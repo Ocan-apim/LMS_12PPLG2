@@ -2,8 +2,6 @@
 
 Fondasi aplikasi E-Learning dengan **5 peran**: Admin, Guru, Kurikulum, Kepala Sekolah (Kepsek), dan Siswa.
 
-> Catatan: Di pesan Anda tertulis “Admin, guru, kurikulum, admin dan kepsek”. Saya asumsikan peran ke-5 adalah **Siswa** (umum untuk LMS). Jika yang dimaksud peran lain, tinggal ganti di `src/lib/roles.ts` dan folder page-nya.
-
 Figma referensi: [E-learning Design](https://www.figma.com/design/5RQynqLyfWzbxm1BHf11nV/E-learning?node-id=0-1)
 
 ## Stack
