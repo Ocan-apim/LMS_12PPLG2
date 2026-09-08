@@ -3,24 +3,28 @@ import { getSession } from "@/lib/auth";
 import { ROLE_DASHBOARD } from "@/lib/roles";
 import type { Role, SessionUser } from "@/types";
 
-export async function requireSession() {
+export type SessionResult =
+  | { session: SessionUser; error: null }
+  | { session: null; error: NextResponse };
+
+export async function requireSession(): Promise<SessionResult> {
   const session = await getSession();
   if (!session) {
-    return { session: null as SessionUser | null, error: unauthorized() };
+    return { session: null, error: unauthorized() };
   }
   return { session, error: null };
 }
 
-export async function requireRole(roles: Role | Role[]) {
+export async function requireRole(roles: Role | Role[]): Promise<SessionResult> {
   const allowed = Array.isArray(roles) ? roles : [roles];
   const { session, error } = await requireSession();
   if (error || !session) {
-    return { session: null as SessionUser | null, error: error ?? unauthorized() };
+    return { session: null, error: error ?? unauthorized() };
   }
 
   if (!allowed.includes(session.role)) {
     return {
-      session,
+      session: null,
       error: NextResponse.json(
         { success: false, message: "Forbidden" },
         { status: 403 }

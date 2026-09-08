@@ -47,8 +47,16 @@ export function RoleShell({ role, user, children }: RoleShellProps) {
           roleLabel={ROLE_LABELS[role]}
           onMenuClick={() => setSidebarOpen(true)}
         />
-        <main className="flex-1 overflow-y-auto p-4 md:p-6">
-          <div className="mx-auto max-w-6xl">{children}</div>
+        <main className="flex-1 overflow-y-auto p-4 md:p-6 flex flex-col justify-between">
+          <div className="mx-auto w-full max-w-7xl">{children}</div>
+          <footer className="mx-auto w-full max-w-7xl mt-12 pt-6 border-t border-slate-200/80 flex flex-col sm:flex-row items-center justify-between text-[11px] text-slate-400 gap-3 pb-6">
+            <p>© 2024 Learnix LMS. All rights reserved.</p>
+            <div className="flex items-center gap-6">
+              <a href="#" className="hover:text-slate-600 transition">Privacy Policy</a>
+              <a href="#" className="hover:text-slate-600 transition">Terms of Service</a>
+              <a href="#" className="hover:text-slate-600 transition">Contact Support</a>
+            </div>
+          </footer>
         </main>
       </div>
     </div>

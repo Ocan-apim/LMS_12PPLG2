@@ -17,6 +17,9 @@ import {
   Users,
   BarChart3,
   HelpCircle,
+  Layers,
+  BookMarked,
+  UserCheck,
 } from "lucide-react";
 import type { Role } from "@/types";
 import type { NavIcon } from "@/lib/navigation";
@@ -29,9 +32,12 @@ const iconMap: Record<
   dashboard: LayoutDashboard,
   users: Users,
   classes: GraduationCap,
+  students: UserCheck,
+  departments: Layers,
   materials: Folder,
   assignments: ClipboardList,
   subjects: BookOpen,
+  academic: BookMarked,
   syllabus: FileText,
   reports: BarChart3,
   overview: BarChart3,
@@ -63,12 +69,12 @@ export function Sidebar({ role, pathname, onNavigate }: SidebarProps) {
 
   return (
     <aside className="flex h-full w-[220px] shrink-0 flex-col border-r border-[#e4e6ef] bg-white text-[#141821]">
-      <div className="flex h-[62px] items-center gap-3 border-b border-[#e4e6ef] px-4">
-        <div className="grid size-9 place-items-center rounded-md bg-[#674ce7] text-white">
+      <div className="flex h-[62px] items-center gap-3 border-b border-slate-200 px-4">
+        <div className="grid size-9 place-items-center rounded-xl bg-blue-600 text-white shadow-sm">
           <GraduationCap className="size-5" />
         </div>
         <div>
-          <h1 className="font-[family-name:var(--font-display)] text-lg font-extrabold leading-5">
+          <h1 className="font-sans text-lg font-bold leading-5 text-slate-900">
             Learnix
           </h1>
           <p className="text-[11px] font-medium text-slate-500">Portal Akademik</p>
@@ -87,10 +93,10 @@ export function Sidebar({ role, pathname, onNavigate }: SidebarProps) {
               key={item.href}
               href={item.href}
               onClick={onNavigate}
-              className={`flex h-10 items-center gap-3 border-l-4 px-4 text-sm font-semibold transition duration-300 ${
+              className={`flex h-10 items-center gap-3 border-l-4 px-4 text-xs font-semibold transition duration-200 ${
                 active
-                  ? "border-[#674ce7] bg-[#e8e1ff] text-[#674ce7]"
-                  : "border-transparent text-[#151922] hover:bg-[#f5f2ff] hover:text-[#674ce7]"
+                  ? "border-blue-600 bg-blue-50 text-blue-600"
+                  : "border-transparent text-slate-600 hover:bg-slate-50 hover:text-slate-900"
               }`}
             >
               <Icon className="size-4 shrink-0" />
@@ -100,19 +106,41 @@ export function Sidebar({ role, pathname, onNavigate }: SidebarProps) {
         })}
       </nav>
 
-      <div className="border-t border-[#e4e6ef] py-3">
-        <Link href="#" className="flex h-9 items-center gap-3 px-4 text-sm font-semibold transition hover:text-[#674ce7]">
-          <Settings className="size-4" />
-          Settings
-        </Link>
-        <button
-          type="button"
-          onClick={handleLogout}
-          className="flex h-9 w-full items-center gap-3 px-4 text-left text-sm font-semibold transition hover:text-[#674ce7]"
-        >
-          <LogOut className="size-4" />
-          Logout
-        </button>
+      <div className="border-t border-slate-200 p-3 space-y-2">
+        {role === "guru" && (
+          <Link
+            href="/guru/classes/new"
+            onClick={onNavigate}
+            className="flex h-9 w-full items-center justify-center gap-1.5 rounded-lg bg-blue-600 px-3 text-xs font-semibold text-white shadow-sm hover:bg-blue-700 transition"
+          >
+            <span className="text-base font-bold leading-none">+</span>
+            <span>Buat Kelas Baru</span>
+          </Link>
+        )}
+        <div className="pt-1 space-y-0.5">
+          <Link
+            href="#"
+            className="flex h-8 items-center gap-3 px-2 rounded-lg text-xs font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition"
+          >
+            <Settings className="size-4 text-slate-500" />
+            Pengaturan
+          </Link>
+          <Link
+            href="#"
+            className="flex h-8 items-center gap-3 px-2 rounded-lg text-xs font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition"
+          >
+            <HelpCircle className="size-4 text-slate-500" />
+            Bantuan
+          </Link>
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="flex h-8 w-full items-center gap-3 px-2 rounded-lg text-left text-xs font-medium text-slate-600 hover:bg-red-50 hover:text-red-600 transition"
+          >
+            <LogOut className="size-4 text-slate-500" />
+            Logout
+          </button>
+        </div>
       </div>
     </aside>
   );

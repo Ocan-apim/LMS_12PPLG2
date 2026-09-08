@@ -4,9 +4,12 @@ export type NavIcon =
   | "dashboard"
   | "users"
   | "classes"
+  | "students"
+  | "departments"
   | "materials"
   | "assignments"
   | "subjects"
+  | "academic"
   | "syllabus"
   | "reports"
   | "overview"
@@ -27,17 +30,21 @@ export type NavItem = {
 export const ROLE_NAV: Record<Role, NavItem[]> = {
   admin: [
     { href: "/admin", label: "Dashboard", icon: "dashboard" },
+    { href: "/admin/classes", label: "Manajemen Kelas", icon: "classes" },
+    { href: "/admin/students", label: "Manajemen Siswa", icon: "students" },
+    { href: "/admin/teachers", label: "Manajemen Guru", icon: "teachers" },
+    { href: "/admin/departments", label: "Manajemen Jurusan", icon: "departments" },
+    { href: "/admin/subjects", label: "Mata Pelajaran", icon: "subjects" },
+    { href: "/admin/academic-years", label: "Tahun Ajaran", icon: "academic" },
     { href: "/admin/users", label: "Manajemen Pengguna", icon: "users" },
-    { href: "/admin/classes", label: "Kelas", icon: "classes" },
-    { href: "/admin/import", label: "Impor Data", icon: "import" },
     { href: "/admin/settings", label: "Pengaturan", icon: "settings" },
   ],
   guru: [
     { href: "/guru", label: "Dashboard", icon: "dashboard" },
-    { href: "/guru/classes", label: "Kelas Tugas", icon: "classes" },
-    { href: "/guru/students", label: "Manajemen Siswa", icon: "users" },
-    { href: "/guru/materials", label: "File Kelas", icon: "materials" },
-    { href: "/guru/assignments", label: "Tugas & Quiz", icon: "assignments" },
+    { href: "/guru/classes", label: "Kelas Saya", icon: "classes" },
+    { href: "/guru/assignments", label: "Tugas", icon: "assignments" },
+    { href: "/guru/grades", label: "Penilaian", icon: "grades" },
+    { href: "/guru/students", label: "Profil", icon: "users" },
   ],
   kurikulum: [
     { href: "/kurikulum", label: "Dashboard", icon: "dashboard" },
@@ -70,7 +77,7 @@ export const LOGIN_ROLES: {
   {
     role: "admin",
     title: "Admin",
-    description: "Kelola pengguna, kelas, dan sistem",
+    description: "Kelola pengguna, kelas, jurusan, dan sistem",
     accent: "blue",
   },
   {
