@@ -27,6 +27,8 @@ export type SessionUser = {
   name: string;
   email: string;
   role: Role;
+  nis?: string;
+  nisn?: string;
 };
 
 export type ApiResponse<T = unknown> = {

@@ -35,6 +35,7 @@ export async function GET(req: Request) {
     if (search) {
       query.$or = [
         { name: { $regex: search, $options: "i" } },
+        { nis: { $regex: search, $options: "i" } },
         { nisn: { $regex: search, $options: "i" } },
         { email: { $regex: search, $options: "i" } },
       ];
@@ -61,7 +62,7 @@ export async function GET(req: Request) {
       },
     });
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Gagal memuat data siswa";
+    const message = err instanceof Error ? err.message : "Gagal memuat siswa";
     return NextResponse.json({ success: false, message }, { status: 500 });
   }
 }
@@ -76,6 +77,7 @@ export async function POST(req: Request) {
 
     const {
       name,
+      nis,
       nisn,
       gender,
       birthPlace,
@@ -88,29 +90,33 @@ export async function POST(req: Request) {
       password,
     } = body;
 
-    if (!name || !nisn) {
+    const cleanNis = (nis || nisn || "").toString().trim();
+    const cleanNisn = (nisn || nis || "").toString().trim();
+
+    if (!name || (!cleanNis && !cleanNisn)) {
       return NextResponse.json(
-        { success: false, message: "Nama lengkap dan NISN wajib diisi" },
+        { success: false, message: "Nama lengkap dan NIS / NISN wajib diisi" },
         { status: 400 }
       );
     }
 
-    if (nisn.length !== 10 || !/^\d{10}$/.test(nisn)) {
+    const duplicateChecks = [];
+    if (cleanNis) duplicateChecks.push({ nis: cleanNis });
+    if (cleanNisn) duplicateChecks.push({ nisn: cleanNisn });
+
+    const existingStudent = await User.findOne({
+      role: "siswa",
+      $or: duplicateChecks,
+    });
+
+    if (existingStudent) {
       return NextResponse.json(
-        { success: false, message: "NISN harus tepat 10 digit angka" },
+        { success: false, message: `Siswa dengan NIS/NISN (${cleanNis}) sudah terdaftar` },
         { status: 400 }
       );
     }
 
-    const existingNisn = await User.findOne({ nisn });
-    if (existingNisn) {
-      return NextResponse.json(
-        { success: false, message: `Siswa dengan NISN ${nisn} sudah terdaftar` },
-        { status: 400 }
-      );
-    }
-
-    const studentEmail = email?.trim().toLowerCase() || `${nisn}@siswa.smk.sch.id`;
+    const studentEmail = email?.trim().toLowerCase() || `${cleanNis}@siswa.smk.sch.id`;
     const existingEmail = await User.findOne({ email: studentEmail });
     if (existingEmail) {
       return NextResponse.json(
@@ -126,7 +132,8 @@ export async function POST(req: Request) {
       email: studentEmail,
       password: hashedPassword,
       role: "siswa",
-      nisn,
+      nis: cleanNis,
+      nisn: cleanNisn,
       gender: gender || "Laki-laki",
       birthPlace,
       birthDate: birthDate ? new Date(birthDate) : undefined,

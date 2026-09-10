@@ -13,6 +13,9 @@ import {
   X,
   BookOpen,
   Calendar,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { Button, Spinner } from "@/components/ui";
 
@@ -24,6 +27,7 @@ interface TeacherItem {
   degree?: string;
   lastEducation?: string;
   subjects?: Array<{ _id: string; name: string; code: string }>;
+  departmentId?: { _id: string; name: string; code: string };
   isHomeroomTeacher?: boolean;
   homeroomClassId?: { _id: string; name: string };
   joinDate?: string;
@@ -35,20 +39,86 @@ interface SubjectOption {
   code: string;
 }
 
+interface DeptOption {
+  _id: string;
+  name: string;
+  code: string;
+}
+
+const MONTH_NAMES = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+];
+
 export default function AdminTeachersPage() {
   const [teachers, setTeachers] = useState<TeacherItem[]>([]);
   const [subjects, setSubjects] = useState<SubjectOption[]>([]);
+  const [departments, setDepartments] = useState<DeptOption[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Filters
+  // Applied Filters
   const [search, setSearch] = useState("");
   const [selectedSubject, setSelectedSubject] = useState("all");
+  const [selectedDepartment, setSelectedDepartment] = useState("all");
   const [sortAlphabet, setSortAlphabet] = useState("name");
+  const [selectedJoinYear, setSelectedJoinYear] = useState("all");
+  const [selectedJoinDate, setSelectedJoinDate] = useState<string | null>(null);
+
+  // Drawer & Draft Filter State
   const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
+  const [tempSubject, setTempSubject] = useState("all");
+  const [tempDepartment, setTempDepartment] = useState("all");
+  const [tempSort, setTempSort] = useState("name");
+  const [tempJoinYear, setTempJoinYear] = useState("all");
+  const [tempJoinDate, setTempJoinDate] = useState<string | null>(null);
+  const [calendarDate, setCalendarDate] = useState(new Date(2024, 1, 1)); // February 2024 default
 
   // Delete modal
   const [deleteTarget, setDeleteTarget] = useState<TeacherItem | null>(null);
   const [deleting, setDeleting] = useState(false);
+
+  function handleOpenFilterDrawer() {
+    setTempSubject(selectedSubject);
+    setTempDepartment(selectedDepartment);
+    setTempSort(sortAlphabet);
+    setTempJoinYear(selectedJoinYear);
+    setTempJoinDate(selectedJoinDate);
+    setIsFilterModalOpen(true);
+  }
+
+  function handleApplyFilter() {
+    setSelectedSubject(tempSubject);
+    setSelectedDepartment(tempDepartment);
+    setSortAlphabet(tempSort);
+    setSelectedJoinYear(tempJoinYear);
+    setSelectedJoinDate(tempJoinDate);
+    setIsFilterModalOpen(false);
+  }
+
+  function handleResetFilter() {
+    setTempSubject("all");
+    setTempDepartment("all");
+    setTempSort("name");
+    setTempJoinYear("all");
+    setTempJoinDate(null);
+
+    setSelectedSubject("all");
+    setSelectedDepartment("all");
+    setSortAlphabet("name");
+    setSelectedJoinYear("all");
+    setSelectedJoinDate(null);
+    setIsFilterModalOpen(false);
+  }
 
   async function loadData() {
     setLoading(true);
@@ -56,20 +126,25 @@ export default function AdminTeachersPage() {
       const params = new URLSearchParams();
       if (search) params.set("search", search);
       if (selectedSubject !== "all") params.set("subjectId", selectedSubject);
+      if (selectedDepartment !== "all") params.set("departmentId", selectedDepartment);
+      if (selectedJoinYear !== "all") params.set("joinYear", selectedJoinYear);
       if (sortAlphabet) params.set("sort", sortAlphabet);
 
-      const [teacherRes, subjectRes] = await Promise.all([
+      const [teacherRes, subjectRes, deptRes] = await Promise.all([
         fetch(`/api/admin/teachers?${params.toString()}`),
         fetch("/api/admin/subjects"),
+        fetch("/api/admin/departments"),
       ]);
 
-      const [teacherJson, subjectJson] = await Promise.all([
+      const [teacherJson, subjectJson, deptJson] = await Promise.all([
         teacherRes.json(),
         subjectRes.json(),
+        deptRes.json(),
       ]);
 
       if (teacherJson.success) setTeachers(teacherJson.data);
       if (subjectJson.success) setSubjects(subjectJson.data);
+      if (deptJson.success) setDepartments(deptJson.data);
     } catch (err) {
       console.error("Gagal memuat data guru:", err);
     } finally {
@@ -79,7 +154,7 @@ export default function AdminTeachersPage() {
 
   useEffect(() => {
     loadData();
-  }, [search, selectedSubject, sortAlphabet]);
+  }, [search, selectedSubject, selectedDepartment, selectedJoinYear, sortAlphabet]);
 
   async function handleDeleteTeacher() {
     if (!deleteTarget) return;
@@ -161,7 +236,7 @@ export default function AdminTeachersPage() {
 
         <div className="flex items-center gap-2">
           <button
-            onClick={() => setIsFilterModalOpen(true)}
+            onClick={handleOpenFilterDrawer}
             className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3.5 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition"
           >
             <Filter className="size-4 text-slate-500" />
@@ -259,70 +334,212 @@ export default function AdminTeachersPage() {
         </table>
       </div>
 
-      {/* Filter Modal matching Image 3 Top */}
+      {/* Filter Right Drawer matching Screenshot */}
       {isFilterModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs">
-          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <h3 className="font-bold text-slate-900">Filter Guru</h3>
-              <button onClick={() => setIsFilterModalOpen(false)} className="text-slate-400 hover:text-slate-600">
+        <div className="fixed inset-0 z-50 flex justify-end">
+          {/* Backdrop overlay */}
+          <div
+            className="fixed inset-0 bg-black/40 backdrop-blur-xs transition-opacity"
+            onClick={() => setIsFilterModalOpen(false)}
+          />
+
+          {/* Right Sliding Drawer */}
+          <div className="relative z-10 w-80 max-w-full bg-white shadow-2xl flex flex-col justify-between border-l border-slate-200 animate-in slide-in-from-right duration-200">
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+              <h3 className="text-base font-bold text-slate-900">Filter Guru</h3>
+              <button
+                type="button"
+                onClick={() => setIsFilterModalOpen(false)}
+                className="rounded-lg p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition"
+              >
                 <X className="size-5" />
               </button>
             </div>
 
-            <div className="mt-4 space-y-4">
+            {/* Body */}
+            <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
+              {/* 1. PILIH MAPEL */}
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-2">
                   PILIH MAPEL
                 </label>
-                <select
-                  value={selectedSubject}
-                  onChange={(e) => setSelectedSubject(e.target.value)}
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-800 focus:border-blue-500 focus:outline-hidden"
-                >
-                  <option value="all">Semua Mata Pelajaran</option>
-                  {subjects.map((s) => (
-                    <option key={s._id} value={s._id}>
-                      {s.name} ({s.code})
-                    </option>
-                  ))}
-                </select>
+                <div className="relative">
+                  <select
+                    value={tempSubject}
+                    onChange={(e) => setTempSubject(e.target.value)}
+                    className="w-full appearance-none rounded-lg border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-800 pr-10 focus:border-blue-600 focus:outline-hidden"
+                  >
+                    <option value="all">Semua Mapel</option>
+                    {subjects.map((s) => (
+                      <option key={s._id} value={s._id}>
+                        {s.name}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown className="pointer-events-none absolute right-3.5 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+                </div>
               </div>
 
+              {/* 2. PILIH JURUSAN */}
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-2">
+                  PILIH JURUSAN
+                </label>
+                <div className="relative">
+                  <select
+                    value={tempDepartment}
+                    onChange={(e) => setTempDepartment(e.target.value)}
+                    className="w-full appearance-none rounded-lg border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-800 pr-10 focus:border-blue-600 focus:outline-hidden"
+                  >
+                    <option value="all">Semua Jurusan</option>
+                    {departments.map((d) => (
+                      <option key={d._id} value={d._id}>
+                        {d.code} - {d.name}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown className="pointer-events-none absolute right-3.5 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+                </div>
+              </div>
+
+              {/* 3. URUTKAN BERDASARKAN */}
+              <div>
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-2">
                   URUTKAN BERDASARKAN
                 </label>
-                <select
-                  value={sortAlphabet}
-                  onChange={(e) => setSortAlphabet(e.target.value)}
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-800 focus:border-blue-500 focus:outline-hidden"
-                >
-                  <option value="name">Alfabet (A - Z)</option>
-                  <option value="nip">Nomor Induk Pegawai (NIP)</option>
-                </select>
+                <div className="relative">
+                  <select
+                    value={tempSort}
+                    onChange={(e) => setTempSort(e.target.value)}
+                    className="w-full appearance-none rounded-lg border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-800 pr-10 focus:border-blue-600 focus:outline-hidden"
+                  >
+                    <option value="name">Alfabet</option>
+                    <option value="nip">NIP</option>
+                  </select>
+                  <ChevronDown className="pointer-events-none absolute right-3.5 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+                </div>
               </div>
 
-              <div className="flex items-center justify-between pt-4 border-t border-slate-100">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    setSelectedSubject("all");
-                    setSortAlphabet("name");
-                    setIsFilterModalOpen(false);
-                  }}
-                >
-                  Reset
-                </Button>
-                <Button
-                  size="sm"
-                  onClick={() => setIsFilterModalOpen(false)}
-                  className="bg-blue-600 text-white hover:bg-blue-700"
-                >
-                  Terapkan Filter
-                </Button>
+              {/* 4. TAHUN BERGABUNG */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                    TAHUN BERGABUNG
+                  </label>
+                  {tempJoinYear !== "all" && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTempJoinYear("all");
+                        setTempJoinDate(null);
+                      }}
+                      className="text-[11px] text-blue-600 hover:underline"
+                    >
+                      Reset Tahun
+                    </button>
+                  )}
+                </div>
+
+                {/* Calendar Card matching Screenshot */}
+                <div className="rounded-lg border border-slate-300 bg-white p-3 shadow-xs">
+                  {/* Calendar Top Bar */}
+                  <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-100">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setCalendarDate(
+                          new Date(calendarDate.getFullYear(), calendarDate.getMonth() - 1, 1)
+                        )
+                      }
+                      className="p-1 rounded text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition"
+                    >
+                      <ChevronLeft className="size-3.5" />
+                    </button>
+                    <span className="text-xs font-semibold text-slate-700">
+                      {MONTH_NAMES[calendarDate.getMonth()]} {calendarDate.getFullYear()}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setCalendarDate(
+                          new Date(calendarDate.getFullYear(), calendarDate.getMonth() + 1, 1)
+                        )
+                      }
+                      className="p-1 rounded text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition"
+                    >
+                      <ChevronRight className="size-3.5" />
+                    </button>
+                  </div>
+
+                  {/* Day Initials: M T W T F S S */}
+                  <div className="grid grid-cols-7 text-center text-[10px] font-bold text-slate-400 mb-1.5">
+                    <span>M</span>
+                    <span>T</span>
+                    <span>W</span>
+                    <span>T</span>
+                    <span>F</span>
+                    <span>S</span>
+                    <span>S</span>
+                  </div>
+
+                  {/* Day Numbers Grid */}
+                  <div className="grid grid-cols-7 gap-1 text-center text-xs">
+                    {Array.from({
+                      length: (new Date(calendarDate.getFullYear(), calendarDate.getMonth(), 1).getDay() + 6) % 7,
+                    }).map((_, i) => (
+                      <span key={`empty-${i}`} />
+                    ))}
+                    {Array.from({
+                      length: new Date(calendarDate.getFullYear(), calendarDate.getMonth() + 1, 0).getDate(),
+                    }).map((_, i) => {
+                      const dayNum = i + 1;
+                      const isSelected =
+                        tempJoinYear === String(calendarDate.getFullYear()) &&
+                        (tempJoinDate === null ||
+                          tempJoinDate ===
+                            `${calendarDate.getFullYear()}-${calendarDate.getMonth() + 1}-${dayNum}`);
+                      return (
+                        <button
+                          key={dayNum}
+                          type="button"
+                          onClick={() => {
+                            setTempJoinYear(String(calendarDate.getFullYear()));
+                            setTempJoinDate(
+                              `${calendarDate.getFullYear()}-${calendarDate.getMonth() + 1}-${dayNum}`
+                            );
+                          }}
+                          className={`size-7 mx-auto flex items-center justify-center rounded-md transition text-xs ${
+                            isSelected
+                              ? "bg-blue-600 text-white font-bold shadow-xs"
+                              : "text-slate-700 hover:bg-slate-100"
+                          }`}
+                        >
+                          {dayNum}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
               </div>
+            </div>
+
+            {/* Footer Buttons */}
+            <div className="p-4 border-t border-slate-100 bg-white flex gap-3">
+              <button
+                type="button"
+                onClick={handleResetFilter}
+                className="flex-1 rounded-lg border border-slate-300 py-2.5 px-4 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition text-center"
+              >
+                Reset
+              </button>
+              <button
+                type="button"
+                onClick={handleApplyFilter}
+                className="flex-1 rounded-lg bg-blue-600 hover:bg-blue-700 py-2.5 px-4 text-xs font-semibold text-white transition shadow-xs text-center"
+              >
+                Terapkan Filter
+              </button>
             </div>
           </div>
         </div>

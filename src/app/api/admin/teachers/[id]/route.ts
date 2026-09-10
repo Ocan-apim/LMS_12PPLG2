@@ -64,6 +64,19 @@ export async function PUT(req: Request, context: RouteContext) {
     const oldClassId = currentTeacher.homeroomClassId?.toString();
     const newClassId = isHomeroomTeacher && homeroomClassId ? homeroomClassId.toString() : null;
 
+    if (newClassId && oldClassId !== newClassId) {
+      const existingClass = await ClassModel.findById(newClassId);
+      if (existingClass?.homeroomTeacherId && existingClass.homeroomTeacherId.toString() !== id) {
+        return NextResponse.json(
+          {
+            success: false,
+            message: `Kelas ${existingClass.name} sudah memiliki wali kelas lain.`,
+          },
+          { status: 400 }
+        );
+      }
+    }
+
     if (oldClassId && oldClassId !== newClassId) {
       await ClassModel.findByIdAndUpdate(oldClassId, {
         $unset: { homeroomTeacherId: 1 },
@@ -76,9 +89,11 @@ export async function PUT(req: Request, context: RouteContext) {
       });
     }
 
-    const updated = await User.findByIdAndUpdate(
-      id,
-      {
+    const updateQuery: {
+      $set: Record<string, unknown>;
+      $unset?: Record<string, 1>;
+    } = {
+      $set: {
         name: name ? name.trim() : undefined,
         nip: nip ? nip.trim() : undefined,
         email: email ? email.toLowerCase().trim() : undefined,
@@ -87,13 +102,19 @@ export async function PUT(req: Request, context: RouteContext) {
         photoUrl,
         subjects: Array.isArray(subjects) ? subjects : currentTeacher.subjects,
         joinDate: joinDate ? new Date(joinDate) : currentTeacher.joinDate,
-        isHomeroomTeacher: Boolean(isHomeroomTeacher),
-        homeroomClassId: newClassId || undefined,
+        isHomeroomTeacher: Boolean(isHomeroomTeacher && newClassId),
         phone,
         isActive: isActive !== undefined ? isActive : true,
       },
-      { new: true, runValidators: true }
-    )
+    };
+
+    if (newClassId) {
+      updateQuery.$set.homeroomClassId = newClassId;
+    } else {
+      updateQuery.$unset = { homeroomClassId: 1 };
+    }
+
+    const updated = await User.findByIdAndUpdate(id, updateQuery, { new: true, runValidators: true })
       .populate("subjects", "name code category")
       .populate("homeroomClassId", "name grade")
       .select("-password");

@@ -13,7 +13,7 @@ function AuthFooter() {
   return (
     <footer className="mt-auto w-full px-8 py-6 text-[11px] text-[var(--muted)]">
       <div className="mx-auto flex max-w-7xl flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <p>© 2024 Learnix LMS. All rights reserved.</p>
+        <p>© 2026 Learnix LMS. All rights reserved.</p>
         <div className="flex gap-8">
           <Link href="#" className="hover:text-[var(--primary)]">
             Privacy Policy
@@ -48,10 +48,12 @@ export default async function RoleLoginPage({ params }: PageProps) {
               <GraduationCap className="size-8" />
             </div>
             <h1 className="mt-7 font-[family-name:var(--font-display)] text-3xl font-extrabold tracking-[-0.03em]">
-              Selamat Datang Kembali
+              {role === "siswa" ? "Portal Masuk Siswa" : "Selamat Datang Kembali"}
             </h1>
             <p className="mt-2 max-w-[290px] text-sm leading-5 text-[var(--muted)]">
-              Akses portal Learnix Academy untuk memulai sesi pembelajaran Anda hari ini.
+              {role === "siswa"
+                ? "Masuk menggunakan Nomor Induk Siswa (NIS) dan password akun Anda."
+                : "Akses portal Learnix Academy untuk memulai sesi pembelajaran Anda hari ini."}
             </p>
           </div>
 

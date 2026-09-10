@@ -13,6 +13,8 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
     const search = searchParams.get("search");
     const subjectId = searchParams.get("subjectId");
+    const departmentId = searchParams.get("departmentId");
+    const joinYear = searchParams.get("joinYear");
     const isHomeroom = searchParams.get("isHomeroom");
     const sort = searchParams.get("sort") || "name";
 
@@ -24,8 +26,17 @@ export async function GET(req: Request) {
     if (subjectId && subjectId !== "all") {
       query.subjects = subjectId;
     }
-    if (isHomeroom === "true") {
-      query.isHomeroomTeacher = true;
+    if (departmentId && departmentId !== "all") {
+      query.departmentId = departmentId;
+    }
+    if (joinYear && joinYear !== "all") {
+      const y = parseInt(joinYear, 10);
+      if (!isNaN(y)) {
+        query.joinDate = {
+          $gte: new Date(y, 0, 1),
+          $lte: new Date(y, 11, 31, 23, 59, 59, 999),
+        };
+      }
     }
     if (search) {
       query.$or = [
@@ -37,14 +48,43 @@ export async function GET(req: Request) {
 
     const sortOption: Record<string, 1 | -1> = sort === "nip" ? { nip: 1 } : { name: 1 };
 
-    const teachers = await User.find(query)
-      .populate("subjects", "name code category")
-      .populate("homeroomClassId", "name grade")
-      .sort(sortOption)
-      .select("-password")
-      .lean();
+    const [teachers, activeClasses] = await Promise.all([
+      User.find(query)
+        .populate("subjects", "name code category")
+        .populate("homeroomClassId", "name grade")
+        .sort(sortOption)
+        .select("-password")
+        .lean(),
+      ClassModel.find({ isActive: true, homeroomTeacherId: { $ne: null } })
+        .select("_id name grade homeroomTeacherId")
+        .lean(),
+    ]);
 
-    return NextResponse.json({ success: true, data: teachers });
+    const walasClassMap = new Map<string, { _id: string; name: string; grade: string }>();
+    for (const c of activeClasses as any[]) {
+      if (c.homeroomTeacherId) {
+        walasClassMap.set(String(c.homeroomTeacherId), {
+          _id: String(c._id),
+          name: c.name,
+          grade: c.grade,
+        });
+      }
+    }
+
+    let formattedTeachers = (teachers as any[]).map((t) => {
+      const assignedClass = walasClassMap.get(String(t._id)) || t.homeroomClassId;
+      return {
+        ...t,
+        isHomeroomTeacher: Boolean(assignedClass),
+        homeroomClassId: assignedClass || null,
+      };
+    });
+
+    if (isHomeroom === "true") {
+      formattedTeachers = formattedTeachers.filter((t) => t.isHomeroomTeacher);
+    }
+
+    return NextResponse.json({ success: true, data: formattedTeachers });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Gagal memuat data guru";
     return NextResponse.json({ success: false, message }, { status: 500 });
@@ -99,7 +139,7 @@ export async function POST(req: Request) {
       }
     }
 
-    const hashedPassword = await bcrypt.hash(password || "guru12345", 10);
+    const hashedPassword = await bcrypt.hash(password || "password123", 10);
 
     const teacher = await User.create({
       name: name.trim(),

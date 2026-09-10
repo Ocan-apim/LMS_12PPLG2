@@ -38,6 +38,23 @@ export async function PUT(req: Request, context: RouteContext) {
 
     const { name, code, headOfDepartmentId, maxClasses, capacity, description, isActive } = body;
 
+    if (headOfDepartmentId) {
+      const existingKajur = await Department.findOne({
+        headOfDepartmentId,
+        _id: { $ne: id },
+        isActive: true,
+      });
+      if (existingKajur) {
+        return NextResponse.json(
+          {
+            success: false,
+            message: `Guru tersebut sudah menjadi Kepala Jurusan di ${existingKajur.name}`,
+          },
+          { status: 400 }
+        );
+      }
+    }
+
     const dept = await Department.findByIdAndUpdate(
       id,
       {

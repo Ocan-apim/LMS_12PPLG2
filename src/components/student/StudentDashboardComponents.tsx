@@ -42,7 +42,7 @@ export function SmoothProgress({ value }: { value: number }) {
 export function FooterBar() {
   return (
     <footer className="mt-24 flex flex-col gap-4 border-t border-[#e5e7ef] py-6 text-[11px] text-slate-500 sm:flex-row sm:items-center sm:justify-between">
-      <p>© 2024 Learnix LMS. All rights reserved.</p>
+      <p>© 2026 Learnix LMS. All rights reserved.</p>
       <div className="flex gap-8">
         <Link href="#">Privacy Policy</Link>
         <Link href="#">Terms of Service</Link>

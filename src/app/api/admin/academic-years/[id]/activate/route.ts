@@ -20,6 +20,27 @@ export async function PATCH(_req: Request, context: RouteContext) {
       return NextResponse.json({ success: false, message: "Tahun ajaran tidak ditemukan" }, { status: 404 });
     }
 
+    const currentActive = await AcademicYear.findOne({ isActive: true });
+    if (currentActive) {
+      const activeStart = parseInt(currentActive.name.match(/\d{4}/)?.[0] || "0", 10);
+      const targetStart = parseInt(targetYear.name.match(/\d{4}/)?.[0] || "0", 10);
+
+      const isPast =
+        (targetStart > 0 && activeStart > 0 && targetStart < activeStart) ||
+        (targetStart === activeStart && currentActive.semester === "Genap" && targetYear.semester === "Ganjil") ||
+        (targetYear.endDate && new Date(targetYear.endDate) < new Date());
+
+      if (isPast) {
+        return NextResponse.json(
+          {
+            success: false,
+            message: "Tahun ajaran periode lampau tidak dapat diaktifkan kembali",
+          },
+          { status: 400 }
+        );
+      }
+    }
+
     // Set all to false, then this to true
     await AcademicYear.updateMany({}, { isActive: false });
     targetYear.isActive = true;

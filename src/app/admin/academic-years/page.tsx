@@ -49,6 +49,35 @@ interface ClassOption {
   name: string;
 }
 
+function isPastAcademicYear(y: AcademicYearItem, activeYear?: AcademicYearItem): boolean {
+  if (y.isActive) return false;
+
+  if (y.endDate) {
+    const end = new Date(y.endDate);
+    if (!isNaN(end.getTime()) && end < new Date()) {
+      return true;
+    }
+  }
+
+  if (activeYear) {
+    const activeStartYear = parseInt(activeYear.name.match(/\d{4}/)?.[0] || "0", 10);
+    const targetStartYear = parseInt(y.name.match(/\d{4}/)?.[0] || "0", 10);
+
+    if (activeStartYear > 0 && targetStartYear > 0) {
+      if (targetStartYear < activeStartYear) return true;
+      if (
+        targetStartYear === activeStartYear &&
+        activeYear.semester === "Genap" &&
+        y.semester === "Ganjil"
+      ) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
 export default function AdminAcademicYearsPage() {
   const [activeTab, setActiveTab] = useState<"years" | "assignments">("years");
 
@@ -315,7 +344,13 @@ export default function AdminAcademicYearsPage() {
                       )}
                     </td>
                     <td className="py-4 px-6 text-right">
-                      {!y.isActive && (
+                      {y.isActive ? (
+                        <span className="text-xs text-emerald-600 font-semibold">Sedang Berjalan</span>
+                      ) : isPastAcademicYear(y, years.find((item) => item.isActive)) ? (
+                        <span className="inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-400 italic">
+                          Periode Lampau
+                        </span>
+                      ) : (
                         <Button
                           size="sm"
                           variant="outline"

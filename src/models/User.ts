@@ -7,6 +7,7 @@ export interface IUser {
   password: string;
   role: Role;
   // Siswa specific
+  nis?: string;
   nisn?: string;
   gender?: "Laki-laki" | "Perempuan";
   birthPlace?: string;
@@ -40,6 +41,7 @@ const UserSchema = new Schema<IUser>(
       type: String,
       required: true,
       unique: true,
+      sparse: true,
       lowercase: true,
       trim: true,
     },
@@ -50,6 +52,7 @@ const UserSchema = new Schema<IUser>(
       required: true,
     },
     // Siswa fields
+    nis: { type: String, trim: true, index: true },
     nisn: { type: String, trim: true, index: true },
     gender: { type: String, enum: ["Laki-laki", "Perempuan"] },
     birthPlace: { type: String, trim: true },

@@ -117,21 +117,7 @@ export function Sidebar({ role, pathname, onNavigate }: SidebarProps) {
             <span>Buat Kelas Baru</span>
           </Link>
         )}
-        <div className="pt-1 space-y-0.5">
-          <Link
-            href="#"
-            className="flex h-8 items-center gap-3 px-2 rounded-lg text-xs font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition"
-          >
-            <Settings className="size-4 text-slate-500" />
-            Pengaturan
-          </Link>
-          <Link
-            href="#"
-            className="flex h-8 items-center gap-3 px-2 rounded-lg text-xs font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition"
-          >
-            <HelpCircle className="size-4 text-slate-500" />
-            Bantuan
-          </Link>
+        <div>
           <button
             type="button"
             onClick={handleLogout}

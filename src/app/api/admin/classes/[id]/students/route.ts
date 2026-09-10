@@ -16,10 +16,16 @@ export async function GET(_req: Request, context: RouteContext) {
     await connectDB();
 
     const students = await User.find({ classId: id, role: "siswa", isActive: true })
-      .select("name nisn email gender birthPlace birthDate")
-      .sort({ name: 1 });
+      .select("name nis nisn email gender birthPlace birthDate")
+      .sort({ name: 1 })
+      .lean();
 
-    return NextResponse.json({ success: true, data: students });
+    const formatted = students.map((st) => ({
+      ...st,
+      password: (st as { initialPassword?: string }).initialPassword || "password123",
+    }));
+
+    return NextResponse.json({ success: true, data: formatted });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Gagal memuat siswa di kelas ini";
     return NextResponse.json({ success: false, message }, { status: 500 });

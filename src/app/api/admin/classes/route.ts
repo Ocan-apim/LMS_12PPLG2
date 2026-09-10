@@ -77,19 +77,40 @@ export async function POST(req: Request) {
       );
     }
 
+    const cleanTeacherId =
+      homeroomTeacherId && typeof homeroomTeacherId === "string" && homeroomTeacherId.trim().length > 0
+        ? homeroomTeacherId.trim()
+        : null;
+
+    if (cleanTeacherId) {
+      const existingWalasClass = await ClassModel.findOne({
+        homeroomTeacherId: cleanTeacherId,
+        isActive: true,
+      });
+      if (existingWalasClass) {
+        return NextResponse.json(
+          {
+            success: false,
+            message: `Guru tersebut sudah menjadi wali kelas di ${existingWalasClass.name}. Satu guru hanya dapat menjadi wali kelas untuk 1 kelas.`,
+          },
+          { status: 400 }
+        );
+      }
+    }
+
     const newClass = await ClassModel.create({
       name,
       grade,
       departmentId: departmentId || undefined,
       parallelNumber: Number(parallelNumber) || 1,
       academicYear: academicYear || "2024/2025 - Genap",
-      homeroomTeacherId: homeroomTeacherId || undefined,
+      homeroomTeacherId: cleanTeacherId || undefined,
       maxCapacity: Number(maxCapacity) || 36,
       studentIds: [],
     });
 
-    if (homeroomTeacherId) {
-      await User.findByIdAndUpdate(homeroomTeacherId, {
+    if (cleanTeacherId) {
+      await User.findByIdAndUpdate(cleanTeacherId, {
         isHomeroomTeacher: true,
         homeroomClassId: newClass._id,
       });

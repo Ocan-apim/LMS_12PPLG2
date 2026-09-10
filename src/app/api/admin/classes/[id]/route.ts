@@ -56,10 +56,33 @@ export async function PUT(req: Request, context: RouteContext) {
       isActive,
     } = body;
 
-    // If homeroom teacher changed
-    const oldTeacherId = currentClass.homeroomTeacherId?.toString();
-    const newTeacherId = homeroomTeacherId || null;
+    // Normalize teacher ID: empty string or falsy means unassign
+    const oldTeacherId = currentClass.homeroomTeacherId ? currentClass.homeroomTeacherId.toString() : null;
+    const newTeacherId =
+      homeroomTeacherId && typeof homeroomTeacherId === "string" && homeroomTeacherId.trim().length > 0
+        ? homeroomTeacherId.trim()
+        : null;
 
+    // Validate: Teacher cannot be walas of 2 classes
+    if (newTeacherId && newTeacherId !== oldTeacherId) {
+      const existingWalasClass = await ClassModel.findOne({
+        _id: { $ne: id },
+        homeroomTeacherId: newTeacherId,
+        isActive: true,
+      });
+
+      if (existingWalasClass) {
+        return NextResponse.json(
+          {
+            success: false,
+            message: `Guru tersebut sudah menjadi wali kelas di ${existingWalasClass.name}. Satu guru hanya dapat menjadi wali kelas untuk 1 kelas.`,
+          },
+          { status: 400 }
+        );
+      }
+    }
+
+    // Update old teacher if changed or unassigned
     if (oldTeacherId && oldTeacherId !== newTeacherId) {
       await User.findByIdAndUpdate(oldTeacherId, {
         isHomeroomTeacher: false,
@@ -67,6 +90,7 @@ export async function PUT(req: Request, context: RouteContext) {
       });
     }
 
+    // Update new teacher if assigned
     if (newTeacherId && oldTeacherId !== newTeacherId) {
       await User.findByIdAndUpdate(newTeacherId, {
         isHomeroomTeacher: true,
@@ -74,20 +98,31 @@ export async function PUT(req: Request, context: RouteContext) {
       });
     }
 
-    const updated = await ClassModel.findByIdAndUpdate(
-      id,
-      {
+    const updateQuery: {
+      $set: Record<string, unknown>;
+      $unset?: Record<string, 1>;
+    } = {
+      $set: {
         name,
         grade,
         departmentId: departmentId || undefined,
         parallelNumber: parallelNumber !== undefined ? Number(parallelNumber) : undefined,
         academicYear,
-        homeroomTeacherId: newTeacherId || undefined,
         maxCapacity: maxCapacity !== undefined ? Number(maxCapacity) : undefined,
         isActive: isActive !== undefined ? isActive : true,
       },
-      { new: true, runValidators: true }
-    )
+    };
+
+    if (newTeacherId) {
+      updateQuery.$set.homeroomTeacherId = newTeacherId;
+    } else {
+      updateQuery.$unset = { homeroomTeacherId: 1 };
+    }
+
+    const updated = await ClassModel.findByIdAndUpdate(id, updateQuery, {
+      new: true,
+      runValidators: true,
+    })
       .populate("homeroomTeacherId", "name email nip degree")
       .populate("departmentId", "name code");
 

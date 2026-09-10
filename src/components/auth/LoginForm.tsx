@@ -14,7 +14,8 @@ type LoginFormProps = {
 export function LoginForm({ role }: LoginFormProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [email, setEmail] = useState("");
+  const isSiswa = role === "siswa";
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
@@ -26,10 +27,22 @@ export function LoginForm({ role }: LoginFormProps) {
     setLoading(true);
 
     try {
+      const payload: Record<string, string | undefined> = {
+        identifier: identifier.trim(),
+        password,
+        role,
+      };
+
+      if (isSiswa) {
+        payload.nis = identifier.trim();
+      } else {
+        payload.email = identifier.trim();
+      }
+
       const response = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify(payload),
       });
 
       const result = await response.json();
@@ -56,14 +69,27 @@ export function LoginForm({ role }: LoginFormProps) {
       <label className="relative block">
         <UserRound className="pointer-events-none absolute left-4 top-1/2 size-4 -translate-y-1/2 text-slate-500" />
         <input
-          type="email"
+          type={isSiswa ? "text" : "email"}
           required
-          value={email}
-          onChange={(event) => setEmail(event.target.value)}
-          placeholder="Username atau Email"
+          autoComplete={isSiswa ? "username" : "email"}
+          value={identifier}
+          onChange={(event) => setIdentifier(event.target.value)}
+          placeholder={
+            isSiswa
+              ? "Nomor Induk Siswa (NIS)"
+              : role === "guru"
+              ? "Email Guru atau NIP"
+              : "Username atau Email"
+          }
           className="h-14 w-full rounded-[5px] border border-[var(--border)] bg-[#f4f6ff] pl-11 pr-4 text-sm outline-none transition placeholder:text-slate-500 focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary-soft)]"
         />
       </label>
+
+      {isSiswa && (
+        <p className="text-[11px] text-slate-500 px-1 -mt-2">
+          Masukkan Nomor Induk Siswa (NIS) resmi Anda.
+        </p>
+      )}
 
       <label className="relative block">
         <LockKeyhole className="pointer-events-none absolute left-4 top-1/2 size-4 -translate-y-1/2 text-slate-500" />

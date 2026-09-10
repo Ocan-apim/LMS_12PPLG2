@@ -65,9 +65,9 @@ export async function POST(req: Request) {
 
     const { name, email, password, role, nip, nisn, phone } = body;
 
-    if (!name || !email || !password || !role) {
+    if (!name || !email || !role) {
       return NextResponse.json(
-        { success: false, message: "Nama, email, password, dan role wajib diisi" },
+        { success: false, message: "Nama, email, dan role wajib diisi" },
         { status: 400 }
       );
     }
@@ -80,7 +80,7 @@ export async function POST(req: Request) {
       );
     }
 
-    const hashedPassword = await bcrypt.hash(password, 10);
+    const hashedPassword = await bcrypt.hash(password || "password123", 10);
 
     const user = await User.create({
       name: name.trim(),

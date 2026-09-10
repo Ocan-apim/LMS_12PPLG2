@@ -291,13 +291,11 @@ export default function AdminDepartmentsPage() {
                       <span className="text-xs text-slate-400 italic">Belum ditentukan</span>
                     )}
                   </td>
-                  <td className="py-4 px-6">
-                    <span className="font-semibold text-slate-800">{d.classCount || 0}</span>
-                    <span className="text-xs text-slate-400"> / {d.maxClasses} Paralel</span>
+                  <td className="py-4 px-6 font-semibold text-slate-800">
+                    {d.maxClasses || d.classCount || 0}
                   </td>
-                  <td className="py-4 px-6">
-                    <span className="font-semibold text-slate-800">{d.studentCount || 0}</span>
-                    <span className="text-xs text-slate-400"> / {d.capacity} Kuota</span>
+                  <td className="py-4 px-6 font-semibold text-slate-800">
+                    {(d.studentCount ?? 0) > 0 ? d.studentCount : (d.capacity || 0)}
                   </td>
                   <td className="py-4 px-6 text-right">
                     <div className="flex items-center justify-end gap-1">
@@ -410,11 +408,23 @@ export default function AdminDepartmentsPage() {
                   className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-800 focus:border-blue-500 focus:outline-hidden"
                 >
                   <option value="">-- Pilih Kepala Jurusan --</option>
-                  {teachers.map((t) => (
-                    <option key={t._id} value={t._id}>
-                      {t.name} {t.degree ? `, ${t.degree}` : ""}
-                    </option>
-                  ))}
+                  {teachers.map((t) => {
+                    const alreadyKajurDept = departments.find(
+                      (dept) =>
+                        dept.headOfDepartmentId?._id === t._id &&
+                        (!editingDept || dept._id !== editingDept._id)
+                    );
+                    return (
+                      <option
+                        key={t._id}
+                        value={t._id}
+                        disabled={Boolean(alreadyKajurDept)}
+                      >
+                        {t.name} {t.degree ? `, ${t.degree}` : ""}
+                        {alreadyKajurDept ? ` (Sudah Kajur ${alreadyKajurDept.name})` : ""}
+                      </option>
+                    );
+                  })}
                 </select>
               </div>
 

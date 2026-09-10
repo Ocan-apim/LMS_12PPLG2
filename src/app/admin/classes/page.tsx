@@ -47,6 +47,18 @@ interface DeptOption {
   maxClasses: number;
 }
 
+interface EnrolledStudentInfo {
+  _id: string;
+  name: string;
+  nis?: string;
+  nisn?: string;
+  email: string;
+  password?: string;
+  gender?: string;
+  birthPlace?: string;
+  birthDate?: string;
+}
+
 export default function AdminClassesPage() {
   const [classes, setClasses] = useState<ClassItem[]>([]);
   const [teachers, setTeachers] = useState<TeacherOption[]>([]);
@@ -64,6 +76,12 @@ export default function AdminClassesPage() {
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState("");
 
+  // View students modal
+  const [viewStudentsClass, setViewStudentsClass] = useState<ClassItem | null>(null);
+  const [classStudents, setClassStudents] = useState<EnrolledStudentInfo[]>([]);
+  const [loadingStudents, setLoadingStudents] = useState(false);
+  const [studentSearch, setStudentSearch] = useState("");
+
   // Form fields
   const [formData, setFormData] = useState({
     name: "",
@@ -78,6 +96,26 @@ export default function AdminClassesPage() {
   // Delete modal
   const [deleteTarget, setDeleteTarget] = useState<ClassItem | null>(null);
   const [deleting, setDeleting] = useState(false);
+
+  async function handleViewStudents(c: ClassItem) {
+    setViewStudentsClass(c);
+    setLoadingStudents(true);
+    setStudentSearch("");
+    try {
+      const res = await fetch(`/api/admin/classes/${c._id}/students`);
+      const json = await res.json();
+      if (json.success) {
+        setClassStudents(json.data);
+      } else {
+        setClassStudents([]);
+      }
+    } catch (err) {
+      console.error("Gagal memuat siswa:", err);
+      setClassStudents([]);
+    } finally {
+      setLoadingStudents(false);
+    }
+  }
 
   // Load classes, teachers, departments
   async function loadData() {
@@ -379,6 +417,13 @@ export default function AdminClassesPage() {
                   <td className="py-4 px-6 text-right">
                     <div className="flex items-center justify-end gap-1">
                       <button
+                        onClick={() => handleViewStudents(c)}
+                        className="rounded-lg p-1.5 text-slate-400 hover:bg-blue-50 hover:text-blue-600 transition"
+                        title="Lihat Seluruh Siswa"
+                      >
+                        <Users className="size-4" />
+                      </button>
+                      <button
                         onClick={() => handleOpenEditModal(c)}
                         className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-blue-600 transition"
                         title="Edit Kelas"
@@ -525,11 +570,21 @@ export default function AdminClassesPage() {
                       className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-800 focus:border-blue-500 focus:outline-hidden"
                     >
                       <option value="">-- Pilih Wali Kelas (Opsional) --</option>
-                      {teachers.map((t) => (
-                        <option key={t._id} value={t._id}>
-                          {t.name} {t.degree ? `, ${t.degree}` : ""} {t.nip ? `(${t.nip})` : ""}
-                        </option>
-                      ))}
+                      {teachers.map((t) => {
+                        const assignedClass = classes.find(
+                          (c) =>
+                            c.homeroomTeacherId?._id === t._id &&
+                            (!editingClass || c._id !== editingClass._id)
+                        );
+                        const isAssignedToOther = Boolean(assignedClass);
+
+                        return (
+                          <option key={t._id} value={t._id} disabled={isAssignedToOther}>
+                            {t.name} {t.degree ? `, ${t.degree}` : ""} {t.nip ? `(${t.nip})` : ""}
+                            {isAssignedToOther ? ` (Sudah Walas ${assignedClass?.name})` : ""}
+                          </option>
+                        );
+                      })}
                     </select>
                   </div>
 
@@ -565,17 +620,6 @@ export default function AdminClassesPage() {
                     </div>
                   </div>
 
-                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-xs space-y-2">
-                    <div className="font-semibold text-slate-700">Statistik Rombel</div>
-                    <div className="flex justify-between text-slate-600">
-                      <span>Total Kelas Terdaftar:</span>
-                      <strong className="font-bold text-slate-800">{totalClasses} Kelas</strong>
-                    </div>
-                    <div className="flex justify-between text-slate-600">
-                      <span>Total Guru Tersedia:</span>
-                      <strong className="font-bold text-slate-800">{teachers.length} Guru</strong>
-                    </div>
-                  </div>
                 </div>
               </div>
 
@@ -622,6 +666,143 @@ export default function AdminClassesPage() {
                 className="bg-rose-600 hover:bg-rose-700 text-white font-medium"
               >
                 {deleting ? "Menghapus..." : "Ya, Hapus Kelas"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* View Students Modal */}
+      {viewStudentsClass && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs animate-in fade-in">
+          <div className="w-full max-w-4xl rounded-2xl bg-white shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
+              <div className="flex items-center gap-3">
+                <div className="flex size-10 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+                  <Users className="size-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-900 text-base">
+                    Daftar Siswa Kelas {viewStudentsClass.name}
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    {viewStudentsClass.departmentId?.name || "Umum"} • Wali Kelas:{" "}
+                    {viewStudentsClass.homeroomTeacherId?.name || "Belum ada"} • Total: {classStudents.length} Siswa
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setViewStudentsClass(null)}
+                className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+              >
+                <X className="size-5" />
+              </button>
+            </div>
+
+            {/* Filter / Search inside modal */}
+            <div className="px-6 py-3 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between gap-3">
+              <div className="relative flex-1 max-w-sm">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="Cari nama, NISN, atau email siswa..."
+                  value={studentSearch}
+                  onChange={(e) => setStudentSearch(e.target.value)}
+                  className="w-full rounded-lg border border-slate-200 bg-white py-1.5 pl-8 pr-3 text-xs text-slate-800 placeholder-slate-400 focus:border-blue-500 focus:outline-none"
+                />
+              </div>
+              <span className="text-xs text-slate-500">
+                {classStudents.filter((st) => {
+                  const q = studentSearch.toLowerCase();
+                  return (
+                    st.name.toLowerCase().includes(q) ||
+                    (st.nisn && st.nisn.toLowerCase().includes(q)) ||
+                    st.email.toLowerCase().includes(q)
+                  );
+                }).length}{" "}
+                siswa ditemukan
+              </span>
+            </div>
+
+            {/* Student List Table */}
+            <div className="flex-1 overflow-y-auto p-6">
+              {loadingStudents ? (
+                <div className="py-12 text-center text-slate-400 flex items-center justify-center gap-2">
+                  <Spinner size="md" />
+                  <span className="text-xs">Memuat daftar siswa...</span>
+                </div>
+              ) : classStudents.length === 0 ? (
+                <div className="py-12 text-center text-slate-400 text-xs">
+                  Belum ada siswa yang terdaftar di kelas ini.
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead>
+                      <tr className="border-b border-slate-100 text-slate-400 font-bold uppercase text-[10px]">
+                        <th className="pb-3 px-3 w-10">No</th>
+                        <th className="pb-3 px-3">Nama Siswa</th>
+                        <th className="pb-3 px-3">NIS / NISN</th>
+                        <th className="pb-3 px-3">Email</th>
+                        <th className="pb-3 px-3">Password Akun</th>
+                        <th className="pb-3 px-3">Gender</th>
+                        <th className="pb-3 px-3">Tempat / Tgl Lahir</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {classStudents
+                        .filter((st) => {
+                          const q = studentSearch.toLowerCase();
+                          return (
+                            st.name.toLowerCase().includes(q) ||
+                            (st.nis && st.nis.toLowerCase().includes(q)) ||
+                            (st.nisn && st.nisn.toLowerCase().includes(q)) ||
+                            st.email.toLowerCase().includes(q)
+                          );
+                        })
+                        .map((st, idx) => (
+                          <tr key={st._id} className="hover:bg-slate-50 transition">
+                            <td className="py-2.5 px-3 font-mono text-slate-400">{idx + 1}</td>
+                            <td className="py-2.5 px-3">
+                              <div className="flex items-center gap-2">
+                                <div className="flex size-6 items-center justify-center rounded-full bg-blue-100 text-blue-700 font-bold text-[10px]">
+                                  {st.name.charAt(0)}
+                                </div>
+                                <span className="font-semibold text-slate-800">{st.name}</span>
+                              </div>
+                            </td>
+                            <td className="py-2.5 px-3 font-mono text-slate-600">{st.nis || st.nisn || "-"}</td>
+                            <td className="py-2.5 px-3 text-slate-500">{st.email}</td>
+                            <td className="py-2.5 px-3">
+                              <span className="inline-flex items-center rounded-md bg-slate-100 px-2 py-0.5 font-mono text-[11px] font-medium text-slate-700 border border-slate-200">
+                                {st.password || "password123"}
+                              </span>
+                            </td>
+                            <td className="py-2.5 px-3 text-slate-600">{st.gender || "-"}</td>
+                            <td className="py-2.5 px-3 text-slate-500">
+                              {st.birthPlace ? `${st.birthPlace}, ` : ""}
+                              {st.birthDate ? new Date(st.birthDate).toLocaleDateString("id-ID") : "-"}
+                            </td>
+                          </tr>
+                        ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="border-t border-slate-100 px-6 py-3 bg-slate-50 flex items-center justify-between">
+              <span className="text-xs text-slate-500">
+                Kapasitas: <strong className="text-slate-800">{viewStudentsClass.studentCount}</strong> / {viewStudentsClass.maxCapacity} Siswa
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setViewStudentsClass(null)}
+              >
+                Tutup
               </Button>
             </div>
           </div>

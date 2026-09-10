@@ -38,6 +38,7 @@ export default function TambahSiswaBaruPage() {
 
   // Form State
   const [name, setName] = useState("");
+  const [nis, setNis] = useState("");
   const [nisn, setNisn] = useState("");
   const [gender, setGender] = useState<"Laki-laki" | "Perempuan">("Laki-laki");
   const [birthPlace, setBirthPlace] = useState("");
@@ -83,8 +84,10 @@ export default function TambahSiswaBaruPage() {
       setError("Nama lengkap sesuai ijazah wajib diisi");
       return;
     }
-    if (nisn.trim().length !== 10 || !/^\d{10}$/.test(nisn.trim())) {
-      setError("NISN harus tepat 10 digit angka");
+    const cleanNis = nis.trim();
+    const cleanNisn = nisn.trim();
+    if (!cleanNis && !cleanNisn) {
+      setError("Nomor Induk Siswa (NIS) atau NISN wajib diisi");
       return;
     }
 
@@ -95,7 +98,8 @@ export default function TambahSiswaBaruPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: name.trim(),
-          nisn: nisn.trim(),
+          nis: cleanNis || cleanNisn,
+          nisn: cleanNisn || cleanNis,
           gender,
           birthPlace: birthPlace.trim(),
           birthDate: birthDate || undefined,
@@ -178,10 +182,24 @@ export default function TambahSiswaBaruPage() {
                 />
               </div>
 
-              <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid gap-4 sm:grid-cols-3">
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    NISN (10 Digit) <span className="text-rose-500">*</span>
+                    NIS (Untuk Login) <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={nis}
+                    onChange={(e) => setNis(e.target.value.replace(/\D/g, ""))}
+                    placeholder="Contoh: 24769233"
+                    required
+                    className="w-full rounded-lg border border-slate-200 px-3.5 py-2.5 font-mono text-sm text-slate-800 placeholder-slate-400 focus:border-blue-500 focus:outline-hidden"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    NISN (10 Digit)
                   </label>
                   <input
                     type="text"
@@ -189,7 +207,6 @@ export default function TambahSiswaBaruPage() {
                     value={nisn}
                     onChange={(e) => setNisn(e.target.value.replace(/\D/g, ""))}
                     placeholder="Contoh: 0098273645"
-                    required
                     className="w-full rounded-lg border border-slate-200 px-3.5 py-2.5 font-mono text-sm text-slate-800 placeholder-slate-400 focus:border-blue-500 focus:outline-hidden"
                   />
                 </div>

@@ -63,6 +63,22 @@ export async function POST(req: Request) {
       );
     }
 
+    if (headOfDepartmentId) {
+      const existingKajur = await Department.findOne({
+        headOfDepartmentId,
+        isActive: true,
+      });
+      if (existingKajur) {
+        return NextResponse.json(
+          {
+            success: false,
+            message: `Guru tersebut sudah menjadi Kepala Jurusan di ${existingKajur.name}`,
+          },
+          { status: 400 }
+        );
+      }
+    }
+
     const dept = await Department.create({
       name,
       code: code.toUpperCase(),

@@ -29,7 +29,7 @@ function AuthFooter() {
   return (
     <footer className="mt-auto w-full border-t border-[var(--border)] bg-white/35 px-6 py-6 text-[11px] text-[var(--muted)]">
       <div className="mx-auto flex max-w-7xl flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <p>© 2024 Learnix LMS. All rights reserved.</p>
+        <p>© 2026 Learnix LMS. All rights reserved.</p>
         <div className="flex gap-8">
           <Link href="#" className="hover:text-[var(--primary)]">
             Privacy Policy

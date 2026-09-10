@@ -79,7 +79,8 @@ export async function PUT(req: Request, context: RouteContext) {
       id,
       {
         name,
-        nisn,
+        nis: body.nis || nisn || undefined,
+        nisn: nisn || body.nis || undefined,
         gender,
         birthPlace,
         birthDate: birthDate ? new Date(birthDate) : undefined,

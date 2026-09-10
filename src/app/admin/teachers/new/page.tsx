@@ -41,7 +41,7 @@ export default function TambahGuruBaruPage() {
   const [degree, setDegree] = useState("");
   const [nip, setNip] = useState("");
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("guru12345");
+  const [password, setPassword] = useState("password123");
   const [lastEducation, setLastEducation] = useState("S1 / Sarjana");
   const [selectedSubjects, setSelectedSubjects] = useState<string[]>([]);
   const [isHomeroomTeacher, setIsHomeroomTeacher] = useState(false);

@@ -5,6 +5,7 @@ import {
   BookOpen,
   CheckCircle2,
   Database,
+  ExternalLink,
   Mail,
   MapPin,
   MessageCircle,
@@ -208,10 +209,10 @@ export function LandingHero() {
         </ScrollReveal>
         <ScrollReveal delay={120} className="rounded-2xl border border-[var(--border)] bg-white p-2 shadow-[0_28px_58px_rgba(15,23,42,0.16)]">
           <Image
-            src="/learnix-hero.svg"
-            alt="Ilustrasi siswa dan guru Learnix"
+            src="/heroLanding.png"
+            alt="Ilustrasi siswa dan guru Learnix SMK Citra Negara"
             width={720}
-            height={390}
+            height={480}
             priority
             className="h-auto w-full rounded-xl"
           />
@@ -274,7 +275,7 @@ export function LandingFeatures() {
 
 export function LandingAbout() {
   return (
-    <section className="bg-[#eef1fb] py-24">
+    <section id="tentang" className="bg-[#eef1fb] py-24">
       <ScrollReveal className="mx-auto grid max-w-7xl items-center gap-16 px-6 lg:grid-cols-[0.9fr_1fr]">
         <div>
           <h2 className="font-[family-name:var(--font-display)] text-3xl font-extrabold leading-tight">
@@ -374,33 +375,99 @@ export function LandingCta() {
 export function LandingFooter() {
   return (
     <footer id="bantuan" className="border-t border-[var(--border)] bg-white">
-      <ScrollReveal className="mx-auto grid max-w-7xl gap-12 px-6 py-16 md:grid-cols-4">
-        <div>
-          <p className="font-bold text-[var(--primary)]">Learnix LMS</p>
-          <p className="mt-6 text-sm leading-6 text-[var(--muted)]">
-            Platform manajemen pembelajaran cerdas yang mengutamakan kemudahan dan skalabilitas untuk institusi modern.
+      <ScrollReveal className="mx-auto grid max-w-7xl gap-8 px-6 py-16 md:grid-cols-12">
+        {/* Col 1: Brand & Desc */}
+        <div className="md:col-span-4 lg:col-span-3">
+          <Link href="/" className="font-[family-name:var(--font-display)] text-lg font-extrabold text-[var(--primary)]">
+            Learnix LMS
+          </Link>
+          <p className="mt-3 text-xs font-bold uppercase tracking-wider text-slate-700">
+            SMK CITRA NEGARA DEPOK
           </p>
-          <div className="mt-7 flex gap-3">
+          <p className="mt-2 text-xs leading-5 text-[var(--muted)]">
+            Platform manajemen pembelajaran cerdas yang dirancang untuk mendukung kegiatan belajar mengajar siswa dan guru di SMK Citra Negara Depok.
+          </p>
+          <div className="mt-6 flex gap-2.5">
             {[MessageCircle, Share2, Rss].map((Icon, index) => (
-              <span key={index} className="grid size-8 place-items-center rounded-full bg-slate-100 text-slate-500">
+              <span key={index} className="grid size-8 place-items-center rounded-full bg-slate-100 text-slate-500 hover:text-[var(--primary)] transition">
                 <Icon className="size-4" />
               </span>
             ))}
           </div>
         </div>
-        <FooterColumn title="PRODUK" items={["Fitur Utama", "Integrasi", "Update Terbaru", "Harga"]} />
-        <FooterColumn title="DUKUNGAN" items={["Pusat Bantuan", "Tutorial", "Dokumentasi API", "Status Sistem"]} />
-        <div>
-          <p className="text-xs font-extrabold tracking-wide">KONTAK KAMI</p>
-          <div className="mt-6 space-y-4 text-sm text-[var(--muted)]">
-            <p className="flex gap-3"><Mail className="size-4 text-[var(--primary)]" />support@eduflow.id</p>
-            <p className="flex gap-3"><Phone className="size-4 text-[var(--primary)]" />+62 (21) 5000 8888</p>
-            <p className="flex gap-3"><MapPin className="size-4 text-[var(--primary)]" />Sudirman Central Business District, Jakarta</p>
+
+        {/* Col 2: Navigasi Aplikasi */}
+        <div className="md:col-span-4 lg:col-span-2">
+          <p className="text-xs font-extrabold tracking-wider text-slate-900">NAVIGASI</p>
+          <div className="mt-4 space-y-2.5 text-xs text-[var(--muted)]">
+            <p><a href="#beranda" className="hover:text-[var(--primary)] transition">Beranda</a></p>
+            <p><a href="#fitur" className="hover:text-[var(--primary)] transition">Fitur Unggulan</a></p>
+            <p><a href="#tentang" className="hover:text-[var(--primary)] transition">Hak Akses Peran</a></p>
+            <p><a href="#testimonial" className="hover:text-[var(--primary)] transition">Testimonial</a></p>
+            <p><Link href="/login" className="hover:text-[var(--primary)] transition font-semibold text-[var(--primary)]">Halaman Masuk</Link></p>
+          </div>
+        </div>
+
+        {/* Col 3: Portal Login Role */}
+        <div className="md:col-span-4 lg:col-span-2">
+          <p className="text-xs font-extrabold tracking-wider text-slate-900">PORTAL LOGIN</p>
+          <div className="mt-4 space-y-2.5 text-xs text-[var(--muted)]">
+            <p><Link href="/login/siswa" className="hover:text-[var(--primary)] transition">Portal Siswa</Link></p>
+            <p><Link href="/login/guru" className="hover:text-[var(--primary)] transition">Portal Guru</Link></p>
+            <p><Link href="/login/admin/admin" className="hover:text-[var(--primary)] transition">Administrator</Link></p>
+            <p><Link href="/login/admin/kurikulum" className="hover:text-[var(--primary)] transition">Kurikulum</Link></p>
+            <p><Link href="/login/admin/kepsek" className="hover:text-[var(--primary)] transition">Kepala Sekolah</Link></p>
+          </div>
+        </div>
+
+        {/* Col 4: Kontak Kami SMK Citra Negara */}
+        <div className="md:col-span-6 lg:col-span-3">
+          <p className="text-xs font-extrabold tracking-wider text-slate-900">KONTAK KAMI</p>
+          <div className="mt-4 space-y-3 text-xs text-[var(--muted)]">
+            <div className="flex items-start gap-2.5">
+              <MapPin className="size-4 shrink-0 text-[var(--primary)] mt-0.5" />
+              <span className="leading-relaxed">
+                <strong className="text-slate-800">SMK Citra Negara Depok</strong><br />
+                Jl. Tanah Baru No. 128, RT 002/RW 003, Kel. Beji, Kec. Beji, Kota Depok, Jawa Barat 16421
+              </span>
+            </div>
+            <div className="flex items-center gap-2.5">
+              <Phone className="size-4 shrink-0 text-[var(--primary)]" />
+              <span>(021) 775 8852 / +62 812-8228-4747</span>
+            </div>
+            <div className="flex items-center gap-2.5">
+              <Mail className="size-4 shrink-0 text-[var(--primary)]" />
+              <span>info@smkcitranegara.sch.id</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Col 5: Square Map Pinpointing SMK Citra Negara */}
+        <div className="md:col-span-6 lg:col-span-2 flex flex-col items-start md:items-end">
+          <div className="w-full max-w-[210px]">
+            <p className="text-xs font-extrabold tracking-wider text-slate-900 mb-3">LOKASI SEKOLAH</p>
+            <div className="relative aspect-square w-full overflow-hidden rounded-xl border border-slate-200 bg-slate-100 shadow-xs">
+              <iframe
+                title="Peta Lokasi SMK Citra Negara Depok"
+                src="https://maps.google.com/maps?q=SMK+Citra+Negara+Depok,+Jl.+Tanah+Baru+No.128,+Beji,+Kota+Depok&t=&z=15&ie=UTF8&iwloc=&output=embed"
+                className="h-full w-full border-0"
+                loading="lazy"
+                referrerPolicy="no-referrer-when-downgrade"
+              />
+            </div>
+            <a
+              href="https://maps.google.com/?q=SMK+Citra+Negara+Depok"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-2 inline-flex items-center gap-1 text-[11px] font-semibold text-[var(--primary)] hover:underline"
+            >
+              Buka di Google Maps <ExternalLink className="size-3" />
+            </a>
           </div>
         </div>
       </ScrollReveal>
       <div className="mx-auto flex max-w-7xl flex-col gap-4 border-t border-[var(--border)] px-6 py-6 text-xs text-[var(--muted)] md:flex-row md:justify-between">
-        <p>© 2024 Learnix LMS. All rights reserved.</p>
+        <p>© 2026 Learnix LMS. All rights reserved.</p>
         <div className="flex gap-8">
           <a href="#">Privacy Policy</a>
           <a href="#">Terms of Service</a>
@@ -408,18 +475,5 @@ export function LandingFooter() {
         </div>
       </div>
     </footer>
-  );
-}
-
-function FooterColumn({ title, items }: { title: string; items: string[] }) {
-  return (
-    <div>
-      <p className="text-xs font-extrabold tracking-wide">{title}</p>
-      <div className="mt-6 space-y-4 text-sm text-[var(--muted)]">
-        {items.map((item) => (
-          <p key={item}>{item}</p>
-        ))}
-      </div>
-    </div>
   );
 }

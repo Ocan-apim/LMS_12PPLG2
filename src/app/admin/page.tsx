@@ -78,7 +78,6 @@ export default function AdminDashboardPage() {
       <DashboardHero
         title="Halo, Administrator Learnix"
         subtitle="Kelola data kelas, siswa, guru, jurusan SMK, dan pengaturan sistem sekolah secara terpusat."
-        meta="SMK Negeri 1 Learnix • Tahun Ajaran 2024/2025 Genap"
       />
 
       {/* Primary Metrics */}
