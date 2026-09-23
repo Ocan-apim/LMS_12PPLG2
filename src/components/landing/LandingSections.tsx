@@ -133,40 +133,7 @@ function QuizMockup() {
   );
 }
 
-export function LandingNav({ session }: { session?: SessionUser | null }) {
-  return (
-    <nav className="sticky top-0 z-30 border-b border-[var(--border)] bg-white/90 backdrop-blur">
-      <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-6">
-        <Link href="/" className="font-[family-name:var(--font-display)] text-lg font-extrabold text-[var(--primary)]">
-          Learnix LMS
-        </Link>
-        <div className="hidden items-center gap-9 text-xs font-medium text-[var(--muted)] md:flex">
-          <a className="border-b-2 border-[#f9a825] pb-2 text-[#f9a825]" href="#beranda">Beranda</a>
-          <a className="transition hover:text-[var(--primary)]" href="#fitur">Fitur</a>
-          <a className="transition hover:text-[var(--primary)]" href="#testimonial">Testimonial</a>
-          <a className="transition hover:text-[var(--primary)]" href="#bantuan">Bantuan</a>
-        </div>
-        {session ? (
-          <div className="flex items-center gap-4">
-            <span className="hidden text-xs font-semibold text-slate-500 sm:inline">
-              Halo, {session.name}
-            </span>
-            <Link
-              href={ROLE_DASHBOARD[session.role]}
-              className="text-xs font-bold text-[var(--primary)] transition hover:text-[var(--primary-hover)]"
-            >
-              Dashboard
-            </Link>
-          </div>
-        ) : (
-          <Link href="/login" className="text-xs font-bold text-[var(--primary)] transition hover:text-[var(--primary-hover)]">
-            Masuk
-          </Link>
-        )}
-      </div>
-    </nav>
-  );
-}
+export { LandingNav } from "./LandingNav";
 
 export function LandingHero() {
   return (

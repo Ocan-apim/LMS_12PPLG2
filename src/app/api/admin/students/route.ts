@@ -127,6 +127,21 @@ export async function POST(req: Request) {
 
     const hashedPassword = await bcrypt.hash(password || "password123", 10);
 
+    let resolvedDepartmentId = departmentId || undefined;
+    let resolvedGrade = grade;
+
+    if (classId) {
+      const targetClass = await ClassModel.findById(classId);
+      if (targetClass) {
+        if (targetClass.departmentId) {
+          resolvedDepartmentId = targetClass.departmentId;
+        }
+        if (targetClass.grade) {
+          resolvedGrade = targetClass.grade;
+        }
+      }
+    }
+
     const student = await User.create({
       name,
       email: studentEmail,
@@ -137,8 +152,8 @@ export async function POST(req: Request) {
       gender: gender || "Laki-laki",
       birthPlace,
       birthDate: birthDate ? new Date(birthDate) : undefined,
-      grade,
-      departmentId: departmentId || undefined,
+      grade: resolvedGrade,
+      departmentId: resolvedDepartmentId,
       classId: classId || undefined,
       academicYear: academicYear || "2024/2025 - Genap",
       isActive: true,

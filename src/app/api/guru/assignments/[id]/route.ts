@@ -28,6 +28,18 @@ export async function GET(_req: Request, context: RouteContext) {
       );
     }
 
+    const teacherIdStr =
+      typeof assignment.teacherId === "object" && assignment.teacherId !== null
+        ? (assignment.teacherId as any)._id?.toString() || (assignment.teacherId as any).toString()
+        : String(assignment.teacherId);
+
+    if (session.role === "guru" && teacherIdStr !== session.id) {
+      return NextResponse.json(
+        { success: false, message: "Akses ditolak: Anda bukan pemilik tugas ini" },
+        { status: 403 }
+      );
+    }
+
     // Counts
     const [turnedInCount, gradedCount] = await Promise.all([
       Submission.countDocuments({
@@ -63,6 +75,21 @@ export async function PUT(req: Request, context: RouteContext) {
     await connectDB();
     const body = await req.json();
 
+    const existing = await Assignment.findById(id);
+    if (!existing) {
+      return NextResponse.json(
+        { success: false, message: "Tugas tidak ditemukan" },
+        { status: 404 }
+      );
+    }
+
+    if (session.role === "guru" && existing.teacherId.toString() !== session.id) {
+      return NextResponse.json(
+        { success: false, message: "Akses ditolak: Anda bukan pemilik tugas ini" },
+        { status: 403 }
+      );
+    }
+
     const {
       title,
       instructions,
@@ -72,10 +99,11 @@ export async function PUT(req: Request, context: RouteContext) {
       attachments,
       bannerUrl,
       quizId,
+      isPublished,
     } = body;
 
-    const updated = await Assignment.findOneAndUpdate(
-      { _id: id, teacherId: session.id },
+    const updated = await Assignment.findByIdAndUpdate(
+      id,
       {
         title: title ? title.trim() : undefined,
         instructions,
@@ -85,18 +113,12 @@ export async function PUT(req: Request, context: RouteContext) {
         attachments: Array.isArray(attachments) ? attachments : undefined,
         bannerUrl,
         quizId,
+        isPublished: isPublished !== undefined ? Boolean(isPublished) : undefined,
       },
       { new: true }
     )
       .populate("courseClassId", "name code")
       .populate("classId", "name grade");
-
-    if (!updated) {
-      return NextResponse.json(
-        { success: false, message: "Tugas tidak ditemukan atau Anda bukan pemilik tugas ini" },
-        { status: 404 }
-      );
-    }
 
     return NextResponse.json({ success: true, data: updated });
   } catch (err: unknown) {
@@ -113,17 +135,22 @@ export async function DELETE(_req: Request, context: RouteContext) {
     const { id } = await context.params;
     await connectDB();
 
-    const assignment = await Assignment.findOneAndDelete({
-      _id: id,
-      teacherId: session.id,
-    });
-
-    if (!assignment) {
+    const existing = await Assignment.findById(id);
+    if (!existing) {
       return NextResponse.json(
-        { success: false, message: "Tugas tidak ditemukan atau tidak memiliki izin" },
+        { success: false, message: "Tugas tidak ditemukan" },
         { status: 404 }
       );
     }
+
+    if (session.role === "guru" && existing.teacherId.toString() !== session.id) {
+      return NextResponse.json(
+        { success: false, message: "Akses ditolak: Anda bukan pemilik tugas ini" },
+        { status: 403 }
+      );
+    }
+
+    await Assignment.findByIdAndDelete(id);
 
     // Clean up submissions and class stream posts
     await Promise.all([

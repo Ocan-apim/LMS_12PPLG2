@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import { requireRole } from "@/lib/session";
-import { Assignment, Submission, CourseClass, ClassModel, User } from "@/models";
+import { Assignment, Submission, CourseClass, ClassModel, User, Quiz } from "@/models";
 
 type RouteContext = {
   params: Promise<{ id: string }>;
@@ -17,12 +17,20 @@ export async function GET(_req: Request, context: RouteContext) {
 
     const assignment = await Assignment.findById(id)
       .populate("courseClassId", "name code studentIds classRombelId")
-      .populate("classId", "name grade studentIds");
+      .populate("classId", "name grade studentIds")
+      .populate("quizId");
 
     if (!assignment) {
       return NextResponse.json(
         { success: false, message: "Tugas tidak ditemukan" },
         { status: 404 }
+      );
+    }
+
+    if (session.role === "guru" && assignment.teacherId.toString() !== session.id) {
+      return NextResponse.json(
+        { success: false, message: "Akses ditolak: Anda bukan pemilik tugas ini" },
+        { status: 403 }
       );
     }
 
@@ -68,6 +76,7 @@ export async function GET(_req: Request, context: RouteContext) {
           privateComments: sub.privateComments || [],
           attachments: sub.attachments || (sub.fileUrl ? [{ name: "Lampiran Siswa", url: sub.fileUrl, type: "file", size: "1.0 MB" }] : []),
           content: sub.content,
+          quizAnswers: sub.quizAnswers || [],
           submittedAt: sub.submittedAt,
           gradedAt: sub.gradedAt,
         };
@@ -83,6 +92,7 @@ export async function GET(_req: Request, context: RouteContext) {
           privateComments: [],
           attachments: [],
           content: "",
+          quizAnswers: [],
           submittedAt: null,
           gradedAt: null,
         };
@@ -104,6 +114,7 @@ export async function GET(_req: Request, context: RouteContext) {
           dueDate: assignment.dueDate,
           attachments: assignment.attachments || [],
           className: assignment.courseClassId?.name || assignment.classId?.name || "Kelas",
+          quiz: assignment.quizId || null,
         },
         stats: {
           totalStudents: students.length,

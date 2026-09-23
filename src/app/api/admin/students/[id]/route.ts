@@ -63,16 +63,30 @@ export async function PUT(req: Request, context: RouteContext) {
     const oldClassId = currentStudent.classId?.toString();
     const newClassId = classId ? classId.toString() : null;
 
+    let resolvedDepartmentId = departmentId || undefined;
+    let resolvedGrade = grade;
+
     if (oldClassId && oldClassId !== newClassId) {
       await ClassModel.findByIdAndUpdate(oldClassId, {
         $pull: { studentIds: id },
       });
     }
 
-    if (newClassId && oldClassId !== newClassId) {
-      await ClassModel.findByIdAndUpdate(newClassId, {
-        $addToSet: { studentIds: id },
-      });
+    if (newClassId) {
+      const targetClass = await ClassModel.findById(newClassId);
+      if (targetClass) {
+        if (targetClass.departmentId) {
+          resolvedDepartmentId = targetClass.departmentId;
+        }
+        if (targetClass.grade) {
+          resolvedGrade = targetClass.grade;
+        }
+      }
+      if (oldClassId !== newClassId) {
+        await ClassModel.findByIdAndUpdate(newClassId, {
+          $addToSet: { studentIds: id },
+        });
+      }
     }
 
     const updated = await User.findByIdAndUpdate(
@@ -84,8 +98,8 @@ export async function PUT(req: Request, context: RouteContext) {
         gender,
         birthPlace,
         birthDate: birthDate ? new Date(birthDate) : undefined,
-        grade,
-        departmentId: departmentId || undefined,
+        grade: resolvedGrade,
+        departmentId: resolvedDepartmentId,
         classId: newClassId || undefined,
         academicYear,
         email: email?.trim().toLowerCase(),

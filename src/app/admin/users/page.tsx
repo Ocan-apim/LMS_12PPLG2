@@ -13,6 +13,8 @@ import {
   ShieldCheck,
   X,
   AlertCircle,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import { Button, Spinner, Badge } from "@/components/ui";
 
@@ -25,6 +27,9 @@ interface UserItem {
   nisn?: string;
   phone?: string;
   isActive: boolean;
+  tahunBergabung?: string;
+  joinDate?: string;
+  createdAt?: string;
 }
 
 export default function AdminUsersPage() {
@@ -43,6 +48,11 @@ export default function AdminUsersPage() {
   const [selectedRole, setSelectedRole] = useState("all");
   const [search, setSearch] = useState("");
   const [selectedStatus, setSelectedStatus] = useState("all");
+  const [showPasswords, setShowPasswords] = useState<Record<string, boolean>>({});
+
+  function toggleShowPassword(id: string) {
+    setShowPasswords((prev) => ({ ...prev, [id]: !prev[id] }));
+  }
 
   // Modal Create / Edit
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -267,10 +277,10 @@ export default function AdminUsersPage() {
         <table className="w-full text-left border-collapse">
           <thead>
             <tr className="border-b border-slate-100 bg-slate-50/70 text-[11px] font-bold uppercase tracking-wider text-slate-500">
-              <th className="py-3.5 px-6">Nama Pengguna</th>
-              <th className="py-3.5 px-6">Email / Username</th>
+              <th className="py-3.5 px-6">Email</th>
+              <th className="py-3.5 px-6">Password</th>
               <th className="py-3.5 px-6">Role</th>
-              <th className="py-3.5 px-6">Identitas (NIP/NISN)</th>
+              <th className="py-3.5 px-6">Tahun bergabung</th>
               <th className="py-3.5 px-6">Status</th>
               <th className="py-3.5 px-6 text-right">Aksi</th>
             </tr>
@@ -293,9 +303,28 @@ export default function AdminUsersPage() {
               users.map((u) => (
                 <tr key={u._id} className="hover:bg-slate-50/80 transition">
                   <td className="py-4 px-6">
-                    <div className="font-semibold text-slate-900">{u.name}</div>
+                    <div className="font-mono text-xs font-semibold text-slate-900">{u.email}</div>
+                    <div className="text-[11px] text-slate-400">{u.name}</div>
                   </td>
-                  <td className="py-4 px-6 font-mono text-xs text-slate-600">{u.email}</td>
+                  <td className="py-4 px-6">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-xs text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200">
+                        {showPasswords[u._id] ? "password123" : "••••••••"}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => toggleShowPassword(u._id)}
+                        className="text-slate-400 hover:text-slate-600 p-1 rounded transition"
+                        title={showPasswords[u._id] ? "Sembunyikan password" : "Intip password"}
+                      >
+                        {showPasswords[u._id] ? (
+                          <EyeOff className="size-3.5" />
+                        ) : (
+                          <Eye className="size-3.5" />
+                        )}
+                      </button>
+                    </div>
+                  </td>
                   <td className="py-4 px-6">
                     <span
                       className={`inline-flex rounded-md px-2.5 py-1 text-xs font-bold uppercase border ${
@@ -305,8 +334,9 @@ export default function AdminUsersPage() {
                       {u.role}
                     </span>
                   </td>
-                  <td className="py-4 px-6 font-mono text-xs text-slate-600">
-                    {u.nip || u.nisn || "-"}
+                  <td className="py-4 px-6 font-mono text-xs text-slate-700">
+                    {u.tahunBergabung ||
+                      (u.createdAt ? new Date(u.createdAt).getFullYear().toString() : "-")}
                   </td>
                   <td className="py-4 px-6">
                     {u.isActive ? (
@@ -426,6 +456,21 @@ export default function AdminUsersPage() {
                 </div>
               </div>
 
+              {formData.role === "admin" && (
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    NIP (Nomor Induk Pegawai)
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.nip || ""}
+                    onChange={(e) => setFormData({ ...formData, nip: e.target.value })}
+                    placeholder="Contoh: 198503152010011002"
+                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-800 focus:border-blue-500 focus:outline-hidden"
+                  />
+                </div>
+              )}
+
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
                   Password {editingUser ? "(Kosongkan jika tidak diubah)" : <span className="text-rose-500">*</span>}
@@ -440,31 +485,28 @@ export default function AdminUsersPage() {
                 />
               </div>
 
-              <div className="grid gap-4 sm:grid-cols-2">
+              {editingUser && (
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    NIP (Untuk Guru / Staf)
-                  </label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-semibold text-slate-700">
+                      Tahun Bergabung
+                    </label>
+                    <span className="text-[11px] text-slate-400 font-medium">
+                      (Tidak dapat diubah)
+                    </span>
+                  </div>
                   <input
                     type="text"
-                    value={formData.nip}
-                    onChange={(e) => setFormData({ ...formData, nip: e.target.value })}
-                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-800 focus:border-blue-500 focus:outline-hidden"
+                    value={
+                      editingUser.tahunBergabung ||
+                      (editingUser.joinDate ? new Date(editingUser.joinDate).getFullYear().toString() : "") ||
+                      (editingUser.createdAt ? new Date(editingUser.createdAt).getFullYear().toString() : "-")
+                    }
+                    disabled
+                    className="w-full rounded-lg border border-slate-200 bg-slate-100 px-3 py-2 text-sm text-slate-500 cursor-not-allowed"
                   />
                 </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    NISN (Untuk Siswa)
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.nisn}
-                    onChange={(e) => setFormData({ ...formData, nisn: e.target.value })}
-                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-800 focus:border-blue-500 focus:outline-hidden"
-                  />
-                </div>
-              </div>
+              )}
 
               <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
                 <Button type="button" variant="outline" onClick={() => setIsModalOpen(false)}>

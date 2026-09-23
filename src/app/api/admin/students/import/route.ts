@@ -6,6 +6,7 @@ import { User, ClassModel, Department } from "@/models";
 
 export interface ImportRowPayload {
   name?: string;
+  nis?: string;
   nisn?: string;
   kelas?: string;
   jurusan?: string;
@@ -53,6 +54,18 @@ function normalizeGender(val?: string): "Laki-laki" | "Perempuan" | null {
   return null;
 }
 
+const FIELD_NAMES_ID: Record<string, string> = {
+  name: "namasiswa",
+  nis: "nis",
+  nisn: "nisn",
+  kelas: "kelas",
+  jurusan: "jurusan",
+  rombel: "rombel",
+  kelamin: "kelamin",
+  tempatLahir: "tempatlahir",
+  tanggalLahir: "tanggallahir",
+};
+
 export async function POST(req: Request) {
   const { error } = await requireRole("admin");
   if (error) return error;
@@ -69,11 +82,10 @@ export async function POST(req: Request) {
       );
     }
 
-    // Pre-fetch all classes, departments, and existing students
-    const [allClasses, allDepartments, existingUsers] = await Promise.all([
+    // Pre-fetch all classes and departments
+    const [allClasses, allDepartments] = await Promise.all([
       ClassModel.find({ isActive: true }).select("_id name grade departmentId parallelNumber"),
       Department.find({ isActive: true }).select("_id code name"),
-      User.find({ role: "siswa" }).select("nisn email"),
     ]);
 
     const classMap = new Map(allClasses.map((c) => [c.name.toUpperCase().trim(), c]));
@@ -82,10 +94,10 @@ export async function POST(req: Request) {
       deptMap.set(d.code.toUpperCase().trim(), d);
       deptMap.set(d.name.toUpperCase().trim(), d);
     }
-    const existingNisns = new Set(existingUsers.map((u) => u.nisn).filter(Boolean));
 
     const validatedRows = [];
-    const seenNisnsInBatch = new Set<string>();
+    const seenNisMap = new Map<string, string>();
+    const seenNisnMap = new Map<string, string>();
 
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
@@ -93,7 +105,17 @@ export async function POST(req: Request) {
       const fieldErrors: Record<string, string> = {};
 
       const cleanName = row.name?.toString().trim() || "";
-      const cleanNisn = row.nisn?.toString().trim() || "";
+      let cleanNis = row.nis?.toString().trim().replace(/\.0+$/, "") || "";
+      let cleanNisn = row.nisn?.toString().trim().replace(/\.0+$/, "") || "";
+
+      // Auto-pad leading zero if stripped by Excel (NIS 9 digit, NISN 10 digit)
+      if (/^\d{1,9}$/.test(cleanNis) && cleanNis.length < 9) {
+        cleanNis = cleanNis.padStart(9, "0");
+      }
+      if (/^\d{1,10}$/.test(cleanNisn) && cleanNisn.length < 10) {
+        cleanNisn = cleanNisn.padStart(10, "0");
+      }
+
       const rawKelas = row.kelas?.toString().trim() || "";
       const normalizedKelas = normalizeGrade(rawKelas);
       const cleanJurusan = row.jurusan?.toString().trim().toUpperCase() || "";
@@ -109,24 +131,41 @@ export async function POST(req: Request) {
         fieldErrors.name = "Nama siswa wajib diisi";
       }
 
-      // 2. NISN
+      // 2. NIS (9 digit)
+      if (!cleanNis) {
+        errors.push("NIS wajib diisi");
+        fieldErrors.nis = "NIS wajib diisi";
+      } else if (!/^\d{9}$/.test(cleanNis)) {
+        errors.push("NIS harus tepat 9 digit angka");
+        fieldErrors.nis = "NIS harus 9 digit";
+      } else if (seenNisMap.has(cleanNis)) {
+        const priorName = seenNisMap.get(cleanNis)!;
+        const studentLabel = cleanName || `Baris ${i + 1}`;
+        const msg = `Siswa: "${priorName}" dengan "${studentLabel}" memiliki nis yang sama! Akun "${studentLabel}" gagal diunggah.`;
+        errors.push(msg);
+        fieldErrors.nis = "NIS duplikat";
+      } else {
+        seenNisMap.set(cleanNis, cleanName || `Baris ${i + 1}`);
+      }
+
+      // 3. NISN (10 digit)
       if (!cleanNisn) {
         errors.push("NISN wajib diisi");
         fieldErrors.nisn = "NISN wajib diisi";
       } else if (!/^\d{10}$/.test(cleanNisn)) {
         errors.push("NISN harus tepat 10 digit angka");
         fieldErrors.nisn = "NISN harus 10 digit";
-      } else if (existingNisns.has(cleanNisn)) {
-        errors.push(`NISN ${cleanNisn} sudah terdaftar di sistem`);
-        fieldErrors.nisn = "NISN sudah terdaftar";
-      } else if (seenNisnsInBatch.has(cleanNisn)) {
-        errors.push(`NISN ${cleanNisn} duplikat dalam berkas`);
-        fieldErrors.nisn = "Duplikat di berkas";
+      } else if (seenNisnMap.has(cleanNisn)) {
+        const priorName = seenNisnMap.get(cleanNisn)!;
+        const studentLabel = cleanName || `Baris ${i + 1}`;
+        const msg = `Siswa: "${priorName}" dengan "${studentLabel}" memiliki nisn yang sama! Akun "${studentLabel}" gagal diunggah.`;
+        errors.push(msg);
+        fieldErrors.nisn = "NISN duplikat";
       } else {
-        seenNisnsInBatch.add(cleanNisn);
+        seenNisnMap.set(cleanNisn, cleanName || `Baris ${i + 1}`);
       }
 
-      // 3. Kelas (X, XI, XII)
+      // 4. Kelas (X, XI, XII)
       if (!rawKelas) {
         errors.push("Kelas wajib diisi");
         fieldErrors.kelas = "Kelas wajib diisi";
@@ -135,7 +174,7 @@ export async function POST(req: Request) {
         fieldErrors.kelas = "Harus X, XI, atau XII";
       }
 
-      // 4. Jurusan
+      // 5. Jurusan
       let matchedDept = null;
       if (!cleanJurusan) {
         errors.push("Jurusan wajib diisi");
@@ -148,7 +187,7 @@ export async function POST(req: Request) {
         }
       }
 
-      // 5. Rombel
+      // 6. Rombel
       const rombelNum = parseInt(cleanRombel, 10);
       if (!cleanRombel) {
         errors.push("Rombel wajib diisi");
@@ -158,7 +197,7 @@ export async function POST(req: Request) {
         fieldErrors.rombel = "Harus berupa angka";
       }
 
-      // 6. Jenis Kelamin
+      // 7. Jenis Kelamin
       if (!rawKelamin) {
         errors.push("Jenis kelamin wajib diisi");
         fieldErrors.kelamin = "Jenis kelamin wajib diisi";
@@ -167,13 +206,16 @@ export async function POST(req: Request) {
         fieldErrors.kelamin = "Harus Laki-laki / Perempuan";
       }
 
-      // 7. Tempat Lahir
+      // 8. Tempat Lahir
       if (!cleanTempatLahir) {
         errors.push("Tempat lahir wajib diisi");
         fieldErrors.tempatLahir = "Tempat lahir wajib diisi";
+      } else if (/\d/.test(cleanTempatLahir)) {
+        errors.push("Tempat lahir tidak boleh mengandung angka, harus berupa teks nama kota/daerah");
+        fieldErrors.tempatLahir = "Tidak boleh angka";
       }
 
-      // 8. Tanggal Lahir (day-month-year)
+      // 9. Tanggal Lahir (day-month-year)
       const parsedDate = parseDMYDate(cleanTanggalLahir);
       if (!cleanTanggalLahir) {
         errors.push("Tanggal lahir wajib diisi");
@@ -195,6 +237,7 @@ export async function POST(req: Request) {
       validatedRows.push({
         index: i + 1,
         name: cleanName,
+        nis: cleanNis,
         nisn: cleanNisn,
         kelas: normalizedKelas || rawKelas,
         jurusan: cleanJurusan,
@@ -231,13 +274,24 @@ export async function POST(req: Request) {
     const invalidRows = validatedRows.filter((r) => !r.isValid);
     if (invalidRows.length > 0) {
       const firstInvalid = invalidRows[0];
+      const dupError = firstInvalid.errors.find((e) => e.startsWith("Siswa: "));
+      if (dupError) {
+        return NextResponse.json(
+          {
+            success: false,
+            message: dupError,
+          },
+          { status: 400 }
+        );
+      }
       const errFields = Object.keys(firstInvalid.fieldErrors || {});
-      const firstField = errFields[0] || "data";
+      const rawField = errFields[0] || "data";
+      const fieldDisplay = FIELD_NAMES_ID[rawField] || rawField.toLowerCase();
       const studentName = firstInvalid.name || `Baris ${firstInvalid.index}`;
       return NextResponse.json(
         {
           success: false,
-          message: `Tidak dapat mengimpor data: Data "${studentName}" bagian "${firstField}" invalid! Masih terdapat ${invalidRows.length} data berstatus ERROR.`,
+          message: `Tidak dapat mengimpor data: Data "${studentName}" bagian "${fieldDisplay}" invalid! Masih terdapat ${invalidRows.length} data berstatus ERROR.`,
         },
         { status: 400 }
       );
@@ -255,7 +309,7 @@ export async function POST(req: Request) {
     const createdUsers = [];
 
     for (const item of validRowsToCommit) {
-      const studentEmail = `${item.nisn}@siswa.smk.sch.id`;
+      const studentEmail = `${item.nisn || item.nis}@siswa.smk.sch.id`;
 
       // Resolve or auto-create class if not exists
       let finalClassId = item.classId;
@@ -279,31 +333,66 @@ export async function POST(req: Request) {
         finalClassId = cls._id;
       }
 
-      const studentNis = (item.nisn || "").toString().trim();
-      const newUser = await User.create({
-        name: item.name,
-        email: studentEmail,
-        password: defaultPassword,
+      const cleanNisToSave = (item.nis || "").toString().trim();
+      const cleanNisnToSave = (item.nisn || "").toString().trim();
+
+      const existingUser = await User.findOne({
         role: "siswa",
-        nis: studentNis,
-        nisn: studentNis,
-        gender: item.kelamin === "Perempuan" ? "Perempuan" : "Laki-laki",
-        birthPlace: item.tempatLahir,
-        birthDate: item.parsedBirthDate ? new Date(item.parsedBirthDate) : undefined,
-        grade: gradeNum,
-        departmentId: item.departmentId,
-        classId: finalClassId,
-        academicYear: "2024/2025 - Genap",
-        isActive: true,
+        $or: [
+          ...(cleanNisToSave ? [{ nis: cleanNisToSave }] : []),
+          ...(cleanNisnToSave ? [{ nisn: cleanNisnToSave }] : []),
+          { email: studentEmail },
+        ],
       });
 
-      if (finalClassId) {
-        await ClassModel.findByIdAndUpdate(finalClassId, {
-          $addToSet: { studentIds: newUser._id },
+      let committedUser;
+      if (existingUser) {
+        if (existingUser.classId && existingUser.classId.toString() !== finalClassId?.toString()) {
+          await ClassModel.findByIdAndUpdate(existingUser.classId, {
+            $pull: { studentIds: existingUser._id },
+          });
+        }
+        existingUser.name = item.name;
+        existingUser.gender = item.kelamin === "Perempuan" ? "Perempuan" : "Laki-laki";
+        existingUser.birthPlace = item.tempatLahir;
+        if (item.parsedBirthDate) existingUser.birthDate = new Date(item.parsedBirthDate);
+        existingUser.grade = gradeNum;
+        existingUser.departmentId = item.departmentId;
+        existingUser.classId = finalClassId;
+        existingUser.academicYear = "2024/2025 - Genap";
+        existingUser.isActive = true;
+        if (cleanNisToSave) existingUser.nis = cleanNisToSave;
+        if (cleanNisnToSave) existingUser.nisn = cleanNisnToSave;
+        await existingUser.save();
+        committedUser = existingUser;
+      } else {
+        committedUser = await User.create({
+          name: item.name,
+          email: studentEmail,
+          password: defaultPassword,
+          role: "siswa",
+          nis: cleanNisToSave,
+          nisn: cleanNisnToSave,
+          gender: item.kelamin === "Perempuan" ? "Perempuan" : "Laki-laki",
+          birthPlace: item.tempatLahir,
+          birthDate: item.parsedBirthDate ? new Date(item.parsedBirthDate) : undefined,
+          grade: gradeNum,
+          departmentId: item.departmentId,
+          classId: finalClassId,
+          academicYear: "2024/2025 - Genap",
+          tahunBergabung: new Date().getFullYear().toString(),
+          joinYear: new Date().getFullYear(),
+          isActive: true,
         });
       }
 
-      createdUsers.push(newUser);
+      if (finalClassId) {
+        await ClassModel.findByIdAndUpdate(finalClassId, {
+          $addToSet: { studentIds: committedUser._id },
+        });
+      }
+
+      createdUsers.push(committedUser);
     }
 
     return NextResponse.json({

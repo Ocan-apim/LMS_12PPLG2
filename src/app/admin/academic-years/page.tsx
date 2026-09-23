@@ -6,6 +6,7 @@ import {
   CheckCircle2,
   Plus,
   Trash2,
+  Edit2,
   BookOpen,
   GraduationCap,
   Users,
@@ -36,6 +37,7 @@ interface TeacherOption {
   _id: string;
   name: string;
   degree?: string;
+  subjects?: Array<{ _id: string; name: string; code: string }>;
 }
 
 interface SubjectOption {
@@ -49,30 +51,18 @@ interface ClassOption {
   name: string;
 }
 
-function isPastAcademicYear(y: AcademicYearItem, activeYear?: AcademicYearItem): boolean {
+function isPastAcademicYear(y: AcademicYearItem): boolean {
   if (y.isActive) return false;
 
-  if (y.endDate) {
-    const end = new Date(y.endDate);
-    if (!isNaN(end.getTime()) && end < new Date()) {
-      return true;
-    }
-  }
+  const now = new Date();
+  const currentRealYear = now.getFullYear();
+  const currentMonth = now.getMonth() + 1;
+  const currentRealAcademicStartYear = currentMonth >= 7 ? currentRealYear : currentRealYear - 1;
+  const minAllowableStartYear = Math.min(currentRealAcademicStartYear, 2025);
 
-  if (activeYear) {
-    const activeStartYear = parseInt(activeYear.name.match(/\d{4}/)?.[0] || "0", 10);
-    const targetStartYear = parseInt(y.name.match(/\d{4}/)?.[0] || "0", 10);
-
-    if (activeStartYear > 0 && targetStartYear > 0) {
-      if (targetStartYear < activeStartYear) return true;
-      if (
-        targetStartYear === activeStartYear &&
-        activeYear.semester === "Genap" &&
-        y.semester === "Ganjil"
-      ) {
-        return true;
-      }
-    }
+  const targetStartYear = parseInt(y.name.match(/\d{4}/)?.[0] || "0", 10);
+  if (targetStartYear > 0 && targetStartYear < minAllowableStartYear) {
+    return true;
   }
 
   return false;
@@ -96,13 +86,47 @@ export default function AdminAcademicYearsPage() {
   const [submittingYear, setSubmittingYear] = useState(false);
   const [yearError, setYearError] = useState("");
 
-  // New Assignment Modal
+  // Assignment Modal (Create & Edit)
   const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
+  const [editingAssignment, setEditingAssignment] = useState<AssignmentItem | null>(null);
   const [assignTeacherId, setAssignTeacherId] = useState("");
   const [assignSubjectId, setAssignSubjectId] = useState("");
   const [assignClassId, setAssignClassId] = useState("");
+  const [assignClassIds, setAssignClassIds] = useState<string[]>([]);
   const [submittingAssign, setSubmittingAssign] = useState(false);
   const [assignError, setAssignError] = useState("");
+
+  function handleOpenCreateAssignment() {
+    setEditingAssignment(null);
+    setAssignTeacherId("");
+    setAssignSubjectId("");
+    setAssignClassId("");
+    setAssignClassIds([]);
+    setAssignError("");
+    setIsAssignModalOpen(true);
+  }
+
+  function handleOpenEditAssignment(a: AssignmentItem) {
+    setEditingAssignment(a);
+    setAssignTeacherId(a.teacherId?._id || "");
+    setAssignSubjectId(a.subjectId?._id || "");
+    setAssignClassId(a.classId?._id || "");
+    setAssignClassIds(a.classId?._id ? [a.classId._id] : []);
+    setAssignError("");
+    setIsAssignModalOpen(true);
+  }
+
+  function handleTeacherChange(teacherId: string) {
+    setAssignTeacherId(teacherId);
+    const teacher = teachers.find((t) => t._id === teacherId);
+    const teacherSubjects = teacher?.subjects || [];
+
+    if (teacherSubjects.length > 0) {
+      setAssignSubjectId(teacherSubjects[0]._id);
+    } else {
+      setAssignSubjectId("");
+    }
+  }
 
   async function loadData() {
     setLoading(true);
@@ -184,7 +208,7 @@ export default function AdminAcademicYearsPage() {
     }
   }
 
-  async function handleCreateAssignment(e: React.FormEvent) {
+  async function handleSubmitAssignment(e: React.FormEvent) {
     e.preventDefault();
     setAssignError("");
     setSubmittingAssign(true);
@@ -193,25 +217,57 @@ export default function AdminAcademicYearsPage() {
     const activeYearStr = activeYear ? `${activeYear.name} - ${activeYear.semester}` : "2024/2025 - Genap";
 
     try {
-      const res = await fetch("/api/admin/academic-assignments", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          teacherId: assignTeacherId,
-          subjectId: assignSubjectId,
-          classId: assignClassId,
-          academicYear: activeYearStr,
-        }),
-      });
-      const json = await res.json();
-      if (!json.success) {
-        setAssignError(json.message || "Gagal menambahkan penugasan");
+      if (editingAssignment) {
+        if (!assignTeacherId || !assignSubjectId || !assignClassId) {
+          setAssignError("Guru, mata pelajaran, dan kelas wajib dipilih");
+          setSubmittingAssign(false);
+          return;
+        }
+
+        const res = await fetch(`/api/admin/academic-assignments/${editingAssignment._id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            teacherId: assignTeacherId,
+            subjectId: assignSubjectId,
+            classId: assignClassId,
+            academicYear: editingAssignment.academicYear || activeYearStr,
+          }),
+        });
+        const json = await res.json();
+        if (!json.success) {
+          setAssignError(json.message || "Gagal memperbarui penugasan");
+        } else {
+          setIsAssignModalOpen(false);
+          loadData();
+        }
       } else {
-        setIsAssignModalOpen(false);
-        setAssignTeacherId("");
-        setAssignSubjectId("");
-        setAssignClassId("");
-        loadData();
+        if (!assignTeacherId || !assignSubjectId || assignClassIds.length === 0) {
+          setAssignError("Guru, mata pelajaran, dan minimal satu kelas wajib dipilih");
+          setSubmittingAssign(false);
+          return;
+        }
+
+        const res = await fetch("/api/admin/academic-assignments", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            teacherId: assignTeacherId,
+            subjectId: assignSubjectId,
+            classIds: assignClassIds,
+            academicYear: activeYearStr,
+          }),
+        });
+        const json = await res.json();
+        if (!json.success) {
+          setAssignError(json.message || "Gagal menambahkan penugasan");
+        } else {
+          setIsAssignModalOpen(false);
+          setAssignTeacherId("");
+          setAssignSubjectId("");
+          setAssignClassIds([]);
+          loadData();
+        }
       }
     } catch {
       setAssignError("Terjadi kesalahan sistem");
@@ -255,10 +311,7 @@ export default function AdminAcademicYearsPage() {
             </Button>
           ) : (
             <Button
-              onClick={() => {
-                setAssignError("");
-                setIsAssignModalOpen(true);
-              }}
+              onClick={handleOpenCreateAssignment}
               className="bg-blue-600 hover:bg-blue-700 text-white font-semibold shadow-xs"
               leftIcon={<Plus className="size-4" />}
             >
@@ -346,7 +399,7 @@ export default function AdminAcademicYearsPage() {
                     <td className="py-4 px-6 text-right">
                       {y.isActive ? (
                         <span className="text-xs text-emerald-600 font-semibold">Sedang Berjalan</span>
-                      ) : isPastAcademicYear(y, years.find((item) => item.isActive)) ? (
+                      ) : isPastAcademicYear(y) ? (
                         <span className="inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-400 italic">
                           Periode Lampau
                         </span>
@@ -420,13 +473,22 @@ export default function AdminAcademicYearsPage() {
                     </td>
                     <td className="py-4 px-6 text-slate-600 text-xs">{a.academicYear}</td>
                     <td className="py-4 px-6 text-right">
-                      <button
-                        onClick={() => handleDeleteAssignment(a._id)}
-                        className="rounded-lg p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600 transition"
-                        title="Hapus Penugasan"
-                      >
-                        <Trash2 className="size-4" />
-                      </button>
+                      <div className="flex items-center justify-end gap-1.5">
+                        <button
+                          onClick={() => handleOpenEditAssignment(a)}
+                          className="rounded-lg p-1.5 text-slate-400 hover:bg-blue-50 hover:text-blue-600 transition"
+                          title="Edit Penugasan"
+                        >
+                          <Edit2 className="size-4" />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteAssignment(a._id)}
+                          className="rounded-lg p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600 transition"
+                          title="Hapus Penugasan"
+                        >
+                          <Trash2 className="size-4" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -499,15 +561,24 @@ export default function AdminAcademicYearsPage() {
       {/* Modal Penugasan Pengajar */}
       {isAssignModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs">
-          <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl">
+          <div className="w-full max-w-xl max-h-[90vh] overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <h3 className="font-bold text-slate-900">Penugasan Pengajar (Guru ↔ Mapel ↔ Kelas)</h3>
+              <div>
+                <h3 className="font-bold text-slate-900">
+                  {editingAssignment ? "Edit Penugasan Pengajar" : "Penugasan Pengajar (Guru ↔ Mapel ↔ Kelas)"}
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  {editingAssignment
+                    ? "Perbarui guru, mata pelajaran, atau kelas penugasan."
+                    : "Pilih pengajar, mata pelajaran, dan satu atau lebih kelas rombel yang diajar."}
+                </p>
+              </div>
               <button onClick={() => setIsAssignModalOpen(false)} className="text-slate-400 hover:text-slate-600">
                 <X className="size-5" />
               </button>
             </div>
 
-            <form onSubmit={handleCreateAssignment} className="mt-4 space-y-4">
+            <form onSubmit={handleSubmitAssignment} className="mt-4 space-y-4">
               {assignError && (
                 <div className="flex items-center gap-2 rounded-lg bg-rose-50 p-3 text-xs text-rose-700 border border-rose-200">
                   <AlertCircle className="size-4 shrink-0" />
@@ -521,7 +592,7 @@ export default function AdminAcademicYearsPage() {
                 </label>
                 <select
                   value={assignTeacherId}
-                  onChange={(e) => setAssignTeacherId(e.target.value)}
+                  onChange={(e) => handleTeacherChange(e.target.value)}
                   required
                   className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-800 focus:border-blue-500 focus:outline-hidden"
                 >
@@ -529,55 +600,161 @@ export default function AdminAcademicYearsPage() {
                   {teachers.map((t) => (
                     <option key={t._id} value={t._id}>
                       {t.name} {t.degree ? `, ${t.degree}` : ""}
+                      {t.subjects && t.subjects.length > 0
+                        ? ` (${t.subjects.map((s) => s.name).join(", ")})`
+                        : " (Belum ada mapel)"}
                     </option>
                   ))}
                 </select>
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Pilih Mata Pelajaran <span className="text-rose-500">*</span>
-                </label>
-                <select
-                  value={assignSubjectId}
-                  onChange={(e) => setAssignSubjectId(e.target.value)}
-                  required
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-800 focus:border-blue-500 focus:outline-hidden"
-                >
-                  <option value="">-- Pilih Mapel --</option>
-                  {subjects.map((s) => (
-                    <option key={s._id} value={s._id}>
-                      {s.name} ({s.code})
-                    </option>
-                  ))}
-                </select>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-semibold text-slate-700">
+                    Pilih Mata Pelajaran <span className="text-rose-500">*</span>
+                  </label>
+                  {(() => {
+                    const selectedTeacher = teachers.find((t) => t._id === assignTeacherId);
+                    const count = selectedTeacher?.subjects?.length || 0;
+                    if (!selectedTeacher) return null;
+                    return (
+                      <span className="text-[11px] font-medium text-blue-600">
+                        {count > 0 ? `${count} mapel terdaftar pada guru ini` : "Semua mapel"}
+                      </span>
+                    );
+                  })()}
+                </div>
+                {(() => {
+                  const selectedTeacher = teachers.find((t) => t._id === assignTeacherId);
+                  const teacherSubjects = selectedTeacher?.subjects || [];
+                  const availableSubjects = teacherSubjects.length > 0 ? teacherSubjects : subjects;
+
+                  return (
+                    <select
+                      value={assignSubjectId}
+                      onChange={(e) => setAssignSubjectId(e.target.value)}
+                      required
+                      className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-800 focus:border-blue-500 focus:outline-hidden"
+                    >
+                      <option value="">-- Pilih Mapel --</option>
+                      {availableSubjects.map((s) => (
+                        <option key={s._id} value={s._id}>
+                          {s.name} ({s.code})
+                        </option>
+                      ))}
+                    </select>
+                  );
+                })()}
+                {(() => {
+                  const selectedTeacher = teachers.find((t) => t._id === assignTeacherId);
+                  if (selectedTeacher && (!selectedTeacher.subjects || selectedTeacher.subjects.length === 0)) {
+                    return (
+                      <p className="mt-1 text-[11px] text-amber-600">
+                        Guru ini belum di-assign mapel di Manajemen Guru. Menampilkan seluruh mapel.
+                      </p>
+                    );
+                  }
+                  return null;
+                })()}
               </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Pilih Kelas Rombel <span className="text-rose-500">*</span>
-                </label>
-                <select
-                  value={assignClassId}
-                  onChange={(e) => setAssignClassId(e.target.value)}
-                  required
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-800 focus:border-blue-500 focus:outline-hidden"
-                >
-                  <option value="">-- Pilih Kelas --</option>
-                  {classes.map((c) => (
-                    <option key={c._id} value={c._id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              {editingAssignment ? (
+                /* Edit Mode: Single Class Selection */
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Pilih Kelas Rombel <span className="text-rose-500">*</span>
+                  </label>
+                  <select
+                    value={assignClassId}
+                    onChange={(e) => setAssignClassId(e.target.value)}
+                    required
+                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-800 focus:border-blue-500 focus:outline-hidden"
+                  >
+                    <option value="">-- Pilih Kelas --</option>
+                    {classes.map((c) => (
+                      <option key={c._id} value={c._id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ) : (
+                /* Create Mode: Multi-Class Selection */
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-xs font-semibold text-slate-700">
+                      Pilih Kelas Rombel <span className="text-rose-500">*</span>
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] font-semibold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-200">
+                        {assignClassIds.length} Kelas Dipilih
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (assignClassIds.length === classes.length) {
+                            setAssignClassIds([]);
+                          } else {
+                            setAssignClassIds(classes.map((c) => c._id));
+                          }
+                        }}
+                        className="text-[11px] font-semibold text-blue-600 hover:underline cursor-pointer"
+                      >
+                        {assignClassIds.length === classes.length ? "Batal Semua" : "Pilih Semua"}
+                      </button>
+                    </div>
+                  </div>
 
-              <div className="flex justify-end gap-2 pt-3">
+                  <div className="max-h-52 overflow-y-auto rounded-lg border border-slate-200 bg-slate-50/50 p-2.5 grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    {classes.length === 0 ? (
+                      <p className="text-xs text-slate-400 col-span-3 text-center py-4">
+                        Belum ada data kelas aktif.
+                      </p>
+                    ) : (
+                      classes.map((c) => {
+                        const isSelected = assignClassIds.includes(c._id);
+                        return (
+                          <label
+                            key={c._id}
+                            className={`flex items-center gap-2 p-2 rounded-lg border text-xs cursor-pointer transition select-none ${
+                              isSelected
+                                ? "border-blue-500 bg-blue-50/90 text-blue-900 font-semibold shadow-xs"
+                                : "border-slate-200 bg-white text-slate-700 hover:bg-slate-100/70"
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setAssignClassIds([...assignClassIds, c._id]);
+                                } else {
+                                  setAssignClassIds(assignClassIds.filter((id) => id !== c._id));
+                                }
+                              }}
+                              className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 size-3.5"
+                            />
+                            <span className="truncate">{c.name}</span>
+                          </label>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+              )}
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
                 <Button type="button" variant="outline" onClick={() => setIsAssignModalOpen(false)}>
                   Batal
                 </Button>
-                <Button type="submit" disabled={submittingAssign} className="bg-blue-600 text-white hover:bg-blue-700">
-                  {submittingAssign ? "Menugaskan..." : "Tugaskan Pengajar"}
+                <Button type="submit" disabled={submittingAssign} className="bg-blue-600 text-white hover:bg-blue-700 font-semibold">
+                  {submittingAssign
+                    ? "Menyimpan..."
+                    : editingAssignment
+                    ? "Simpan Perubahan"
+                    : assignClassIds.length > 1
+                    ? `Tugaskan ke ${assignClassIds.length} Kelas`
+                    : "Tugaskan Pengajar"}
                 </Button>
               </div>
             </form>

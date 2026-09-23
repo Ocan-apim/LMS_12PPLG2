@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import { requireRole } from "@/lib/session";
-import { Submission, User } from "@/models";
+import { Submission, Assignment, User } from "@/models";
 
 type RouteContext = {
   params: Promise<{ id: string }>;
@@ -24,6 +24,7 @@ export async function POST(req: Request, context: RouteContext) {
       assignmentId,
       studentId,
       status,
+      quizAnswers,
     } = body;
 
     let sub;
@@ -47,6 +48,22 @@ export async function POST(req: Request, context: RouteContext) {
       );
     }
 
+    // Verify ownership: assignment must belong to authenticated guru
+    const assignment = await Assignment.findById(sub.assignmentId);
+    if (!assignment) {
+      return NextResponse.json(
+        { success: false, message: "Tugas terkait tidak ditemukan" },
+        { status: 404 }
+      );
+    }
+
+    if (session.role === "guru" && assignment.teacherId.toString() !== session.id) {
+      return NextResponse.json(
+        { success: false, message: "Akses ditolak: Anda bukan pemilik penugasan ini" },
+        { status: 403 }
+      );
+    }
+
     if (score !== undefined) {
       sub.score = Number(score);
       sub.status = "graded";
@@ -60,6 +77,9 @@ export async function POST(req: Request, context: RouteContext) {
     }
     if (status) {
       sub.status = status;
+    }
+    if (quizAnswers && Array.isArray(quizAnswers)) {
+      sub.quizAnswers = quizAnswers;
     }
 
     if (privateComment && privateComment.trim()) {

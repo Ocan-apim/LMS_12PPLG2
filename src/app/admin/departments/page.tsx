@@ -292,10 +292,10 @@ export default function AdminDepartmentsPage() {
                     )}
                   </td>
                   <td className="py-4 px-6 font-semibold text-slate-800">
-                    {d.maxClasses || d.classCount || 0}
+                    {d.classCount ?? 0}
                   </td>
                   <td className="py-4 px-6 font-semibold text-slate-800">
-                    {(d.studentCount ?? 0) > 0 ? d.studentCount : (d.capacity || 0)}
+                    {d.studentCount ?? 0}
                   </td>
                   <td className="py-4 px-6 text-right">
                     <div className="flex items-center justify-end gap-1">
@@ -364,38 +364,40 @@ export default function AdminDepartmentsPage() {
                 />
               </div>
 
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Kode Jurusan <span className="text-rose-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.code}
-                    onChange={(e) => setFormData({ ...formData, code: e.target.value.toUpperCase() })}
-                    placeholder="Contoh: PPLG"
-                    required
-                    className="w-full rounded-lg border border-slate-200 px-3 py-2 font-mono text-sm uppercase text-slate-800 focus:border-blue-500 focus:outline-hidden"
-                  />
-                </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Kode Jurusan <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={formData.code}
+                  onChange={(e) => setFormData({ ...formData, code: e.target.value.toUpperCase() })}
+                  placeholder="Contoh: PPLG"
+                  required
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 font-mono text-sm uppercase text-slate-800 focus:border-blue-500 focus:outline-hidden"
+                />
+              </div>
 
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Jumlah Kelas Maksimal (Paralel) <span className="text-rose-500">*</span>
-                  </label>
-                  <input
-                    type="number"
-                    min={1}
-                    max={10}
-                    value={formData.maxClasses}
-                    onChange={(e) => {
-                      const count = Number(e.target.value) || 1;
-                      setFormData({ ...formData, maxClasses: count, capacity: count * 36 });
-                    }}
-                    required
-                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-800 focus:border-blue-500 focus:outline-hidden"
-                  />
+              <div className="rounded-lg bg-blue-50/70 border border-blue-200 p-3 text-xs text-blue-900">
+                <div className="font-semibold text-blue-950 mb-1">
+                  Kalkulasi Otomatis Sistem
                 </div>
+                <p className="text-blue-700">
+                  Jumlah kelas dan jumlah siswa dihitung secara otomatis oleh sistem berdasarkan rombel kelas aktif dan siswa yang terdaftar di jurusan ini.
+                </p>
+                {editingDept && (
+                  <div className="mt-2.5 flex items-center gap-3 font-medium text-blue-900">
+                    <span className="inline-flex items-center gap-1 bg-white px-2.5 py-1 rounded-md border border-blue-200 text-xs">
+                      <strong>{editingDept.classCount ?? 0}</strong> Kelas Terdaftar
+                    </span>
+                    <span className="inline-flex items-center gap-1 bg-white px-2.5 py-1 rounded-md border border-blue-200 text-xs">
+                      <strong>{editingDept.studentCount ?? 0}</strong> Siswa Aktif
+                    </span>
+                    <span className="inline-flex items-center gap-1 bg-white px-2.5 py-1 rounded-md border border-blue-200 text-xs">
+                      <strong>{editingDept.capacity ?? 0}</strong> Kapasitas Kelas
+                    </span>
+                  </div>
+                )}
               </div>
 
               <div>

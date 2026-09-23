@@ -78,6 +78,26 @@ export default function GuruClassesPage() {
           },
         ];
 
+  const [sortBy, setSortBy] = useState<"name-asc" | "name-desc" | "students" | "assignments">("name-asc");
+  const [sortDropdownOpen, setSortDropdownOpen] = useState(false);
+  const [cardMenuOpenId, setCardMenuOpenId] = useState<string | null>(null);
+  const [copiedCodeId, setCopiedCodeId] = useState<string | null>(null);
+
+  // Sorting
+  const sortedClasses = [...displayClasses].sort((a, b) => {
+    if (sortBy === "name-asc") return a.name.localeCompare(b.name);
+    if (sortBy === "name-desc") return b.name.localeCompare(a.name);
+    if (sortBy === "students") return (b.studentCount || 0) - (a.studentCount || 0);
+    if (sortBy === "assignments") return (b.assignmentCount || 0) - (a.assignmentCount || 0);
+    return 0;
+  });
+
+  function handleCopyClassCode(cId: string, code: string) {
+    navigator.clipboard.writeText(code);
+    setCopiedCodeId(cId);
+    setTimeout(() => setCopiedCodeId(null), 2000);
+  }
+
   if (loading) {
     return (
       <div className="flex h-64 items-center justify-center">
@@ -107,31 +127,126 @@ export default function GuruClassesPage() {
               <span>Buat Baru</span>
             </button>
           </Link>
-          <button
-            type="button"
-            className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 shadow-xs hover:bg-slate-50 transition"
-          >
-            <ArrowUpDown className="size-3.5 text-slate-500" />
-            <span>Urutkan</span>
-          </button>
+
+          {/* Interactive Sort Dropdown */}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setSortDropdownOpen((prev) => !prev)}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 shadow-xs hover:bg-slate-50 transition"
+            >
+              <ArrowUpDown className="size-3.5 text-slate-500" />
+              <span>Urutkan</span>
+            </button>
+
+            {sortDropdownOpen && (
+              <div className="absolute right-0 top-full mt-2 w-48 rounded-2xl border border-slate-200 bg-white p-1.5 shadow-xl z-50 text-xs">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSortBy("name-asc");
+                    setSortDropdownOpen(false);
+                  }}
+                  className={`w-full text-left px-3 py-2 rounded-xl transition ${
+                    sortBy === "name-asc"
+                      ? "bg-blue-50 font-bold text-blue-600"
+                      : "text-slate-700 hover:bg-slate-50"
+                  }`}
+                >
+                  Nama (A - Z)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSortBy("name-desc");
+                    setSortDropdownOpen(false);
+                  }}
+                  className={`w-full text-left px-3 py-2 rounded-xl transition ${
+                    sortBy === "name-desc"
+                      ? "bg-blue-50 font-bold text-blue-600"
+                      : "text-slate-700 hover:bg-slate-50"
+                  }`}
+                >
+                  Nama (Z - A)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSortBy("students");
+                    setSortDropdownOpen(false);
+                  }}
+                  className={`w-full text-left px-3 py-2 rounded-xl transition ${
+                    sortBy === "students"
+                      ? "bg-blue-50 font-bold text-blue-600"
+                      : "text-slate-700 hover:bg-slate-50"
+                  }`}
+                >
+                  Siswa Terbanyak
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSortBy("assignments");
+                    setSortDropdownOpen(false);
+                  }}
+                  className={`w-full text-left px-3 py-2 rounded-xl transition ${
+                    sortBy === "assignments"
+                      ? "bg-blue-50 font-bold text-blue-600"
+                      : "text-slate-700 hover:bg-slate-50"
+                  }`}
+                >
+                  Tugas Terbanyak
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
-      {/* Class Cards Grid matching Screenshot 1 Left */}
-      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-2">
-        {displayClasses.map((item) => (
+      {/* Class Cards Grid matching Figma Page 2 Top (3-column responsive) */}
+      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+        {sortedClasses.map((item) => (
           <div
             key={item._id}
-            className="group overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs transition hover:border-blue-300 hover:shadow-md"
+            className="group relative overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs transition hover:border-blue-400 hover:shadow-md"
           >
             {/* Top Blue Header Banner with 3-dots menu */}
-            <div className="relative h-28 bg-blue-600 p-3">
-              <button
-                type="button"
-                className="absolute right-3 top-3 text-white/80 hover:text-white p-1 rounded-md hover:bg-white/10 transition"
-              >
-                <MoreVertical className="size-4" />
-              </button>
+            <div className="relative h-28 bg-[#0066FF] p-3">
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setCardMenuOpenId((prev) => (prev === item._id ? null : item._id))
+                  }
+                  className="absolute right-0 top-0 text-white/80 hover:text-white p-1 rounded-md hover:bg-white/10 transition"
+                >
+                  <MoreVertical className="size-4" />
+                </button>
+
+                {cardMenuOpenId === item._id && (
+                  <div className="absolute right-0 top-6 w-40 rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl z-50 text-xs text-slate-800 animate-in fade-in">
+                    <Link
+                      href={`/guru/classes/${item._id}`}
+                      className="block px-3 py-1.5 rounded-lg hover:bg-slate-50 font-medium text-slate-700"
+                    >
+                      Buka Kelas
+                    </Link>
+                    <Link
+                      href={`/guru/assignments/new?classId=${item._id}`}
+                      className="block px-3 py-1.5 rounded-lg hover:bg-slate-50 font-medium text-slate-700"
+                    >
+                      Buat Tugas
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={() => handleCopyClassCode(item._id, item.code)}
+                      className="w-full text-left px-3 py-1.5 rounded-lg hover:bg-slate-50 font-medium text-slate-700"
+                    >
+                      {copiedCodeId === item._id ? "Kode Tersalin!" : "Salin Kode Kelas"}
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Bottom Card Content */}
@@ -143,8 +258,8 @@ export default function GuruClassesPage() {
                 >
                   {item.name}
                 </Link>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Gedung D • (Nama walas)
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Gedung D • {item.classRombelId?.name ? `Wali Kelas ${item.classRombelId.name}` : "(Nama walas)"}
                 </p>
               </div>
 
@@ -178,7 +293,7 @@ export default function GuruClassesPage() {
         ))}
       </div>
 
-      {/* Bottom Widgets Row matching Screenshot 1 Left */}
+      {/* Bottom Widgets Row matching Figma Page 2 Top */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
         {/* Left Widget (8 cols): Pengiriman Siswa Terbaru */}
         <div className="lg:col-span-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-xs space-y-4">
@@ -197,7 +312,7 @@ export default function GuruClassesPage() {
           <div className="space-y-3">
             <div className="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50/50 p-3 hover:bg-slate-50 transition">
               <div className="flex items-center gap-3">
-                <div className="size-8 rounded-full bg-slate-200 overflow-hidden flex items-center justify-center text-xs font-bold text-slate-600">
+                <div className="size-8 rounded-full bg-blue-100 flex items-center justify-center text-xs font-bold text-blue-700">
                   R
                 </div>
                 <div>
@@ -207,14 +322,17 @@ export default function GuruClassesPage() {
                   </p>
                 </div>
               </div>
-              <span className="rounded-full bg-slate-200/80 px-2.5 py-1 text-[10px] font-semibold text-slate-600">
-                Kiriman Baru
-              </span>
+              <Link
+                href="/guru/grades"
+                className="rounded-lg bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-600 hover:bg-blue-100 transition"
+              >
+                Kirimkan Nilai
+              </Link>
             </div>
 
             <div className="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50/50 p-3 hover:bg-slate-50 transition">
               <div className="flex items-center gap-3">
-                <div className="size-8 rounded-full bg-slate-200 overflow-hidden flex items-center justify-center text-xs font-bold text-slate-600">
+                <div className="size-8 rounded-full bg-emerald-100 flex items-center justify-center text-xs font-bold text-emerald-700">
                   S
                 </div>
                 <div>
@@ -224,19 +342,22 @@ export default function GuruClassesPage() {
                   </p>
                 </div>
               </div>
-              <span className="rounded-full bg-slate-200/80 px-2.5 py-1 text-[10px] font-semibold text-slate-600">
-                Kiriman Baru
-              </span>
+              <Link
+                href="/guru/grades"
+                className="rounded-lg bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-600 hover:bg-blue-100 transition"
+              >
+                Kirimkan Nilai
+              </Link>
             </div>
           </div>
         </div>
 
-        {/* Right Widget (4 cols): Performa Kelas matching Screenshot 1 Left */}
-        <div className="lg:col-span-4 rounded-2xl bg-blue-600 p-6 text-white shadow-md flex flex-col justify-between space-y-6">
+        {/* Right Widget (4 cols): Performa Kelas matching Figma Page 2 Top */}
+        <div className="lg:col-span-4 rounded-2xl bg-[#0066FF] p-6 text-white shadow-md flex flex-col justify-between space-y-6">
           <div className="space-y-1">
             <h3 className="text-sm font-bold text-white">Performa Kelas</h3>
             <p className="text-xs text-blue-100 leading-relaxed">
-              Rata-rata nilai di semua kelas Learnix minggu ini.
+              Rata-rata nilai di semua kelas Learnix minggu ini:
             </p>
           </div>
 
@@ -246,16 +367,26 @@ export default function GuruClassesPage() {
             </div>
             <div className="flex items-center gap-1 text-xs text-blue-100">
               <TrendingUp className="size-3.5" />
-              <span>+4.2% dari bulan lalu</span>
+              <span>+4.2% dari minggu lalu</span>
             </div>
           </div>
 
-          <button
-            type="button"
-            className="w-full rounded-xl bg-white py-2.5 text-xs font-bold text-blue-600 hover:bg-blue-50 transition shadow-xs"
+          <Link
+            href="/guru/grades"
+            className="w-full text-center rounded-xl bg-white/20 border border-white/30 py-2.5 text-xs font-bold text-white hover:bg-white/30 transition shadow-xs"
           >
             Unduh Laporan Lengkap
-          </button>
+          </Link>
+        </div>
+      </div>
+
+      {/* Footer matching Figma Page 2 */}
+      <div className="flex flex-col sm:flex-row items-center justify-between border-t border-slate-200 pt-6 text-[11px] text-slate-400 gap-2">
+        <p>© 2026 Learnix LMS. All rights reserved.</p>
+        <div className="flex items-center gap-4">
+          <span className="hover:text-slate-600 cursor-pointer">Privacy Policy</span>
+          <span className="hover:text-slate-600 cursor-pointer">Terms of Service</span>
+          <span className="hover:text-slate-600 cursor-pointer">Contact Support</span>
         </div>
       </div>
     </div>

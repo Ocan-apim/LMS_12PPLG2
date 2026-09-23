@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Bell, CircleHelp, Menu, Search, X, Users, GraduationCap, BookOpen, Loader2 } from "lucide-react";
+import { Bell, Menu, Search, X, Users, GraduationCap, BookOpen, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import type { Role } from "@/types";
 
@@ -261,12 +261,6 @@ export function TopNav({ userName, roleLabel, role, onMenuClick }: TopNavProps) 
         >
           <Bell className="size-4.5" />
           <span className="absolute top-1.5 right-1.5 size-1.5 rounded-full bg-red-500" />
-        </button>
-        <button
-          aria-label="Bantuan"
-          className="rounded-full p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-800 transition"
-        >
-          <CircleHelp className="size-4.5" />
         </button>
 
         {/* Profile Section: Hidden for role === "admin" as requested! */}

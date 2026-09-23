@@ -31,6 +31,7 @@ interface TeacherItem {
   isHomeroomTeacher?: boolean;
   homeroomClassId?: { _id: string; name: string };
   joinDate?: string;
+  tahunBergabung?: string;
 }
 
 interface SubjectOption {
@@ -86,6 +87,92 @@ export default function AdminTeachersPage() {
   // Delete modal
   const [deleteTarget, setDeleteTarget] = useState<TeacherItem | null>(null);
   const [deleting, setDeleting] = useState(false);
+
+  // Edit modal
+  const [editingTeacher, setEditingTeacher] = useState<TeacherItem | null>(null);
+  const [editForm, setEditForm] = useState({
+    name: "",
+    nip: "",
+    degree: "",
+    tahunBergabung: "",
+    selectedSubjectIds: [] as string[],
+  });
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
+
+  function handleOpenEditModal(teacher: TeacherItem) {
+    setEditingTeacher(teacher);
+    setEditForm({
+      name: teacher.name || "",
+      nip: teacher.nip || "",
+      degree: teacher.degree || "",
+      tahunBergabung:
+        teacher.tahunBergabung ||
+        (teacher.joinDate ? new Date(teacher.joinDate).getFullYear().toString() : ""),
+      selectedSubjectIds: teacher.subjects?.map((s) => s._id) || [],
+    });
+    setEditError(null);
+  }
+
+  function handleToggleSubject(subjectId: string) {
+    setEditForm((prev) => {
+      const isSelected = prev.selectedSubjectIds.includes(subjectId);
+      if (isSelected) {
+        return {
+          ...prev,
+          selectedSubjectIds: prev.selectedSubjectIds.filter((id) => id !== subjectId),
+        };
+      } else {
+        if (prev.selectedSubjectIds.length >= 2) {
+          return prev;
+        }
+        return {
+          ...prev,
+          selectedSubjectIds: [...prev.selectedSubjectIds, subjectId],
+        };
+      }
+    });
+  }
+
+  async function handleSaveEdit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editingTeacher) return;
+    if (!editForm.name.trim()) {
+      setEditError("Nama lengkap wajib diisi");
+      return;
+    }
+    if (editForm.selectedSubjectIds.length > 2) {
+      setEditError("Maksimal 2 mata pelajaran yang dapat di-assign per guru");
+      return;
+    }
+
+    setSavingEdit(true);
+    setEditError(null);
+    try {
+      const res = await fetch(`/api/admin/teachers/${editingTeacher._id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: editForm.name.trim(),
+          nip: editForm.nip.trim(),
+          degree: editForm.degree.trim(),
+          tahunBergabung: editForm.tahunBergabung.trim(),
+          subjects: editForm.selectedSubjectIds,
+        }),
+      });
+      const json = await res.json();
+      if (!json.success) {
+        setEditError(json.message || "Gagal menyimpan perubahan");
+      } else {
+        setEditingTeacher(null);
+        loadData();
+      }
+    } catch {
+      setEditError("Terjadi kesalahan sistem saat menyimpan perubahan");
+    } finally {
+      setSavingEdit(false);
+    }
+  }
 
   function handleOpenFilterDrawer() {
     setTempSubject(selectedSubject);
@@ -319,6 +406,13 @@ export default function AdminTeachersPage() {
                   <td className="py-4 px-6 text-right">
                     <div className="flex items-center justify-end gap-1">
                       <button
+                        onClick={() => handleOpenEditModal(t)}
+                        className="rounded-lg p-1.5 text-slate-400 hover:bg-blue-50 hover:text-blue-600 transition"
+                        title="Edit Guru & Mapel"
+                      >
+                        <Edit2 className="size-4" />
+                      </button>
+                      <button
                         onClick={() => setDeleteTarget(t)}
                         className="rounded-lg p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600 transition"
                         title="Hapus Guru"
@@ -414,8 +508,9 @@ export default function AdminTeachersPage() {
                     onChange={(e) => setTempSort(e.target.value)}
                     className="w-full appearance-none rounded-lg border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-800 pr-10 focus:border-blue-600 focus:outline-hidden"
                   >
-                    <option value="name">Alfabet</option>
-                    <option value="nip">NIP</option>
+                    <option value="name">Alfabet (A - Z)</option>
+                    <option value="name_desc">Alfabet (Z - A)</option>
+                    <option value="nip">Nomor Induk Pegawai (NIP)</option>
                   </select>
                   <ChevronDown className="pointer-events-none absolute right-3.5 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
                 </div>
@@ -541,6 +636,175 @@ export default function AdminTeachersPage() {
                 Terapkan Filter
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Teacher & Assign Subject Modal */}
+      {editingTeacher && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-xl max-h-[90vh] overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl">
+            <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+              <div>
+                <h3 className="text-lg font-bold text-slate-900">Edit Data & Penugasan Guru</h3>
+                <p className="text-xs text-slate-500">
+                  Ubah profil pengajar dan assign mata pelajaran (maksimal 2 mata pelajaran).
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingTeacher(null)}
+                className="rounded-lg p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition"
+              >
+                <X className="size-5" />
+              </button>
+            </div>
+
+            {editError && (
+              <div className="mt-4 rounded-lg bg-rose-50 p-3 text-xs text-rose-700 border border-rose-200">
+                {editError}
+              </div>
+            )}
+
+            <form onSubmit={handleSaveEdit} className="mt-4 space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Nama Lengkap <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={editForm.name}
+                    onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                    required
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-800 focus:border-blue-600 focus:outline-hidden"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    NIP (Nomor Induk Pegawai)
+                  </label>
+                  <input
+                    type="text"
+                    value={editForm.nip}
+                    onChange={(e) => setEditForm({ ...editForm, nip: e.target.value })}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-800 focus:border-blue-600 focus:outline-hidden"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Gelar (Opsional)
+                  </label>
+                  <input
+                    type="text"
+                    value={editForm.degree}
+                    placeholder="Contoh: S.Pd, M.Kom"
+                    onChange={(e) => setEditForm({ ...editForm, degree: e.target.value })}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-800 focus:border-blue-600 focus:outline-hidden"
+                  />
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-semibold text-slate-700">
+                      Tahun Bergabung
+                    </label>
+                    <span className="text-[10px] text-slate-400 font-medium">
+                      (Tidak dapat diubah)
+                    </span>
+                  </div>
+                  <input
+                    type="number"
+                    value={editForm.tahunBergabung}
+                    disabled
+                    placeholder="Contoh: 2024"
+                    className="w-full rounded-lg border border-slate-300 bg-slate-100 px-3 py-2 text-sm text-slate-500 cursor-not-allowed focus:outline-hidden"
+                  />
+                </div>
+              </div>
+
+              {/* Subject Selection - Max 2 */}
+              <div className="pt-2 border-t border-slate-100">
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">
+                    Mata Pelajaran yang Diampu
+                  </label>
+                  <span
+                    className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                      editForm.selectedSubjectIds.length === 2
+                        ? "bg-amber-100 text-amber-800"
+                        : "bg-blue-50 text-blue-700"
+                    }`}
+                  >
+                    {editForm.selectedSubjectIds.length}/2 Terpilih
+                  </span>
+                </div>
+
+                {editForm.selectedSubjectIds.length >= 2 && (
+                  <p className="text-[11px] text-amber-600 mb-2">
+                    Batas maksimal 2 mapel tercapai. Hapus salah satu pilihan jika ingin memilih mapel lain.
+                  </p>
+                )}
+
+                <div className="max-h-52 overflow-y-auto rounded-lg border border-slate-200 p-2 grid grid-cols-1 sm:grid-cols-2 gap-2 bg-slate-50/50">
+                  {subjects.length === 0 ? (
+                    <p className="text-xs text-slate-400 col-span-2 text-center py-4">
+                      Belum ada data mata pelajaran.
+                    </p>
+                  ) : (
+                    subjects.map((sub) => {
+                      const isChecked = editForm.selectedSubjectIds.includes(sub._id);
+                      const isDisabled = !isChecked && editForm.selectedSubjectIds.length >= 2;
+                      return (
+                        <label
+                          key={sub._id}
+                          className={`flex items-start gap-2.5 p-2.5 rounded-lg border text-xs cursor-pointer transition ${
+                            isChecked
+                              ? "bg-blue-50/80 border-blue-400 text-blue-900 font-medium"
+                              : isDisabled
+                              ? "bg-slate-100/60 border-slate-200 text-slate-400 cursor-not-allowed"
+                              : "bg-white border-slate-200 text-slate-700 hover:border-slate-300"
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            disabled={isDisabled}
+                            onChange={() => handleToggleSubject(sub._id)}
+                            className="mt-0.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <div className="truncate font-semibold">{sub.name}</div>
+                            <div className="text-[10px] text-slate-400 font-mono">{sub.code}</div>
+                          </div>
+                        </label>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="mt-6 flex justify-end gap-3 pt-4 border-t border-slate-100">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setEditingTeacher(null)}
+                  disabled={savingEdit}
+                >
+                  Batal
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={savingEdit}
+                  className="bg-blue-600 hover:bg-blue-700 text-white font-medium"
+                >
+                  {savingEdit ? "Menyimpan..." : "Simpan Perubahan"}
+                </Button>
+              </div>
+            </form>
           </div>
         </div>
       )}

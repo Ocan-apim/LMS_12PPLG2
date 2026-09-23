@@ -29,6 +29,8 @@ export interface IUser {
 
   // Umum / Staff
   phone?: string;
+  tahunBergabung?: string;
+  joinYear?: number;
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -77,6 +79,8 @@ const UserSchema = new Schema<IUser>(
 
     // Umum
     phone: { type: String, trim: true },
+    tahunBergabung: { type: String, trim: true },
+    joinYear: { type: Number },
     isActive: { type: Boolean, default: true },
   },
   { timestamps: true }

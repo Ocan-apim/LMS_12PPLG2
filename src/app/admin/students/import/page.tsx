@@ -22,6 +22,7 @@ import * as XLSX from "xlsx";
 interface PreviewRow {
   index: number;
   name: string;
+  nis: string;
   nisn: string;
   kelas: string;
   jurusan: string;
@@ -34,6 +35,7 @@ interface PreviewRow {
   errors: string[];
   fieldErrors: {
     name?: string;
+    nis?: string;
     nisn?: string;
     kelas?: string;
     jurusan?: string;
@@ -69,6 +71,7 @@ function formatToDMY(val: unknown): string {
 
 const FIELD_NAMES_ID: Record<string, string> = {
   name: "namasiswa",
+  nis: "nis",
   nisn: "nisn",
   kelas: "kelas",
   jurusan: "jurusan",
@@ -78,16 +81,20 @@ const FIELD_NAMES_ID: Record<string, string> = {
   tanggalLahir: "tanggallahir",
 };
 
-function validateRowData(r: {
-  name: string;
-  nisn: string;
-  kelas: string;
-  jurusan: string;
-  rombel: string;
-  kelamin: string;
-  tempatLahir: string;
-  tanggalLahir: string;
-}) {
+function validateRowData(
+  r: {
+    name: string;
+    nis: string;
+    nisn: string;
+    kelas: string;
+    jurusan: string;
+    rombel: string;
+    kelamin: string;
+    tempatLahir: string;
+    tanggalLahir: string;
+  },
+  otherRows?: Array<{ index: number; name: string; nis: string; nisn: string }>
+) {
   const errors: string[] = [];
   const fieldErrors: Record<string, string> = {};
 
@@ -97,14 +104,48 @@ function validateRowData(r: {
     fieldErrors.name = "Nama wajib diisi";
   }
 
-  // 2. NISN
-  const cleanNisn = r.nisn?.toString().trim() || "";
+  // 2. NIS (9 digit)
+  let cleanNis = r.nis?.toString().trim().replace(/\.0+$/, "") || "";
+  if (/^\d{1,9}$/.test(cleanNis) && cleanNis.length < 9) {
+    cleanNis = cleanNis.padStart(9, "0");
+  }
+  if (!cleanNis) {
+    errors.push("NIS wajib diisi");
+    fieldErrors.nis = "NIS wajib diisi";
+  } else if (!/^\d{9}$/.test(cleanNis)) {
+    errors.push("NIS harus tepat 9 digit angka");
+    fieldErrors.nis = "NIS harus 9 digit";
+  } else if (otherRows) {
+    const duplicateRow = otherRows.find((o) => o.nis && o.nis.trim() === cleanNis);
+    if (duplicateRow) {
+      const studentLabel = r.name?.trim() || "namasiswa";
+      const dupLabel = duplicateRow.name?.trim() || "siti budi";
+      const msg = `Siswa: "${dupLabel}" dengan "${studentLabel}" memiliki nis yang sama! Akun "${studentLabel}" gagal diunggah.`;
+      errors.push(msg);
+      fieldErrors.nis = "NIS duplikat";
+    }
+  }
+
+  // 3. NISN (10 digit)
+  let cleanNisn = r.nisn?.toString().trim().replace(/\.0+$/, "") || "";
+  if (/^\d{1,10}$/.test(cleanNisn) && cleanNisn.length < 10) {
+    cleanNisn = cleanNisn.padStart(10, "0");
+  }
   if (!cleanNisn) {
     errors.push("NISN wajib diisi");
     fieldErrors.nisn = "NISN wajib diisi";
   } else if (!/^\d{10}$/.test(cleanNisn)) {
     errors.push("NISN harus tepat 10 digit angka");
     fieldErrors.nisn = "NISN harus 10 digit";
+  } else if (otherRows) {
+    const duplicateRow = otherRows.find((o) => o.nisn && o.nisn.trim() === cleanNisn);
+    if (duplicateRow) {
+      const studentLabel = r.name?.trim() || "namasiswa";
+      const dupLabel = duplicateRow.name?.trim() || "siti budi";
+      const msg = `Siswa: "${dupLabel}" dengan "${studentLabel}" memiliki nisn yang sama! Akun "${studentLabel}" gagal diunggah.`;
+      errors.push(msg);
+      fieldErrors.nisn = "NISN duplikat";
+    }
   }
 
   // 3. Kelas (X, XI, XII)
@@ -144,9 +185,13 @@ function validateRowData(r: {
   }
 
   // 7. Tempat Lahir
-  if (!r.tempatLahir?.trim()) {
+  const cleanTempatLahir = r.tempatLahir?.toString().trim() || "";
+  if (!cleanTempatLahir) {
     errors.push("Tempat lahir wajib diisi");
     fieldErrors.tempatLahir = "Tempat lahir wajib diisi";
+  } else if (/\d/.test(cleanTempatLahir)) {
+    errors.push("Tempat lahir tidak boleh mengandung angka, harus berupa teks nama kota/daerah");
+    fieldErrors.tempatLahir = "Tidak boleh angka";
   }
 
   // 8. Tanggal Lahir (day-month-year)
@@ -197,6 +242,7 @@ export default function AdminImportStudentsPage() {
   const [validCount, setValidCount] = useState(0);
   const [errorCount, setErrorCount] = useState(0);
   const [showErrorAlertModal, setShowErrorAlertModal] = useState(false);
+  const [serverErrorMsg, setServerErrorMsg] = useState<string | null>(null);
 
   // Drag state
   const [dragActive, setDragActive] = useState(false);
@@ -205,11 +251,11 @@ export default function AdminImportStudentsPage() {
   function downloadTemplate(type: "csv" | "xlsx") {
     if (type === "xlsx") {
       const templateData = [
-        ["name", "nisn", "kelas", "jurusan", "rombel", "kelamin", "tempatLahir", "TanggalLahir"],
-        ["Ahmad Dahlan", "0102938475", "XII", "PPLG", "2", "Laki-laki", "Yogyakarta", "29/02/2000"],
-        ["Siti Nurbaya", "0098273651", "XI", "PPLG", "1", "Perempuan", "Padang", "20/08/2008"],
-        ["Bambang Pamungkas", "0092837465", "XII", "PPLG", "2", "Laki-laki", "Salatiga", "15/11/2007"],
-        ["Raden Ajeng Kartini", "0083746592", "X", "PPLG", "1", "Perempuan", "Jepara", "21/04/2009"],
+        ["name", "nis", "nisn", "kelas", "jurusan", "rombel", "kelamin", "tempatLahir", "TanggalLahir"],
+        ["Ahmad Dahlan", "102410001", "0102938475", "XII", "PPLG", "2", "Laki-laki", "Yogyakarta", "29/02/2000"],
+        ["Siti Nurbaya", "102410002", "0098273651", "XI", "PPLG", "1", "Perempuan", "Padang", "20/08/2008"],
+        ["Bambang Pamungkas", "102410003", "0092837465", "XII", "PPLG", "2", "Laki-laki", "Salatiga", "15/11/2007"],
+        ["Raden Ajeng Kartini", "102410004", "0083746592", "X", "PPLG", "1", "Perempuan", "Jepara", "21/04/2009"],
       ];
       const ws = XLSX.utils.aoa_to_sheet(templateData);
       const wb = XLSX.utils.book_new();
@@ -217,11 +263,11 @@ export default function AdminImportStudentsPage() {
       XLSX.writeFile(wb, "template_impor_siswa_learnix.xlsx");
     } else {
       const csvContent =
-        "name;nisn;kelas;jurusan;rombel;kelamin;tempatLahir;TanggalLahir\n" +
-        "Ahmad Dahlan;0102938475;XII;PPLG;2;Laki-laki;Yogyakarta;29/02/2000\n" +
-        "Siti Nurbaya;0098273651;XI;PPLG;1;Perempuan;Padang;20/08/2008\n" +
-        "Bambang Pamungkas;0092837465;XII;PPLG;2;Laki-laki;Salatiga;15/11/2007\n" +
-        "Raden Ajeng Kartini;0083746592;X;PPLG;1;Perempuan;Jepara;21/04/2009\n";
+        "name;nis;nisn;kelas;jurusan;rombel;kelamin;tempatLahir;TanggalLahir\n" +
+        "Ahmad Dahlan;102410001;0102938475;XII;PPLG;2;Laki-laki;Yogyakarta;29/02/2000\n" +
+        "Siti Nurbaya;102410002;0098273651;XI;PPLG;1;Perempuan;Padang;20/08/2008\n" +
+        "Bambang Pamungkas;102410003;0092837465;XII;PPLG;2;Laki-laki;Salatiga;15/11/2007\n" +
+        "Raden Ajeng Kartini;102410004;0083746592;X;PPLG;1;Perempuan;Jepara;21/04/2009\n";
 
       const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
       const url = URL.createObjectURL(blob);
@@ -280,14 +326,22 @@ export default function AdminImportStudentsPage() {
 
       const findColIndex = (...aliases: string[]) => {
         for (const alias of aliases) {
-          const idx = headerCells.findIndex((h: string) => h === alias || h.includes(alias));
+          const exactIdx = headerCells.findIndex((h: string) => h === alias);
+          if (exactIdx !== -1) return exactIdx;
+        }
+        for (const alias of aliases) {
+          const idx = headerCells.findIndex((h: string) => {
+            if (alias === "nis" && h.includes("nisn")) return false;
+            return h.includes(alias);
+          });
           if (idx !== -1) return idx;
         }
         return -1;
       };
 
       const nameIdx = findColIndex("name", "nama", "namalengkap");
-      const nisnIdx = findColIndex("nisn");
+      const nisIdx = findColIndex("nis", "nomorinduk");
+      const nisnIdx = findColIndex("nisn", "nomorinduksiswanasional");
       const kelasIdx = findColIndex("kelas", "tingkat", "grade");
       const jurusanIdx = findColIndex("jurusan", "department", "kejuruan", "dept");
       const rombelIdx = findColIndex("rombel", "parallel", "paralel");
@@ -297,6 +351,7 @@ export default function AdminImportStudentsPage() {
 
       const parsedRows: Array<{
         name: string;
+        nis: string;
         nisn: string;
         kelas: string;
         jurusan: string;
@@ -308,18 +363,24 @@ export default function AdminImportStudentsPage() {
 
       for (let i = 1; i < processedRows.length; i++) {
         const row = processedRows[i];
-        const getVal = (idx: number, fallbackCol: number) => {
-          const val = idx !== -1 ? row[idx] : row[fallbackCol];
-          return val !== undefined && val !== null ? val : "";
+        const getVal = (idx: number) => {
+          if (idx !== -1 && row[idx] !== undefined && row[idx] !== null) {
+            const raw = row[idx];
+            if (typeof raw === "number") {
+              return Number.isInteger(raw) ? raw.toFixed(0) : raw.toString();
+            }
+            return raw.toString();
+          }
+          return "";
         };
 
-        const rawKelas = getVal(kelasIdx, 2).toString().trim();
+        const rawKelas = getVal(kelasIdx).toString().trim();
         let normalizedKelas = rawKelas.toUpperCase();
         if (normalizedKelas === "10") normalizedKelas = "X";
         else if (normalizedKelas === "11") normalizedKelas = "XI";
         else if (normalizedKelas === "12") normalizedKelas = "XII";
 
-        const rawKelamin = getVal(kelaminIdx, 5).toString().trim();
+        const rawKelamin = getVal(kelaminIdx).toString().trim();
         let normalizedKelamin = rawKelamin;
         const lowerKelamin = rawKelamin.toLowerCase();
         if (lowerKelamin === "laki-laki" || lowerKelamin === "l" || lowerKelamin === "pria" || lowerKelamin === "male") {
@@ -328,15 +389,27 @@ export default function AdminImportStudentsPage() {
           normalizedKelamin = "Perempuan";
         }
 
+        let cleanNisVal = getVal(nisIdx).toString().trim().replace(/\.0+$/, "");
+        let cleanNisnVal = getVal(nisnIdx).toString().trim().replace(/\.0+$/, "");
+
+        // Auto-pad leading zero if stripped by Excel (NIS is 9 digits, NISN is 10 digits)
+        if (/^\d{1,9}$/.test(cleanNisVal) && cleanNisVal.length < 9) {
+          cleanNisVal = cleanNisVal.padStart(9, "0");
+        }
+        if (/^\d{1,10}$/.test(cleanNisnVal) && cleanNisnVal.length < 10) {
+          cleanNisnVal = cleanNisnVal.padStart(10, "0");
+        }
+
         parsedRows.push({
-          name: getVal(nameIdx, 0).toString().trim(),
-          nisn: getVal(nisnIdx, 1).toString().trim(),
+          name: getVal(nameIdx).toString().trim(),
+          nis: cleanNisVal,
+          nisn: cleanNisnVal,
           kelas: normalizedKelas,
-          jurusan: getVal(jurusanIdx, 3).toString().trim().toUpperCase(),
-          rombel: getVal(rombelIdx, 4).toString().trim(),
+          jurusan: getVal(jurusanIdx).toString().trim().toUpperCase(),
+          rombel: getVal(rombelIdx).toString().trim(),
           kelamin: normalizedKelamin,
-          tempatLahir: getVal(tempatLahirIdx, 6).toString().trim(),
-          tanggalLahir: formatToDMY(getVal(tanggalLahirIdx, 7)),
+          tempatLahir: getVal(tempatLahirIdx).toString().trim(),
+          tanggalLahir: formatToDMY(getVal(tanggalLahirIdx)),
         });
       }
 
@@ -379,30 +452,36 @@ export default function AdminImportStudentsPage() {
             else cleanVal = upper;
           }
 
-          const nextRow = { ...r, [field]: cleanVal };
-          const validation = validateRowData(nextRow);
-          return {
-            ...nextRow,
-            isValid: validation.isValid,
-            status: validation.status,
-            errors: validation.errors,
-            fieldErrors: validation.fieldErrors,
-          };
+          return { ...r, [field]: cleanVal };
         }
         return r;
       });
 
-      // Recalculate summary counts
-      const valid = updated.filter((r) => r.isValid).length;
-      setValidCount(valid);
-      setErrorCount(updated.length - valid);
+      // Recalculate validation for all rows with inter-row uniqueness check
+      const revalidated = updated.map((r) => {
+        const otherRows = updated.filter((o) => o.index !== r.index);
+        const validation = validateRowData(r, otherRows);
+        return {
+          ...r,
+          isValid: validation.isValid,
+          status: validation.status,
+          errors: validation.errors,
+          fieldErrors: validation.fieldErrors,
+        };
+      });
 
-      return updated;
+      // Recalculate summary counts
+      const valid = revalidated.filter((r) => r.isValid).length;
+      setValidCount(valid);
+      setErrorCount(revalidated.length - valid);
+
+      return revalidated;
     });
   }
 
   async function handleCommitImport() {
     if (errorCount > 0) {
+      setServerErrorMsg(null);
       setShowErrorAlertModal(true);
       return;
     }
@@ -425,7 +504,8 @@ export default function AdminImportStudentsPage() {
       if (json.success) {
         setStep(3);
       } else {
-        alert(json.message || "Gagal menyimpan data impor.");
+        setServerErrorMsg(json.message || "Gagal menyimpan data impor.");
+        setShowErrorAlertModal(true);
       }
     } catch {
       alert("Terjadi kesalahan saat menyimpan data ke sistem.");
@@ -547,9 +627,9 @@ export default function AdminImportStudentsPage() {
                   </p>
                 </div>
                 <div className="rounded-lg border border-amber-100 bg-amber-50/60 p-3.5">
-                  <div className="font-semibold text-amber-900">Validasi NISN & Kelamin</div>
+                  <div className="font-semibold text-amber-900">Validasi NIS & NISN Unik</div>
                   <p className="text-amber-700 mt-0.5">
-                    NISN harus tepat 10 digit angka unik. Kolom Jenis Kelamin harus berupa <code>Laki-laki</code> atau <code>Perempuan</code>.
+                    NIS wajib 9 digit angka dan NISN wajib 10 digit angka. Tempat lahir harus berupa teks (tidak boleh angka). Kolom Jenis Kelamin harus berupa <code>Laki-laki</code> atau <code>Perempuan</code>.
                   </p>
                 </div>
               </div>
@@ -599,7 +679,7 @@ export default function AdminImportStudentsPage() {
 
               <div className="rounded-lg bg-blue-50/70 p-3 text-xs text-blue-900 leading-relaxed border border-blue-100">
                 <strong>Struktur Header:</strong><br />
-                <code>name;nisn;kelas;jurusan;rombel;kelamin;tempatLahir;TanggalLahir</code>
+                <code>name;nis;nisn;kelas;jurusan;rombel;kelamin;tempatLahir;TanggalLahir</code>
               </div>
             </div>
           </div>
@@ -650,6 +730,7 @@ export default function AdminImportStudentsPage() {
                 <tr className="border-b border-slate-100 bg-slate-50/80 font-bold uppercase tracking-wider text-slate-500 text-[11px]">
                   <th className="py-3.5 px-3 w-12 text-center">NO</th>
                   <th className="py-3.5 px-4 min-w-[180px]">NAMA LENGKAP</th>
+                  <th className="py-3.5 px-3 min-w-[110px] text-center">NIS</th>
                   <th className="py-3.5 px-3 min-w-[130px] text-center">NISN</th>
                   <th className="py-3.5 px-3 min-w-[90px] text-center">KELAS</th>
                   <th className="py-3.5 px-3 min-w-[100px]">JURUSAN</th>
@@ -663,6 +744,7 @@ export default function AdminImportStudentsPage() {
               <tbody className="divide-y divide-slate-100">
                 {displayedRows.map((r) => {
                   const hasNameError = Boolean(r.fieldErrors?.name);
+                  const hasNisError = Boolean(r.fieldErrors?.nis);
                   const hasNisnError = Boolean(r.fieldErrors?.nisn);
                   const hasKelasError = Boolean(r.fieldErrors?.kelas);
                   const hasJurusanError = Boolean(r.fieldErrors?.jurusan);
@@ -698,12 +780,30 @@ export default function AdminImportStudentsPage() {
                         />
                       </td>
 
+                      {/* NIS */}
+                      <td className="py-3 px-3 text-center">
+                        <input
+                          type="text"
+                          maxLength={9}
+                          value={r.nis || ""}
+                          placeholder={hasNisError ? "INVALID" : ""}
+                          onChange={(e) =>
+                            handleCellChange(r.index, "nis", e.target.value.replace(/\D/g, ""))
+                          }
+                          className={`w-24 text-center rounded-md px-2 py-1 text-xs font-mono transition ${
+                            hasNisError
+                              ? "border border-rose-300 bg-rose-50/80 text-rose-700 font-semibold focus:outline-rose-500 placeholder-rose-400"
+                              : "border border-transparent bg-transparent hover:border-slate-300 text-slate-700 focus:border-blue-500 focus:bg-white focus:outline-hidden"
+                          }`}
+                        />
+                      </td>
+
                       {/* NISN */}
                       <td className="py-3 px-3 text-center">
                         <input
                           type="text"
                           maxLength={10}
-                          value={r.nisn}
+                          value={r.nisn || ""}
                           placeholder={hasNisnError ? "INVALID" : ""}
                           onChange={(e) =>
                             handleCellChange(r.index, "nisn", e.target.value.replace(/\D/g, ""))
@@ -856,7 +956,10 @@ export default function AdminImportStudentsPage() {
               {errorCount > 0 && (
                 <button
                   type="button"
-                  onClick={() => setShowErrorAlertModal(true)}
+                  onClick={() => {
+                    setServerErrorMsg(null);
+                    setShowErrorAlertModal(true);
+                  }}
                   className="inline-flex items-center gap-1.5 text-xs font-semibold text-rose-600 hover:text-rose-700 underline"
                 >
                   <AlertCircle className="size-4" />
@@ -904,7 +1007,10 @@ export default function AdminImportStudentsPage() {
                     </div>
                   </div>
                   <button
-                    onClick={() => setShowErrorAlertModal(false)}
+                    onClick={() => {
+                      setShowErrorAlertModal(false);
+                      setServerErrorMsg(null);
+                    }}
                     className="text-slate-400 hover:text-slate-600 transition"
                   >
                     <X className="size-5" />
@@ -913,21 +1019,36 @@ export default function AdminImportStudentsPage() {
 
                 <div className="mt-4">
                   <p className="text-xs text-slate-600 mb-3">
-                    Sistem mendeteksi <strong>{errorCount}</strong> baris data yang belum lengkap atau formatnya tidak sesuai ketentuan:
+                    {serverErrorMsg
+                      ? "Pesan kesalahan dari sistem:"
+                      : `Sistem mendeteksi ${errorCount} baris data yang belum lengkap atau formatnya tidak sesuai ketentuan:`}
                   </p>
 
                   <div className="max-h-64 overflow-y-auto space-y-2 rounded-xl border border-rose-100 bg-rose-50/40 p-3">
+                    {serverErrorMsg && (
+                      <div className="flex items-center gap-2 rounded-lg bg-white px-3 py-2 text-xs font-semibold text-rose-700 shadow-xs border border-rose-200">
+                        <span className="size-2 shrink-0 rounded-full bg-rose-500" />
+                        <span className="break-words">{serverErrorMsg}</span>
+                      </div>
+                    )}
                     {rows
                       .filter((r) => !r.isValid)
                       .flatMap((r) => {
-                        const errFields = Object.keys(r.fieldErrors || {});
+                        const msgs: string[] = [];
+                        const dupErrors = r.errors.filter((e) => e.startsWith("Siswa: "));
+                        msgs.push(...dupErrors);
+
                         const studentName = r.name?.trim() || `Baris ${r.index}`;
-                        if (errFields.length === 0) {
-                          return [`Data "${studentName}" bagian "data" invalid!`];
+                        Object.keys(r.fieldErrors || {}).forEach((f) => {
+                          if (f === "nis" && dupErrors.some((e) => e.includes("memiliki nis yang sama"))) return;
+                          if (f === "nisn" && dupErrors.some((e) => e.includes("memiliki nisn yang sama"))) return;
+                          msgs.push(`Data "${studentName}" bagian "${FIELD_NAMES_ID[f] || f}" invalid!`);
+                        });
+
+                        if (msgs.length === 0) {
+                          msgs.push(`Data "${studentName}" bagian "data" invalid!`);
                         }
-                        return errFields.map(
-                          (f) => `Data "${studentName}" bagian "${FIELD_NAMES_ID[f] || f}" invalid!`
-                        );
+                        return msgs;
                       })
                       .map((msg, idx) => (
                         <div
@@ -948,6 +1069,7 @@ export default function AdminImportStudentsPage() {
                   <Button
                     onClick={() => {
                       setShowErrorAlertModal(false);
+                      setServerErrorMsg(null);
                       setFilterOnlyErrors(true);
                     }}
                     className="bg-blue-600 text-white hover:bg-blue-700 font-semibold text-xs"

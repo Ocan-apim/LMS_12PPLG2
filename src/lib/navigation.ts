@@ -19,32 +19,41 @@ export type NavIcon =
   | "quiz"
   | "import"
   | "settings"
-  | "schedule";
+  | "schedule"
+  | "curriculum";
 
 export type NavItem = {
   href: string;
   label: string;
   icon: NavIcon;
+  children?: NavItem[];
 };
 
 export const ROLE_NAV: Record<Role, NavItem[]> = {
   admin: [
     { href: "/admin", label: "Dashboard", icon: "dashboard" },
+    {
+      href: "/admin/accounts",
+      label: "Manajemen Akun",
+      icon: "users",
+      children: [
+        { href: "/admin/users", label: "Manajemen Pengguna", icon: "users" },
+        { href: "/admin/students", label: "Manajemen Siswa", icon: "students" },
+        { href: "/admin/teachers", label: "Manajemen Guru", icon: "teachers" },
+        { href: "/admin/curriculum", label: "Manajemen Kurikulum", icon: "syllabus" },
+      ],
+    },
     { href: "/admin/classes", label: "Manajemen Kelas", icon: "classes" },
-    { href: "/admin/students", label: "Manajemen Siswa", icon: "students" },
-    { href: "/admin/teachers", label: "Manajemen Guru", icon: "teachers" },
     { href: "/admin/departments", label: "Manajemen Jurusan", icon: "departments" },
     { href: "/admin/subjects", label: "Mata Pelajaran", icon: "subjects" },
     { href: "/admin/academic-years", label: "Tahun Ajaran", icon: "academic" },
-    { href: "/admin/users", label: "Manajemen Pengguna", icon: "users" },
-    { href: "/admin/settings", label: "Pengaturan", icon: "settings" },
   ],
   guru: [
     { href: "/guru", label: "Dashboard", icon: "dashboard" },
     { href: "/guru/classes", label: "Kelas Saya", icon: "classes" },
     { href: "/guru/assignments", label: "Tugas", icon: "assignments" },
     { href: "/guru/grades", label: "Penilaian", icon: "grades" },
-    { href: "/guru/students", label: "Profil", icon: "users" },
+    { href: "/guru/profile", label: "Profil", icon: "users" },
   ],
   kurikulum: [
     { href: "/kurikulum", label: "Dashboard", icon: "dashboard" },

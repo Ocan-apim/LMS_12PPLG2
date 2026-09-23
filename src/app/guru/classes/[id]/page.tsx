@@ -94,6 +94,7 @@ export default function GuruClassDetailPage({
   const [newFileUrl, setNewFileUrl] = useState("");
 
   const [copiedCode, setCopiedCode] = useState(false);
+  const [plusMenuOpen, setPlusMenuOpen] = useState(false);
 
   useEffect(() => {
     async function fetchData() {
@@ -498,14 +499,70 @@ export default function GuruClassDetailPage({
           </div>
         </div>
 
-        {/* Circular Blue "+" Button to add assignment */}
-        <Link
-          href={`/guru/assignments/new?classId=${courseClass._id}`}
-          title="Tambah Tugas Baru"
-          className="flex size-12 items-center justify-center rounded-full bg-blue-600 text-white shadow-lg transition-transform hover:scale-105 hover:bg-blue-700"
-        >
-          <Plus className="size-6" />
-        </Link>
+        {/* Speed-dial floating action menu for learning content */}
+        <div className="relative">
+          {plusMenuOpen && (
+            <div className="absolute right-0 bottom-16 flex flex-col gap-1.5 rounded-2xl border border-slate-200 bg-white p-2 shadow-2xl z-50 min-w-52 animate-in slide-in-from-bottom-2 fade-in">
+              <div className="px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400 border-b border-slate-100">
+                Tambah Konten
+              </div>
+              <Link
+                href={`/guru/assignments/new?classId=${courseClass._id}`}
+                onClick={() => setPlusMenuOpen(false)}
+                className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-blue-50 hover:text-blue-600 transition"
+              >
+                <div className="flex size-7 items-center justify-center rounded-lg bg-blue-100 text-blue-600 shrink-0">
+                  <FileText className="size-4" />
+                </div>
+                <div>
+                  <p className="font-bold text-slate-900 leading-tight">Buat Tugas</p>
+                  <p className="text-[10px] text-slate-400 font-normal">Penugasan materi / latihan</p>
+                </div>
+              </Link>
+
+              <Link
+                href={`/guru/quizzes/new?classId=${courseClass._id}`}
+                onClick={() => setPlusMenuOpen(false)}
+                className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 transition"
+              >
+                <div className="flex size-7 items-center justify-center rounded-lg bg-indigo-100 text-indigo-600 shrink-0">
+                  <HelpCircle className="size-4" />
+                </div>
+                <div>
+                  <p className="font-bold text-slate-900 leading-tight">Buat Kuis</p>
+                  <p className="text-[10px] text-slate-400 font-normal">Pilihan ganda & evaluasi</p>
+                </div>
+              </Link>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setPlusMenuOpen(false);
+                  setAddFileModalOpen(true);
+                }}
+                className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-emerald-50 hover:text-emerald-600 transition text-left"
+              >
+                <div className="flex size-7 items-center justify-center rounded-lg bg-emerald-100 text-emerald-600 shrink-0">
+                  <Plus className="size-4" />
+                </div>
+                <div>
+                  <p className="font-bold text-slate-900 leading-tight">Upload File / Materi</p>
+                  <p className="text-[10px] text-slate-400 font-normal">Bagikan dokumen ke kelas</p>
+                </div>
+              </button>
+            </div>
+          )}
+
+          {/* Circular Blue "+" Button */}
+          <button
+            type="button"
+            onClick={() => setPlusMenuOpen((prev) => !prev)}
+            title="Tambah Konten Pembelajaran"
+            className="flex size-12 items-center justify-center rounded-full bg-blue-600 text-white shadow-lg transition-transform hover:scale-105 hover:bg-blue-700 active:scale-95"
+          >
+            <Plus className={`size-6 transition-transform duration-200 ${plusMenuOpen ? "rotate-45" : ""}`} />
+          </button>
+        </div>
       </div>
 
       {/* Modal: Tambah File */}

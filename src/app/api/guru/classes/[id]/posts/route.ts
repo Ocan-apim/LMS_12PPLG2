@@ -15,6 +15,21 @@ export async function GET(_req: Request, context: RouteContext) {
     const { id } = await context.params;
     await connectDB();
 
+    const courseClass = await CourseClass.findById(id);
+    if (!courseClass) {
+      return NextResponse.json(
+        { success: false, message: "Kelas tidak ditemukan" },
+        { status: 404 }
+      );
+    }
+
+    if (session.role === "guru" && courseClass.teacherId.toString() !== session.id) {
+      return NextResponse.json(
+        { success: false, message: "Akses ditolak: Anda bukan pengampu kelas ini" },
+        { status: 403 }
+      );
+    }
+
     const posts = await ClassPost.find({ courseClassId: id })
       .sort({ createdAt: -1 })
       .lean();
@@ -33,6 +48,21 @@ export async function POST(req: Request, context: RouteContext) {
   try {
     const { id } = await context.params;
     await connectDB();
+
+    const courseClass = await CourseClass.findById(id);
+    if (!courseClass) {
+      return NextResponse.json(
+        { success: false, message: "Kelas tidak ditemukan" },
+        { status: 404 }
+      );
+    }
+
+    if (session.role === "guru" && courseClass.teacherId.toString() !== session.id) {
+      return NextResponse.json(
+        { success: false, message: "Akses ditolak: Anda bukan pengampu kelas ini" },
+        { status: 403 }
+      );
+    }
     const body = await req.json();
 
     const { action, title, content, postId, message } = body;

@@ -25,6 +25,7 @@ interface SubjectOption {
 interface ClassOption {
   _id: string;
   name: string;
+  homeroomTeacherId?: { _id: string; name: string } | string | null;
 }
 
 export default function TambahGuruBaruPage() {
@@ -397,18 +398,26 @@ export default function TambahGuruBaruPage() {
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
                   Pilih Kelas yang Diampu
                 </label>
-                <select
-                  value={homeroomClassId}
-                  onChange={(e) => setHomeroomClassId(e.target.value)}
-                  className="w-full rounded-lg border border-slate-200 px-3.5 py-2.5 text-sm text-slate-800 focus:border-blue-500 focus:outline-hidden"
-                >
-                  <option value="">-- Pilih Kelas Rombel --</option>
-                  {classesList.map((c) => (
-                    <option key={c._id} value={c._id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
+                {classesList.filter((c) => !c.homeroomTeacherId).length > 0 ? (
+                  <select
+                    value={homeroomClassId}
+                    onChange={(e) => setHomeroomClassId(e.target.value)}
+                    className="w-full rounded-lg border border-slate-200 px-3.5 py-2.5 text-sm text-slate-800 focus:border-blue-500 focus:outline-hidden"
+                  >
+                    <option value="">-- Pilih Kelas Rombel --</option>
+                    {classesList
+                      .filter((c) => !c.homeroomTeacherId)
+                      .map((c) => (
+                        <option key={c._id} value={c._id}>
+                          {c.name}
+                        </option>
+                      ))}
+                  </select>
+                ) : (
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 leading-relaxed">
+                    Semua kelas rombel saat ini sudah memiliki wali kelas.
+                  </div>
+                )}
               </div>
             )}
           </div>

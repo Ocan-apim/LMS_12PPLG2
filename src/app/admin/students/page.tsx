@@ -39,6 +39,7 @@ interface ClassOption {
   _id: string;
   name: string;
   grade: string;
+  departmentId?: { _id: string; name: string; code: string } | string;
 }
 
 interface DeptOption {
@@ -720,7 +721,19 @@ export default function AdminStudentsPage() {
                   </label>
                   <select
                     value={editForm.classId}
-                    onChange={(e) => setEditForm({ ...editForm, classId: e.target.value })}
+                    onChange={(e) => {
+                      const selectedC = classes.find((c) => c._id === e.target.value);
+                      const deptId =
+                        (selectedC?.departmentId as any)?._id ||
+                        selectedC?.departmentId ||
+                        editForm.departmentId;
+                      setEditForm({
+                        ...editForm,
+                        classId: e.target.value,
+                        departmentId: deptId || "",
+                        grade: selectedC?.grade || editForm.grade,
+                      });
+                    }}
                     className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-800 focus:border-blue-500 focus:outline-hidden"
                   >
                     <option value="">-- Pilih Kelas --</option>

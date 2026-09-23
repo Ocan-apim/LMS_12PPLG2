@@ -20,25 +20,23 @@ export async function PATCH(_req: Request, context: RouteContext) {
       return NextResponse.json({ success: false, message: "Tahun ajaran tidak ditemukan" }, { status: 404 });
     }
 
-    const currentActive = await AcademicYear.findOne({ isActive: true });
-    if (currentActive) {
-      const activeStart = parseInt(currentActive.name.match(/\d{4}/)?.[0] || "0", 10);
-      const targetStart = parseInt(targetYear.name.match(/\d{4}/)?.[0] || "0", 10);
+    const now = new Date();
+    const currentRealYear = now.getFullYear();
+    const currentMonth = now.getMonth() + 1;
+    const currentRealAcademicStartYear = currentMonth >= 7 ? currentRealYear : currentRealYear - 1;
+    const minAllowableStartYear = Math.min(currentRealAcademicStartYear, 2025);
 
-      const isPast =
-        (targetStart > 0 && activeStart > 0 && targetStart < activeStart) ||
-        (targetStart === activeStart && currentActive.semester === "Genap" && targetYear.semester === "Ganjil") ||
-        (targetYear.endDate && new Date(targetYear.endDate) < new Date());
+    const targetStart = parseInt(targetYear.name.match(/\d{4}/)?.[0] || "0", 10);
+    const isPast = targetStart > 0 && targetStart < minAllowableStartYear;
 
-      if (isPast) {
-        return NextResponse.json(
-          {
-            success: false,
-            message: "Tahun ajaran periode lampau tidak dapat diaktifkan kembali",
-          },
-          { status: 400 }
-        );
-      }
+    if (isPast) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: `Tahun ajaran periode lampau (${targetYear.name}) tidak dapat diaktifkan kembali`,
+        },
+        { status: 400 }
+      );
     }
 
     // Set all to false, then this to true

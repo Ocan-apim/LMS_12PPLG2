@@ -46,6 +46,31 @@ interface SubmissionAttachment {
   size?: string;
 }
 
+interface QuizAnswerItem {
+  questionId: string;
+  answer: number | string;
+  isCorrect?: boolean;
+  scoreAwarded?: number;
+}
+
+interface QuizQuestionInfo {
+  id: string;
+  type: "pilihan_ganda" | "essay";
+  question: string;
+  imageUrl?: string;
+  options: string[];
+  correctAnswer: number | string;
+  points: number;
+}
+
+interface QuizInfo {
+  _id: string;
+  title: string;
+  durationSeconds?: number;
+  totalPoints: number;
+  questions: QuizQuestionInfo[];
+}
+
 interface SubmissionData {
   submissionId: string | null;
   student: StudentItem;
@@ -57,6 +82,7 @@ interface SubmissionData {
   privateComments: PrivateComment[];
   attachments: SubmissionAttachment[];
   content?: string;
+  quizAnswers?: QuizAnswerItem[];
   submittedAt: string | null;
   gradedAt: string | null;
 }
@@ -68,6 +94,7 @@ interface AssignmentInfo {
   maxScore: number;
   dueDate?: string;
   className: string;
+  quiz?: QuizInfo | null;
 }
 
 export default function GoogleClassroomSubmissionsPage({
@@ -90,6 +117,7 @@ export default function GoogleClassroomSubmissionsPage({
   const [currentScore, setCurrentScore] = useState<string>("");
   const [currentFeedback, setCurrentFeedback] = useState<string>("");
   const [privateCommentInput, setPrivateCommentInput] = useState<string>("");
+  const [editingQuizAnswers, setEditingQuizAnswers] = useState<QuizAnswerItem[]>([]);
   const [savingGrade, setSavingGrade] = useState(false);
   const [sendingComment, setSendingComment] = useState(false);
   const [saveNotification, setSaveNotification] = useState<string | null>(null);
@@ -129,8 +157,36 @@ export default function GoogleClassroomSubmissionsPage({
       }
       setCurrentFeedback(selectedItem.feedback || "");
       setPrivateCommentInput("");
+      setEditingQuizAnswers(selectedItem.quizAnswers || []);
     }
   }, [selectedStudentId, selectedItem]);
+
+  function handleEssayScoreChange(questionId: string, newPoints: number, maxPoints: number) {
+    const clamped = Math.max(0, Math.min(newPoints, maxPoints));
+    setEditingQuizAnswers((prev) => {
+      const existing = prev.find((a) => a.questionId === questionId);
+      let updated: QuizAnswerItem[];
+      if (existing) {
+        updated = prev.map((a) =>
+          a.questionId === questionId
+            ? { ...a, scoreAwarded: clamped, isCorrect: clamped > 0 }
+            : a
+        );
+      } else {
+        updated = [
+          ...prev,
+          { questionId, answer: "", scoreAwarded: clamped, isCorrect: clamped > 0 },
+        ];
+      }
+      // Recompute total score across all quiz questions
+      const totalFromQuestions = updated.reduce(
+        (sum, a) => sum + (Number(a.scoreAwarded) || 0),
+        0
+      );
+      setCurrentScore(String(totalFromQuestions));
+      return updated;
+    });
+  }
 
   // Counts
   const totalCount = items.length;
@@ -189,6 +245,7 @@ export default function GoogleClassroomSubmissionsPage({
         assignmentId: assignment._id,
         studentId: selectedItem.student._id,
         feedback: currentFeedback,
+        quizAnswers: editingQuizAnswers,
       };
 
       if (asDraft) {
@@ -220,6 +277,7 @@ export default function GoogleClassroomSubmissionsPage({
                 score: asDraft ? i.score : (numericScore ?? null),
                 draftScore: asDraft ? (numericScore ?? null) : null,
                 feedback: currentFeedback,
+                quizAnswers: editingQuizAnswers,
               };
             }
             return i;
@@ -635,6 +693,251 @@ export default function GoogleClassroomSubmissionsPage({
                       </h4>
                       <div className="rounded-xl border border-border bg-background p-4 text-xs text-foreground whitespace-pre-line leading-relaxed">
                         {selectedItem.content}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Quiz Review & Per-Question Essay Grading */}
+                  {((assignment.quiz?.questions && assignment.quiz.questions.length > 0) ||
+                    (selectedItem.quizAnswers && selectedItem.quizAnswers.length > 0)) && (
+                    <div className="space-y-4 pt-4 border-t border-border">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                            Lembar Jawaban & Kuis Siswa
+                          </h4>
+                          <p className="text-[11px] text-muted-foreground">
+                            Pilihan ganda dinilai otomatis. Berikan penilaian manual untuk soal essay di bawah.
+                          </p>
+                        </div>
+                        {assignment.quiz && (
+                          <span className="text-xs font-semibold px-2 py-0.5 rounded bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300">
+                            {assignment.quiz.questions.length} Soal
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="space-y-3">
+                        {assignment.quiz?.questions ? (
+                          assignment.quiz.questions.map((q, idx) => {
+                            const studentAns =
+                              editingQuizAnswers.find((a) => a.questionId === q.id) ||
+                              selectedItem.quizAnswers?.find((a) => a.questionId === q.id);
+                            const isMCQ = q.type === "pilihan_ganda";
+                            const currentAwarded =
+                              studentAns?.scoreAwarded ??
+                              (studentAns?.isCorrect ? q.points : 0);
+
+                            return (
+                              <div
+                                key={q.id || idx}
+                                className="rounded-xl border border-border bg-card p-4 space-y-3 shadow-2xs"
+                              >
+                                <div className="flex items-start justify-between gap-3">
+                                  <div className="flex items-start gap-2.5">
+                                    <span className="flex size-6 shrink-0 items-center justify-center rounded-lg bg-muted text-xs font-bold text-foreground">
+                                      {idx + 1}
+                                    </span>
+                                    <div>
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                                          {isMCQ ? "Pilihan Ganda" : "Essay / Uraian"}
+                                        </span>
+                                        <span className="text-[10px] text-muted-foreground">
+                                          • {q.points} Poin
+                                        </span>
+                                      </div>
+                                      <p className="text-xs font-medium text-foreground mt-1">
+                                        {q.question}
+                                      </p>
+                                    </div>
+                                  </div>
+
+                                  <div className="shrink-0">
+                                    {isMCQ ? (
+                                      studentAns?.isCorrect ? (
+                                        <span className="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-2 py-1 text-[11px] font-bold text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
+                                          <Check className="size-3" /> Benar (+{currentAwarded} Poin)
+                                        </span>
+                                      ) : (
+                                        <span className="inline-flex items-center gap-1 rounded-md bg-rose-50 px-2 py-1 text-[11px] font-bold text-rose-700 dark:bg-rose-950/40 dark:text-rose-300">
+                                          <AlertCircle className="size-3" /> Salah (0 Poin)
+                                        </span>
+                                      )
+                                    ) : (
+                                      <span
+                                        className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-bold ${
+                                          currentAwarded > 0
+                                            ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300"
+                                            : "bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300"
+                                        }`}
+                                      >
+                                        {currentAwarded > 0
+                                          ? `Nilai: ${currentAwarded}/${q.points}`
+                                          : "Belum Dinilai"}
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+
+                                {/* MCQ Options */}
+                                {isMCQ && q.options && (
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                                    {q.options.map((opt, optIdx) => {
+                                      const isStudentChoice =
+                                        studentAns?.answer !== undefined &&
+                                        Number(studentAns.answer) === optIdx;
+                                      const isKeyAnswer = Number(q.correctAnswer) === optIdx;
+
+                                      let borderClass = "border-border bg-muted/10";
+                                      let textClass = "text-foreground";
+                                      let badgeLabel = null;
+
+                                      if (isKeyAnswer) {
+                                        borderClass =
+                                          "border-emerald-500 bg-emerald-50/60 dark:bg-emerald-950/40";
+                                        textClass =
+                                          "text-emerald-900 dark:text-emerald-200 font-semibold";
+                                        badgeLabel = "Kunci Jawaban";
+                                      }
+                                      if (isStudentChoice && !isKeyAnswer) {
+                                        borderClass =
+                                          "border-rose-400 bg-rose-50/60 dark:bg-rose-950/40";
+                                        textClass = "text-rose-900 dark:text-rose-200 font-semibold";
+                                        badgeLabel = "Pilihan Siswa (Salah)";
+                                      } else if (isStudentChoice && isKeyAnswer) {
+                                        badgeLabel = "Pilihan Siswa (Tepat)";
+                                      }
+
+                                      return (
+                                        <div
+                                          key={optIdx}
+                                          className={`flex items-center justify-between rounded-lg border p-2 text-xs transition-colors ${borderClass}`}
+                                        >
+                                          <div className="flex items-center gap-2 truncate">
+                                            <span className="font-bold text-[11px] text-muted-foreground">
+                                              {String.fromCharCode(65 + optIdx)}.
+                                            </span>
+                                            <span className={`truncate ${textClass}`}>{opt}</span>
+                                          </div>
+                                          {badgeLabel && (
+                                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-background/80 shrink-0 ml-1">
+                                              {badgeLabel}
+                                            </span>
+                                          )}
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                )}
+
+                                {/* Essay Answer & Score Control */}
+                                {!isMCQ && (
+                                  <div className="space-y-2 pt-2 border-t border-border/60">
+                                    <div>
+                                      <label className="text-[11px] font-semibold text-muted-foreground">
+                                        Jawaban Siswa:
+                                      </label>
+                                      <div className="mt-1 rounded-lg border border-border bg-muted/20 p-3 text-xs text-foreground whitespace-pre-line leading-relaxed">
+                                        {studentAns?.answer ? (
+                                          String(studentAns.answer)
+                                        ) : (
+                                          <span className="italic text-muted-foreground">
+                                            Siswa tidak mengisi jawaban.
+                                          </span>
+                                        )}
+                                      </div>
+                                    </div>
+
+                                    {q.correctAnswer && (
+                                      <div className="text-[11px] text-muted-foreground bg-muted/30 rounded-lg p-2">
+                                        <span className="font-semibold">Pedoman Penilaian:</span>{" "}
+                                        {String(q.correctAnswer)}
+                                      </div>
+                                    )}
+
+                                    <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                                      <span className="text-xs font-semibold text-foreground">
+                                        Beri Nilai Soal Ini:
+                                      </span>
+                                      <div className="flex items-center gap-1.5">
+                                        <button
+                                          type="button"
+                                          onClick={() => handleEssayScoreChange(q.id, 0, q.points)}
+                                          className="rounded px-2 py-1 text-[11px] font-medium border border-border hover:bg-muted text-muted-foreground transition-colors"
+                                        >
+                                          0
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            handleEssayScoreChange(
+                                              q.id,
+                                              Math.round(q.points / 2),
+                                              q.points
+                                            )
+                                          }
+                                          className="rounded px-2 py-1 text-[11px] font-medium border border-border hover:bg-muted text-muted-foreground transition-colors"
+                                        >
+                                          50%
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            handleEssayScoreChange(q.id, q.points, q.points)
+                                          }
+                                          className="rounded px-2 py-1 text-[11px] font-medium border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 dark:bg-blue-950/40 dark:text-blue-300 transition-colors"
+                                        >
+                                          Penuh ({q.points})
+                                        </button>
+                                        <div className="flex items-center gap-1 ml-1">
+                                          <input
+                                            type="number"
+                                            min="0"
+                                            max={q.points}
+                                            value={currentAwarded}
+                                            onChange={(e) =>
+                                              handleEssayScoreChange(
+                                                q.id,
+                                                Number(e.target.value),
+                                                q.points
+                                              )
+                                            }
+                                            className="w-14 rounded-lg border border-border bg-background p-1 text-center font-bold text-xs text-foreground focus:border-blue-500 focus:outline-none"
+                                          />
+                                          <span className="text-xs text-muted-foreground">
+                                            / {q.points}
+                                          </span>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })
+                        ) : (
+                          selectedItem.quizAnswers?.map((ans, idx) => (
+                            <div
+                              key={ans.questionId || idx}
+                              className="flex items-center justify-between rounded-xl border border-border bg-card p-3 text-xs"
+                            >
+                              <div className="flex items-center gap-2">
+                                <span className="font-bold text-foreground">Soal {idx + 1}</span>
+                                <span className="text-muted-foreground font-mono">
+                                  Jawaban: {String(ans.answer)}
+                                </span>
+                              </div>
+                              <div>
+                                {ans.isCorrect ? (
+                                  <Badge variant="green">Benar (+{ans.scoreAwarded || 10})</Badge>
+                                ) : (
+                                  <Badge variant="red">Salah (0)</Badge>
+                                )}
+                              </div>
+                            </div>
+                          ))
+                        )}
                       </div>
                     </div>
                   )}

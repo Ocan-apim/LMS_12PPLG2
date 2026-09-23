@@ -15,18 +15,32 @@ export async function GET() {
       teacherId: session.id,
       isActive: true,
     })
-      .populate("classRombelId", "name grade")
+      .populate({
+        path: "classRombelId",
+        select: "name grade homeroomTeacherId",
+        populate: { path: "homeroomTeacherId", select: "name" },
+      })
       .select("_id name code studentIds classRombelId bannerColor")
       .lean();
 
-    const activeClasses = classes.map((c) => ({
-      _id: c._id,
-      name: c.name,
-      code: c.code,
-      grade: c.classRombelId?.name || "10 PPLG 1",
-      studentCount: Array.isArray(c.studentIds) ? c.studentIds.length : 0,
-      bannerColor: c.bannerColor,
-    }));
+    const activeClasses = classes.map((c) => {
+      const rombel = c.classRombelId as {
+        name?: string;
+        grade?: string;
+        homeroomTeacherId?: { name?: string };
+      } | null;
+
+      return {
+        _id: c._id,
+        name: c.name,
+        code: c.code,
+        grade: rombel?.name || "10 PPLG 1",
+        walasName: rombel?.homeroomTeacherId?.name || "Wali Kelas",
+        location: "Gedung D",
+        studentCount: Array.isArray(c.studentIds) ? c.studentIds.length : 0,
+        bannerColor: c.bannerColor,
+      };
+    });
 
     // 2. Assignments
     const assignments = await Assignment.find({ teacherId: session.id }).select("_id");

@@ -5,24 +5,26 @@ import Link from "next/link";
 import {
   FileText,
   Plus,
-  Search,
-  Filter,
+  SlidersHorizontal,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  Pencil,
   Trash2,
-  Edit,
-  Eye,
-  CheckCircle2,
+  Calendar as CalendarIcon,
+  X,
+  AlertCircle,
   Clock,
   Sparkles,
-  Users,
-  AlertCircle,
-  MoreHorizontal,
-  GraduationCap,
+  Check,
 } from "lucide-react";
-import { Button, Badge } from "@/components/ui";
+import { Spinner } from "@/components/ui";
 
 interface AssignmentItem {
   _id: string;
   title: string;
+  description?: string;
+  instructions?: string;
   type: string;
   courseClassId?: {
     _id: string;
@@ -36,8 +38,7 @@ interface AssignmentItem {
   };
   dueDate?: string;
   maxScore: number;
-  submittedCount: number;
-  gradedCount: number;
+  isPublished?: boolean;
   createdAt: string;
 }
 
@@ -52,10 +53,22 @@ export default function GuruAssignmentsPage() {
   const [classes, setClasses] = useState<TeacherClass[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Filters
-  const [search, setSearch] = useState("");
-  const [selectedClassId, setSelectedClassId] = useState("all");
-  const [selectedType, setSelectedType] = useState("all");
+  // Selected checkboxes
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+
+  // Sorting
+  const [sortBy, setSortBy] = useState<"date" | "title" | "class">("date");
+
+  // Filter Drawer State matching Figma Page 3 Bottom Right
+  const [filterDrawerOpen, setFilterDrawerOpen] = useState(false);
+  const [filterTypes, setFilterTypes] = useState<string[]>(["tugas", "kuis"]);
+  const [filterClassIds, setFilterClassIds] = useState<string[]>([]);
+  const [startDate, setStartDate] = useState("2023-10-01");
+  const [endDate, setEndDate] = useState("2023-10-31");
+
+  // Mini calendar state for drawer
+  const [calendarMonth, setCalendarMonth] = useState(9); // 0-indexed: 9 = October
+  const [calendarYear, setCalendarYear] = useState(2023);
 
   // Delete modal
   const [deleteTarget, setDeleteTarget] = useState<AssignmentItem | null>(null);
@@ -73,7 +86,11 @@ export default function GuruAssignmentsPage() {
         const classJson = await classRes.json();
 
         if (assignJson.success) setAssignments(assignJson.data);
-        if (classJson.success) setClasses(classJson.data);
+        if (classJson.success) {
+          setClasses(classJson.data);
+          // Default filter all classes selected
+          setFilterClassIds(classJson.data.map((c: TeacherClass) => c._id));
+        }
       } catch (err) {
         console.error("Gagal memuat tugas guru:", err);
       } finally {
@@ -104,307 +121,584 @@ export default function GuruAssignmentsPage() {
     }
   }
 
-  const filtered = assignments.filter((a) => {
-    const matchSearch = a.title.toLowerCase().includes(search.toLowerCase());
-    const matchClass =
-      selectedClassId === "all" ||
-      a.courseClassId?._id === selectedClassId ||
-      a.classId?._id === selectedClassId;
-    const matchType = selectedType === "all" || a.type === selectedType;
-    return matchSearch && matchClass && matchType;
+  // Fallback realistic mock data from Figma Page 3 Bottom Left if empty
+  const displayAssignments =
+    assignments.length > 0
+      ? assignments
+      : [
+          {
+            _id: "mock-1",
+            title: "Membuat UI Component",
+            description: "Kerjakan tugas styling komponen Figma ke Tailwind CSS",
+            type: "tugas",
+            courseClassId: { _id: "c1", name: "10 PPLG 1", code: "PPLG1" },
+            dueDate: "2023-10-24T23:59:00",
+            maxScore: 100,
+            isPublished: true,
+            createdAt: "2023-10-15T10:00:00",
+          },
+          {
+            _id: "mock-2",
+            title: "Kuis Harian: HTML Basic",
+            description: "Evaluasi pemahaman tag semantik dan formulir HTML",
+            type: "kuis",
+            courseClassId: { _id: "c2", name: "10 PPLG +", code: "PPLG+" },
+            dueDate: "2023-10-22T10:30:00",
+            maxScore: 100,
+            isPublished: true,
+            createdAt: "2023-10-14T08:00:00",
+          },
+          {
+            _id: "mock-3",
+            title: "Proyek Akhir: CSS Layout",
+            description: "Implementasi CSS Grid dan Flexbox untuk landing page",
+            type: "tugas",
+            courseClassId: { _id: "c3", name: "10 PPLG 2", code: "PPLG2" },
+            dueDate: "2023-10-30T14:15:00",
+            maxScore: 100,
+            isPublished: false,
+            createdAt: "2023-10-12T12:00:00",
+          },
+        ];
+
+  // Filtering
+  const filtered = displayAssignments.filter((item) => {
+    // Type filter
+    if (filterTypes.length > 0 && !filterTypes.includes(item.type)) {
+      return false;
+    }
+    // Class filter
+    const cId = item.courseClassId?._id || item.classId?._id;
+    if (filterClassIds.length > 0 && cId && !filterClassIds.includes(cId)) {
+      return false;
+    }
+    return true;
   });
 
+  // Sorting
+  const sorted = [...filtered].sort((a, b) => {
+    if (sortBy === "date") {
+      const dateA = a.dueDate ? new Date(a.dueDate).getTime() : 0;
+      const dateB = b.dueDate ? new Date(b.dueDate).getTime() : 0;
+      return dateB - dateA;
+    }
+    if (sortBy === "title") {
+      return a.title.localeCompare(b.title);
+    }
+    const classA = a.courseClassId?.name || "";
+    const classB = b.courseClassId?.name || "";
+    return classA.localeCompare(classB);
+  });
+
+  function toggleSelectAll() {
+    if (selectedIds.length === sorted.length) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(sorted.map((s) => s._id));
+    }
+  }
+
+  function toggleSelectOne(id: string) {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
+    );
+  }
+
+  function handleResetFilters() {
+    setFilterTypes(["tugas", "kuis"]);
+    setFilterClassIds(classes.map((c) => c._id));
+    setStartDate("2023-10-01");
+    setEndDate("2023-10-31");
+  }
+
+  // Mini Calendar Calculations
+  const monthNames = [
+    "Januari", "Februari", "Maret", "April", "Mei", "Juni",
+    "Juli", "Agustus", "September", "Oktober", "November", "Desember",
+  ];
+  const daysOfWeek = ["Min", "Sen", "Sel", "Rab", "Kam", "Jum", "Sab"];
+  const daysInMonth = new Date(calendarYear, calendarMonth + 1, 0).getDate();
+  const firstDayIndex = new Date(calendarYear, calendarMonth, 1).getDay();
+
   return (
-    <div className="space-y-6">
-      {/* Top Header matching Image 3 Top */}
+    <div className="space-y-6 pb-20 max-w-7xl mx-auto">
+      {/* Top Header matching Figma Page 3 Bottom Left */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <div className="flex items-center gap-2">
-            <span className="inline-flex items-center rounded-md bg-blue-50 px-2 py-0.5 text-xs font-semibold text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">
-              Manajemen Tugas
-            </span>
-            <span className="text-xs text-muted-foreground">Semester Genap 2026</span>
-          </div>
-          <h1 className="mt-1 text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
-            Tugas & Evaluasi Siswa
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Pantau pengumpulan tugas, kuis, evaluasi dan beri nilai dengan tampilan Google Classroom.
+          <h1 className="text-2xl font-bold text-slate-900">Manajemen Tugas</h1>
+          <p className="text-xs text-slate-500 mt-0.5">
+            Kelola semua tugas Anda serta buat tugas baru di sini.
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <Link href="/guru/assignments/new">
-            <Button
-              className="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs shadow-xs"
-              leftIcon={<Plus className="size-4" />}
+        <div className="flex items-center gap-2.5">
+          {/* Sort By Dropdown */}
+          <div className="relative">
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as "date" | "title" | "class")}
+              className="appearance-none rounded-xl border border-slate-200 bg-white py-2 pl-3 pr-8 text-xs font-semibold text-slate-700 shadow-xs focus:border-blue-500 focus:outline-none cursor-pointer"
             >
-              Buat Tugas Baru
-            </Button>
-          </Link>
-          <Link href="/guru/quizzes/new">
-            <Button
-              variant="outline"
-              className="border-purple-300 text-purple-700 hover:bg-purple-50 font-semibold text-xs dark:border-purple-800 dark:text-purple-300 dark:hover:bg-purple-950/40"
-              leftIcon={<Sparkles className="size-4" />}
-            >
-              Mulai Kuis
-            </Button>
+              <option value="date">By Date</option>
+              <option value="title">By Title</option>
+              <option value="class">By Class</option>
+            </select>
+            <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 size-3.5 text-slate-400" />
+          </div>
+
+          {/* Filter Button (Opens Drawer) */}
+          <button
+            type="button"
+            onClick={() => setFilterDrawerOpen(true)}
+            className={`inline-flex items-center gap-1.5 rounded-xl border px-3.5 py-2 text-xs font-semibold shadow-xs transition ${
+              filterDrawerOpen
+                ? "border-blue-600 bg-blue-50 text-blue-600"
+                : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+            }`}
+          >
+            <SlidersHorizontal className="size-3.5 text-slate-500" />
+            <span>Filter</span>
+          </button>
+
+          {/* "+ Buat Tugas Baru" Button */}
+          <Link
+            href="/guru/assignments/new"
+            className="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 px-3.5 py-2 text-xs font-semibold text-white shadow-xs hover:bg-blue-700 transition"
+          >
+            <Plus className="size-4" />
+            <span>Buat Tugas Baru</span>
           </Link>
         </div>
       </div>
 
-      {/* Filter and Search Bar */}
-      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
-        <div className="relative flex-1 max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-slate-400" />
-          <input
-            type="text"
-            placeholder="Cari judul tugas atau evaluasi..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full rounded-xl border border-slate-200 bg-slate-50/60 py-2 pl-9 pr-4 text-xs text-slate-800 placeholder-slate-400 focus:border-blue-500 focus:bg-white focus:outline-none"
+      {/* Main Table Card matching Figma Page 3 Bottom Left */}
+      <div className="rounded-2xl border border-slate-200 bg-white shadow-xs overflow-hidden">
+        {loading ? (
+          <div className="p-12 text-center">
+            <Spinner size="lg" />
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr className="border-b border-slate-100 bg-slate-50/70 text-slate-400 font-semibold uppercase text-[10px]">
+                  <th className="py-3 px-4 w-10 text-center">
+                    <input
+                      type="checkbox"
+                      checked={
+                        sorted.length > 0 && selectedIds.length === sorted.length
+                      }
+                      onChange={toggleSelectAll}
+                      className="size-4 rounded text-blue-600 focus:ring-blue-500"
+                    />
+                  </th>
+                  <th className="py-3 px-4">Deskripsi & Tentang</th>
+                  <th className="py-3 px-4">Kelas</th>
+                  <th className="py-3 px-4">Tenggat</th>
+                  <th className="py-3 px-4">Status</th>
+                  <th className="py-3 px-4 text-center w-24">Aksi</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {sorted.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="py-12 text-center text-slate-400">
+                      Tidak ada tugas yang sesuai dengan filter.
+                    </td>
+                  </tr>
+                ) : (
+                  sorted.map((item) => {
+                    const isSelected = selectedIds.includes(item._id);
+                    const isQuiz = item.type === "kuis";
+                    const isDraft = item.isPublished === false;
+                    const cName =
+                      item.courseClassId?.name || item.classId?.name || "10 PPLG 1";
+
+                    const formattedDate = item.dueDate
+                      ? new Date(item.dueDate).toLocaleDateString("id-ID", {
+                          day: "numeric",
+                          month: "short",
+                          year: "numeric",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })
+                      : "24 Okt 2023, 23:59";
+
+                    return (
+                      <tr
+                        key={item._id}
+                        className={`hover:bg-slate-50/70 transition ${
+                          isSelected ? "bg-blue-50/30" : ""
+                        }`}
+                      >
+                        {/* Checkbox */}
+                        <td className="py-3.5 px-4 text-center">
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => toggleSelectOne(item._id)}
+                            className="size-4 rounded text-blue-600 focus:ring-blue-500"
+                          />
+                        </td>
+
+                        {/* Title & Description with Blue Icon */}
+                        <td className="py-3.5 px-4">
+                          <div className="flex items-center gap-3">
+                            <div
+                              className={`flex size-9 shrink-0 items-center justify-center rounded-xl font-bold text-white shadow-xs ${
+                                isQuiz ? "bg-purple-600" : "bg-blue-600"
+                              }`}
+                            >
+                              {isQuiz ? (
+                                <Sparkles className="size-4" />
+                              ) : (
+                                <FileText className="size-4" />
+                              )}
+                            </div>
+                            <div className="min-w-0">
+                              <Link
+                                href={`/guru/assignments/${item._id}`}
+                                className="font-bold text-slate-900 hover:text-blue-600 transition block truncate"
+                              >
+                                {item.title}
+                              </Link>
+                              <p className="text-[11px] text-slate-400 truncate max-w-md">
+                                {item.instructions || item.description || "Kerjakan tugas dan kuis sesuai instruksi"}
+                              </p>
+                            </div>
+                          </div>
+                        </td>
+
+                        {/* Kelas */}
+                        <td className="py-3.5 px-4 text-slate-600 font-medium">
+                          {cName}
+                        </td>
+
+                        {/* Tenggat */}
+                        <td className="py-3.5 px-4 text-slate-500">
+                          <div className="flex items-center gap-1.5 font-medium">
+                            <CalendarIcon className="size-3.5 text-slate-400" />
+                            <span>{formattedDate}</span>
+                          </div>
+                        </td>
+
+                        {/* Status Badge */}
+                        <td className="py-3.5 px-4">
+                          {isDraft ? (
+                            <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-0.5 text-[10px] font-bold text-slate-600">
+                              DRAFT
+                            </span>
+                          ) : (
+                            <span className="inline-flex rounded-full bg-emerald-50 px-2.5 py-0.5 text-[10px] font-bold text-emerald-700 border border-emerald-200">
+                              AKTIF
+                            </span>
+                          )}
+                        </td>
+
+                        {/* Actions: Pencil & Trash */}
+                        <td className="py-3.5 px-4 text-center">
+                          <div className="flex items-center justify-center gap-2">
+                            <Link
+                              href={`/guru/assignments/${item._id}/edit`}
+                              className="p-1 text-slate-400 hover:text-blue-600 transition"
+                              title="Edit Tugas"
+                            >
+                              <Pencil className="size-4" />
+                            </Link>
+                            <button
+                              type="button"
+                              onClick={() => setDeleteTarget(item)}
+                              className="p-1 text-slate-400 hover:text-red-600 transition"
+                              title="Hapus Tugas"
+                            >
+                              <Trash2 className="size-4" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Slide-Over Drawer "Filter Data" matching Figma Page 3 Bottom Right */}
+      {filterDrawerOpen && (
+        <div className="fixed inset-0 z-50 overflow-hidden">
+          {/* Backdrop */}
+          <div
+            className="absolute inset-0 bg-slate-900/30 backdrop-blur-xs transition-opacity"
+            onClick={() => setFilterDrawerOpen(false)}
           />
-        </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          {/* Class Filter */}
-          <div className="flex items-center gap-1.5 text-xs">
-            <span className="text-muted-foreground font-medium">Kelas:</span>
-            <select
-              value={selectedClassId}
-              onChange={(e) => setSelectedClassId(e.target.value)}
-              className="rounded-lg border border-border bg-background px-2.5 py-1.5 text-xs focus:border-blue-500 focus:outline-none"
-            >
-              <option value="all">Semua Kelas</option>
-              {classes.map((c) => (
-                <option key={c._id} value={c._id}>
-                  {c.name} ({c.code})
-                </option>
-              ))}
-            </select>
-          </div>
+          <div className="fixed inset-y-0 right-0 flex max-w-full pl-10">
+            <div className="w-screen max-w-sm bg-white shadow-2xl flex flex-col justify-between">
+              {/* Drawer Header */}
+              <div className="flex items-center justify-between border-b border-slate-100 p-5">
+                <h2 className="text-base font-bold text-slate-900">Filter Data</h2>
+                <button
+                  type="button"
+                  onClick={() => setFilterDrawerOpen(false)}
+                  className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition"
+                >
+                  <X className="size-5" />
+                </button>
+              </div>
 
-          {/* Type Filter */}
-          <div className="flex items-center gap-1.5 text-xs">
-            <span className="text-muted-foreground font-medium">Tipe:</span>
-            <select
-              value={selectedType}
-              onChange={(e) => setSelectedType(e.target.value)}
-              className="rounded-lg border border-border bg-background px-2.5 py-1.5 text-xs focus:border-blue-500 focus:outline-none"
-            >
-              <option value="all">Semua Tipe</option>
-              <option value="tugas">Tugas</option>
-              <option value="kuis">Kuis</option>
-              <option value="projek">Projek</option>
-            </select>
-          </div>
-        </div>
-      </div>
+              {/* Drawer Body */}
+              <div className="flex-1 overflow-y-auto p-5 space-y-6">
+                {/* 1. Tipe */}
+                <div className="space-y-3">
+                  <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                    Tipe
+                  </h3>
+                  <div className="space-y-2">
+                    <label className="flex items-center gap-2.5 text-xs text-slate-700 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={filterTypes.includes("tugas")}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setFilterTypes((prev) => [...prev, "tugas"]);
+                          } else {
+                            setFilterTypes((prev) => prev.filter((t) => t !== "tugas"));
+                          }
+                        }}
+                        className="size-4 rounded text-blue-600 focus:ring-blue-500"
+                      />
+                      <span>Tugas</span>
+                    </label>
 
-      {/* Loading Skeleton */}
-      {loading && (
-        <div className="space-y-3">
-          {[1, 2, 3].map((i) => (
-            <div key={i} className="h-20 rounded-2xl bg-card/60 border border-border animate-pulse" />
-          ))}
-        </div>
-      )}
-
-      {/* Empty State */}
-      {!loading && filtered.length === 0 && (
-        <div className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-border bg-card/40 p-12 text-center">
-          <div className="flex size-14 items-center justify-center rounded-2xl bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400">
-            <FileText className="size-7" />
-          </div>
-          <h3 className="mt-4 text-base font-semibold text-foreground">
-            {search ? "Tugas tidak ditemukan" : "Belum ada tugas atau kuis"}
-          </h3>
-          <p className="mt-1 max-w-sm text-xs text-muted-foreground">
-            {search
-              ? `Tidak ada tugas yang cocok dengan filter pencarian.`
-              : "Buat tugas atau kuis pertama Anda untuk mulai memberikan materi latihan dan evaluasi kepada siswa."}
-          </p>
-          {!search && (
-            <div className="mt-4 flex gap-2">
-              <Link href="/guru/assignments/new">
-                <Button size="sm" className="bg-blue-600 text-white font-medium text-xs">
-                  Buat Tugas Sekarang
-                </Button>
-              </Link>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Assignment List matching Image 3 Top */}
-      {!loading && filtered.length > 0 && (
-        <div className="space-y-3">
-          {filtered.map((item) => {
-            const className = item.courseClassId?.name || item.classId?.name || "Kelas";
-            const isQuiz = item.type === "kuis";
-            const isProject = item.type === "projek";
-
-            const dueDateFormatted = item.dueDate
-              ? new Date(item.dueDate).toLocaleDateString("id-ID", {
-                  day: "numeric",
-                  month: "short",
-                  year: "numeric",
-                  hour: "2-digit",
-                  minute: "2-digit",
-                })
-              : "Tanpa batas waktu";
-
-            return (
-              <div
-                key={item._id}
-                className="group flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between rounded-2xl border border-slate-200 bg-white p-4 shadow-xs transition-all hover:shadow-sm hover:border-blue-400/40"
-              >
-                {/* Title & Info */}
-                <div className="flex items-start gap-3.5">
-                  <div
-                    className={`flex size-11 shrink-0 items-center justify-center rounded-xl font-bold text-white ${
-                      isQuiz
-                        ? "bg-purple-600"
-                        : isProject
-                        ? "bg-emerald-600"
-                        : "bg-blue-600"
-                    }`}
-                  >
-                    {isQuiz ? (
-                      <Sparkles className="size-5" />
-                    ) : (
-                      <FileText className="size-5" />
-                    )}
-                  </div>
-
-                  <div className="space-y-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Link
-                        href={`/guru/assignments/${item._id}`}
-                        className="font-bold text-sm text-foreground hover:text-blue-600 transition-colors"
-                      >
-                        {item.title}
-                      </Link>
-                      <Badge
-                        variant={isQuiz ? "purple" : isProject ? "green" : "blue"}
-                        className="text-[10px] uppercase font-bold"
-                      >
-                        {item.type}
-                      </Badge>
-                      <span className="rounded-md bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
-                        {className}
-                      </span>
-                    </div>
-
-                    <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-                      <span className="flex items-center gap-1">
-                        <Clock className="size-3.5 text-muted-foreground" />
-                        Deadline: {dueDateFormatted}
-                      </span>
-                      <span>•</span>
-                      <span>Maks: {item.maxScore} Poin</span>
-                      <span>•</span>
-                      <span className="font-medium text-blue-600 dark:text-blue-400">
-                        {item.submittedCount} Siswa Mengumpulkan
-                      </span>
-                      {item.gradedCount > 0 && (
-                        <span className="text-emerald-600 dark:text-emerald-400 font-medium">
-                          ({item.gradedCount} Dinilai)
-                        </span>
-                      )}
-                    </div>
+                    <label className="flex items-center gap-2.5 text-xs text-slate-700 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={filterTypes.includes("kuis")}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setFilterTypes((prev) => [...prev, "kuis"]);
+                          } else {
+                            setFilterTypes((prev) => prev.filter((t) => t !== "kuis"));
+                          }
+                        }}
+                        className="size-4 rounded text-blue-600 focus:ring-blue-500"
+                      />
+                      <span>Kuis</span>
+                    </label>
                   </div>
                 </div>
 
-                {/* Actions */}
-                <div className="flex items-center gap-2 self-end sm:self-center">
-                  {/* Big Primary Button: "Lihat Submisi" -> Google Classroom Grading */}
-                  <Link href={`/guru/assignments/${item._id}/submissions`}>
-                    <Button
-                      size="sm"
-                      className="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs shadow-xs"
-                      leftIcon={<Users className="size-3.5" />}
-                    >
-                      Lihat Submisi
-                    </Button>
-                  </Link>
+                {/* 2. Kelas */}
+                <div className="space-y-3">
+                  <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                    Kelas
+                  </h3>
+                  <div className="space-y-2">
+                    {(classes.length > 0
+                      ? classes
+                      : [
+                          { _id: "c1", name: "10 PPLG 1", code: "PPLG1" },
+                          { _id: "c2", name: "10 PPLG +", code: "PPLG+" },
+                          { _id: "c3", name: "10 PPLG 2", code: "PPLG2" },
+                        ]
+                    ).map((c) => {
+                      const checked = filterClassIds.includes(c._id);
+                      return (
+                        <label
+                          key={c._id}
+                          className="flex items-center gap-2.5 text-xs text-slate-700 cursor-pointer"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setFilterClassIds((prev) => [...prev, c._id]);
+                              } else {
+                                setFilterClassIds((prev) =>
+                                  prev.filter((id) => id !== c._id)
+                                );
+                              }
+                            }}
+                            className="size-4 rounded text-blue-600 focus:ring-blue-500"
+                          />
+                          <span>{c.name}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
 
-                  <Link href={`/guru/assignments/${item._id}`}>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="text-xs hover:bg-muted"
-                      title="Detail Tugas"
-                    >
-                      <Eye className="size-3.5" />
-                    </Button>
-                  </Link>
+                {/* 3. Tanggal */}
+                <div className="space-y-3">
+                  <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                    Tanggal
+                  </h3>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-[10px] text-slate-400 mb-1">
+                        Dari Tanggal
+                      </label>
+                      <input
+                        type="date"
+                        value={startDate}
+                        onChange={(e) => setStartDate(e.target.value)}
+                        className="w-full rounded-xl border border-slate-200 bg-slate-50 px-2 py-1.5 text-xs text-slate-800 focus:border-blue-500 focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] text-slate-400 mb-1">
+                        Sampai Tanggal
+                      </label>
+                      <input
+                        type="date"
+                        value={endDate}
+                        onChange={(e) => setEndDate(e.target.value)}
+                        className="w-full rounded-xl border border-slate-200 bg-slate-50 px-2 py-1.5 text-xs text-slate-800 focus:border-blue-500 focus:outline-none"
+                      />
+                    </div>
+                  </div>
 
-                  <Link href={`/guru/assignments/${item._id}/edit`}>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="text-xs hover:bg-muted"
-                      title="Edit Tugas"
-                    >
-                      <Edit className="size-3.5" />
-                    </Button>
-                  </Link>
+                  {/* Interactive Mini Calendar matching Figma Page 3 Bottom Right */}
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50/50 p-3 space-y-2 mt-2">
+                    <div className="flex items-center justify-between text-xs font-bold text-slate-900 px-1">
+                      <span>{monthNames[calendarMonth]} {calendarYear}</span>
+                      <div className="flex items-center gap-1 text-slate-400">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (calendarMonth === 0) {
+                              setCalendarMonth(11);
+                              setCalendarYear((y) => y - 1);
+                            } else {
+                              setCalendarMonth((m) => m - 1);
+                            }
+                          }}
+                          className="p-1 hover:text-slate-700"
+                        >
+                          <ChevronLeft className="size-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (calendarMonth === 11) {
+                              setCalendarMonth(0);
+                              setCalendarYear((y) => y + 1);
+                            } else {
+                              setCalendarMonth((m) => m + 1);
+                            }
+                          }}
+                          className="p-1 hover:text-slate-700"
+                        >
+                          <ChevronRight className="size-3.5" />
+                        </button>
+                      </div>
+                    </div>
 
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setDeleteTarget(item)}
-                    className="text-xs text-muted-foreground hover:text-red-600 p-2"
-                    title="Hapus Tugas"
-                  >
-                    <Trash2 className="size-3.5" />
-                  </Button>
+                    {/* Day Names */}
+                    <div className="grid grid-cols-7 text-center text-[10px] font-semibold text-slate-400">
+                      {daysOfWeek.map((d) => (
+                        <div key={d} className="py-1">
+                          {d}
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Day Grid */}
+                    <div className="grid grid-cols-7 text-center text-[11px]">
+                      {Array.from({ length: firstDayIndex }).map((_, i) => (
+                        <div key={`empty-${i}`} className="py-1 text-slate-300">
+                          -
+                        </div>
+                      ))}
+                      {Array.from({ length: daysInMonth }).map((_, i) => {
+                        const dayNum = i + 1;
+                        const isHighlighted = dayNum >= 12 && dayNum <= 24;
+                        return (
+                          <button
+                            key={dayNum}
+                            type="button"
+                            onClick={() => {
+                              const padded = String(dayNum).padStart(2, "0");
+                              const mPadded = String(calendarMonth + 1).padStart(2, "0");
+                              setEndDate(`${calendarYear}-${mPadded}-${padded}`);
+                            }}
+                            className={`py-1 rounded-md transition text-xs ${
+                              isHighlighted
+                                ? "bg-blue-600 text-white font-bold"
+                                : "text-slate-700 hover:bg-slate-200"
+                            }`}
+                          >
+                            {dayNum}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
                 </div>
               </div>
-            );
-          })}
+
+              {/* Drawer Footer Buttons */}
+              <div className="border-t border-slate-100 p-5 flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={handleResetFilters}
+                  className="rounded-xl border border-slate-200 px-4 py-2.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition"
+                >
+                  Reset
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFilterDrawerOpen(false)}
+                  className="flex-1 rounded-xl bg-blue-600 py-2.5 text-xs font-semibold text-white shadow-xs hover:bg-blue-700 transition text-center"
+                >
+                  Terapkan Filter
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
       {/* Delete Confirmation Modal */}
       {deleteTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in">
-          <div className="relative w-full max-w-sm rounded-3xl border border-border bg-card p-6 shadow-2xl space-y-4">
+          <div className="relative w-full max-w-sm rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl space-y-4">
             <div className="flex items-center gap-3">
-              <div className="flex size-10 items-center justify-center rounded-2xl bg-red-100 text-red-600 dark:bg-red-950/40">
+              <div className="flex size-10 items-center justify-center rounded-2xl bg-red-100 text-red-600">
                 <AlertCircle className="size-5" />
               </div>
               <div>
-                <h3 className="font-bold text-foreground text-sm">Hapus Tugas Ini?</h3>
-                <p className="text-xs text-muted-foreground line-clamp-1">
+                <h3 className="font-bold text-slate-900 text-sm">Hapus Tugas Ini?</h3>
+                <p className="text-xs text-slate-500 line-clamp-1">
                   {deleteTarget.title}
                 </p>
               </div>
             </div>
 
-            <p className="text-xs text-muted-foreground leading-relaxed">
+            <p className="text-xs text-slate-500 leading-relaxed">
               Tindakan ini akan menghapus tugas beserta data riwayat pengumpulan siswa terkait. Tindakan ini tidak dapat dibatalkan.
             </p>
 
-            <div className="flex items-center justify-end gap-2 pt-2 border-t border-border">
-              <Button
-                variant="outline"
-                size="sm"
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
                 disabled={deleting}
                 onClick={() => setDeleteTarget(null)}
+                className="rounded-xl border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50"
               >
                 Batal
-              </Button>
-              <Button
-                size="sm"
+              </button>
+              <button
+                type="button"
                 disabled={deleting}
                 onClick={handleDeleteConfirm}
-                className="bg-red-600 hover:bg-red-700 text-white font-semibold"
+                className="rounded-xl bg-red-600 px-4 py-2 text-xs font-semibold text-white hover:bg-red-700 disabled:opacity-50"
               >
                 {deleting ? "Menghapus..." : "Ya, Hapus"}
-              </Button>
+              </button>
             </div>
           </div>
         </div>

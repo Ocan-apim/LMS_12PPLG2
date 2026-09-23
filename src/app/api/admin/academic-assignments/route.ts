@@ -41,42 +41,62 @@ export async function POST(req: Request) {
     await connectDB();
     const body = await req.json();
 
-    const { teacherId, subjectId, classId, academicYear } = body;
+    const { teacherId, subjectId, classId, classIds, academicYear } = body;
 
-    if (!teacherId || !subjectId || !classId) {
+    const targetClassIds: string[] = Array.isArray(classIds) && classIds.length > 0
+      ? classIds
+      : classId
+      ? [classId]
+      : [];
+
+    if (!teacherId || !subjectId || targetClassIds.length === 0) {
       return NextResponse.json(
-        { success: false, message: "Guru, mata pelajaran, dan kelas wajib dipilih" },
+        { success: false, message: "Guru, mata pelajaran, dan minimal satu kelas wajib dipilih" },
         { status: 400 }
       );
     }
 
-    const existing = await AcademicAssignment.findOne({
-      teacherId,
-      subjectId,
-      classId,
-      academicYear: academicYear || "2024/2025 - Genap",
-    });
+    const year = academicYear || "2024/2025 - Genap";
+    const createdAssignments = [];
+    const skippedClasses = [];
 
-    if (existing) {
+    for (const cid of targetClassIds) {
+      const existing = await AcademicAssignment.findOne({
+        teacherId,
+        subjectId,
+        classId: cid,
+        academicYear: year,
+      });
+
+      if (existing) {
+        skippedClasses.push(cid);
+        continue;
+      }
+
+      const created = await AcademicAssignment.create({
+        teacherId,
+        subjectId,
+        classId: cid,
+        academicYear: year,
+      });
+      createdAssignments.push(created);
+    }
+
+    if (createdAssignments.length === 0 && skippedClasses.length > 0) {
       return NextResponse.json(
-        { success: false, message: "Penugasan guru ini untuk kelas dan mapel tersebut sudah ada" },
+        { success: false, message: "Seluruh penugasan untuk kelas yang dipilih sudah terdaftar sebelumnya" },
         { status: 400 }
       );
     }
 
-    const assignment = await AcademicAssignment.create({
-      teacherId,
-      subjectId,
-      classId,
-      academicYear: academicYear || "2024/2025 - Genap",
-    });
-
-    const populated = await AcademicAssignment.findById(assignment._id)
-      .populate("teacherId", "name nip email degree")
-      .populate("subjectId", "name code category")
-      .populate("classId", "name grade");
-
-    return NextResponse.json({ success: true, data: populated }, { status: 201 });
+    return NextResponse.json(
+      {
+        success: true,
+        message: `Berhasil menugaskan pengajar ke ${createdAssignments.length} kelas`,
+        data: createdAssignments,
+      },
+      { status: 201 }
+    );
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Gagal menambahkan penugasan";
     return NextResponse.json({ success: false, message }, { status: 500 });

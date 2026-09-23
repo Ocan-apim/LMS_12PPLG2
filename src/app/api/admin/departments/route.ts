@@ -15,18 +15,35 @@ export async function GET() {
       .sort({ name: 1 })
       .lean();
 
-    // Enrich with class count and student count
+    // Enrich with class count, student count, and total capacity summed from all classes
     const enriched = await Promise.all(
       departments.map(async (dept) => {
-        const [classCount, studentCount] = await Promise.all([
-          ClassModel.countDocuments({ departmentId: dept._id, isActive: true }),
-          User.countDocuments({ departmentId: dept._id, role: "siswa", isActive: true }),
-        ]);
+        const activeClasses = await ClassModel.find({ departmentId: dept._id, isActive: true })
+          .select("_id maxCapacity")
+          .lean();
+
+        const deptClassIds = (activeClasses as any[]).map((c) => c._id);
+
+        const studentCount = await User.countDocuments({
+          role: "siswa",
+          isActive: true,
+          $or: [
+            { departmentId: dept._id },
+            { classId: { $in: deptClassIds } },
+          ],
+        });
+
+        const totalCapacity = (activeClasses as any[]).reduce(
+          (sum, c) => sum + (Number(c.maxCapacity) || 36),
+          0
+        );
 
         return {
           ...dept,
-          classCount,
+          classCount: activeClasses.length,
           studentCount,
+          capacity: totalCapacity,
+          totalCapacity,
         };
       })
     );

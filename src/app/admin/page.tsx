@@ -13,7 +13,6 @@ import {
   Building,
 } from "lucide-react";
 import {
-  DashboardHero,
   Card,
   CardBody,
   CardHeader,
@@ -40,6 +39,9 @@ interface AdminStats {
     name: string;
     code: string;
     capacity: number;
+    totalCapacity?: number;
+    studentCount?: number;
+    classCount?: number;
     maxClasses: number;
   }>;
 }
@@ -75,11 +77,6 @@ export default function AdminDashboardPage() {
 
   return (
     <div className="space-y-6">
-      <DashboardHero
-        title="Halo, Administrator Learnix"
-        subtitle="Kelola data kelas, siswa, guru, jurusan SMK, dan pengaturan sistem sekolah secara terpusat."
-      />
-
       {/* Primary Metrics */}
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-xs transition hover:shadow-md">
@@ -257,10 +254,12 @@ export default function AdminDashboardPage() {
                       </div>
                       <div>
                         <div className="text-sm font-medium text-slate-800">{dept.name}</div>
-                        <div className="text-xs text-slate-500">Maks. {dept.maxClasses} Kelas Paralel</div>
+                        <div className="text-xs text-slate-500">
+                          {dept.classCount !== undefined ? `${dept.classCount} Kelas Terdaftar` : `Maks. ${dept.maxClasses} Kelas Paralel`}
+                        </div>
                       </div>
                     </div>
-                    <Badge variant="blue">{dept.capacity} Kuota</Badge>
+                    <Badge variant="blue">{dept.capacity} Siswa</Badge>
                   </div>
                 ))
               ) : (

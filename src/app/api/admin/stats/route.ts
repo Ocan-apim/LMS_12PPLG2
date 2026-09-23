@@ -29,7 +29,7 @@ export async function GET() {
         .limit(5)
         .populate("classId", "name")
         .select("name nisn createdAt classId"),
-      Department.find({ isActive: true }).select("name code capacity maxClasses"),
+      Department.find({ isActive: true }).select("name code capacity maxClasses").lean(),
     ]);
 
     // Homeroom teachers count
@@ -37,6 +37,39 @@ export async function GET() {
       homeroomTeacherId: { $exists: true, $ne: null },
       isActive: true,
     });
+
+    // Enrich departments with real sum of class capacities (matching manajemen jurusan)
+    const enrichedDepartments = await Promise.all(
+      (departments as any[]).map(async (dept) => {
+        const activeClasses = await ClassModel.find({ departmentId: dept._id, isActive: true })
+          .select("_id maxCapacity")
+          .lean();
+
+        const deptClassIds = (activeClasses as any[]).map((c) => c._id);
+
+        const studentCount = await User.countDocuments({
+          role: "siswa",
+          isActive: true,
+          $or: [
+            { departmentId: dept._id },
+            { classId: { $in: deptClassIds } },
+          ],
+        });
+
+        const totalCapacity = (activeClasses as any[]).reduce(
+          (sum, c) => sum + (Number(c.maxCapacity) || 36),
+          0
+        );
+
+        return {
+          ...dept,
+          classCount: activeClasses.length,
+          studentCount,
+          capacity: totalCapacity,
+          totalCapacity,
+        };
+      })
+    );
 
     return NextResponse.json({
       success: true,
@@ -48,7 +81,7 @@ export async function GET() {
         totalSubjects,
         homeroomTeachersCount,
         recentStudents,
-        departments,
+        departments: enrichedDepartments,
       },
     });
   } catch (err: unknown) {

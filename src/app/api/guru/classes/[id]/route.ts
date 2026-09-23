@@ -27,6 +27,19 @@ export async function GET(_req: Request, context: RouteContext) {
       );
     }
 
+    // Verify ownership: teacherId must match session.id for guru role
+    const teacherIdStr =
+      typeof courseClass.teacherId === "object" && courseClass.teacherId !== null
+        ? (courseClass.teacherId as any)._id?.toString() || (courseClass.teacherId as any).toString()
+        : String(courseClass.teacherId);
+
+    if (session.role === "guru" && teacherIdStr !== session.id) {
+      return NextResponse.json(
+        { success: false, message: "Akses ditolak: Anda bukan pengampu kelas ini" },
+        { status: 403 }
+      );
+    }
+
     const assignments = await Assignment.find({ courseClassId: id })
       .sort({ createdAt: -1 })
       .lean();
@@ -55,8 +68,23 @@ export async function PUT(req: Request, context: RouteContext) {
 
     const { name, password, bannerColor, sharedFiles } = body;
 
-    const updated = await CourseClass.findOneAndUpdate(
-      { _id: id, teacherId: session.id },
+    const existingClass = await CourseClass.findById(id);
+    if (!existingClass) {
+      return NextResponse.json(
+        { success: false, message: "Kelas tidak ditemukan" },
+        { status: 404 }
+      );
+    }
+
+    if (session.role === "guru" && existingClass.teacherId.toString() !== session.id) {
+      return NextResponse.json(
+        { success: false, message: "Akses ditolak: Anda bukan pengampu kelas ini" },
+        { status: 403 }
+      );
+    }
+
+    const updated = await CourseClass.findByIdAndUpdate(
+      id,
       {
         name: name ? name.trim() : undefined,
         password: password ? password.trim() : undefined,
@@ -67,13 +95,6 @@ export async function PUT(req: Request, context: RouteContext) {
     )
       .populate("classRombelId", "name grade")
       .populate("studentIds", "name nisn email");
-
-    if (!updated) {
-      return NextResponse.json(
-        { success: false, message: "Kelas tidak ditemukan atau Anda tidak berhak mengubahnya" },
-        { status: 404 }
-      );
-    }
 
     return NextResponse.json({ success: true, data: updated });
   } catch (err: unknown) {
@@ -90,17 +111,22 @@ export async function DELETE(_req: Request, context: RouteContext) {
     const { id } = await context.params;
     await connectDB();
 
-    const deleted = await CourseClass.findOneAndDelete({
-      _id: id,
-      teacherId: session.id,
-    });
-
-    if (!deleted) {
+    const existingClass = await CourseClass.findById(id);
+    if (!existingClass) {
       return NextResponse.json(
         { success: false, message: "Kelas tidak ditemukan" },
         { status: 404 }
       );
     }
+
+    if (session.role === "guru" && existingClass.teacherId.toString() !== session.id) {
+      return NextResponse.json(
+        { success: false, message: "Akses ditolak: Anda bukan pengampu kelas ini" },
+        { status: 403 }
+      );
+    }
+
+    await CourseClass.findByIdAndDelete(id);
 
     // Delete associated assignments
     await Assignment.deleteMany({ courseClassId: id });

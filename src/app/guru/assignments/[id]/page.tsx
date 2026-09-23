@@ -51,6 +51,7 @@ interface AssignmentDetail {
     questions?: unknown[];
   };
   attachments?: AssignmentAttachment[];
+  isPublished?: boolean;
   createdAt: string;
 }
 
@@ -117,6 +118,24 @@ export default function AssignmentDetailPage({
       },
     ]);
     setNewComment("");
+  }
+
+  async function handleToggleStatus() {
+    if (!assignment) return;
+    const newStatus = assignment.isPublished === false ? true : false;
+    try {
+      const res = await fetch(`/api/guru/assignments/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isPublished: newStatus }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        setAssignment((prev) => (prev ? { ...prev, isPublished: newStatus } : null));
+      }
+    } catch (err) {
+      console.error("Gagal mengubah status tugas:", err);
+    }
   }
 
   if (loading) {
@@ -200,15 +219,30 @@ export default function AssignmentDetailPage({
               </div>
             </div>
 
-            {/* "Lihat Submisi" Button matching Screenshot 3 Left */}
-            <Link href={`/guru/assignments/${id}/submissions`}>
+            {/* Status toggle & "Lihat Submisi" Button matching Screenshot 3 Left */}
+            <div className="flex items-center gap-2">
               <button
                 type="button"
-                className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-800 shadow-xs hover:bg-slate-50 transition"
+                onClick={handleToggleStatus}
+                title="Klik untuk mengubah status publikasi tugas"
+                className={`rounded-xl px-3 py-1.5 text-xs font-bold transition border ${
+                  assignment.isPublished !== false
+                    ? "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100"
+                    : "bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200"
+                }`}
               >
-                Lihat Submisi
+                {assignment.isPublished !== false ? "● AKTIF" : "○ DRAFT"}
               </button>
-            </Link>
+
+              <Link href={`/guru/assignments/${id}/submissions`}>
+                <button
+                  type="button"
+                  className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-800 shadow-xs hover:bg-slate-50 transition"
+                >
+                  Lihat Submisi
+                </button>
+              </Link>
+            </div>
           </div>
 
           {/* Description text */}

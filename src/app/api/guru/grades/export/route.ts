@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import { requireRole } from "@/lib/session";
 import { CourseClass, Assignment, Submission, User } from "@/models";
+import * as XLSX from "xlsx";
 
 export async function GET(req: Request) {
   const { session, error } = await requireRole(["guru", "admin"]);
@@ -30,6 +31,13 @@ export async function GET(req: Request) {
       );
     }
 
+    if (session.role === "guru" && courseClass.teacherId.toString() !== session.id) {
+      return NextResponse.json(
+        { success: false, message: "Akses ditolak: Anda bukan pengampu kelas ini" },
+        { status: 403 }
+      );
+    }
+
     const assignments = await Assignment.find({ courseClassId })
       .sort({ createdAt: 1 })
       .select("_id title maxScore")
@@ -54,19 +62,19 @@ export async function GET(req: Request) {
       subMap.set(key, typeof sub.score === "number" ? sub.score : null);
     });
 
-    // Build CSV Headers
+    // Build Excel Headers
     const headers = [
       "No",
       "Nama Siswa",
       "NISN",
       "Kelas",
-      ...assignments.map((a) => `"${a.title.replace(/"/g, '""')} (Maks ${a.maxScore})"`),
+      ...assignments.map((a) => `${a.title} (Maks ${a.maxScore})`),
       "Rata-rata",
       "Predikat",
       "Status",
     ];
 
-    const rows = [headers.join(",")];
+    const dataRows: (string | number)[][] = [];
 
     students.forEach((st, idx) => {
       let total = 0;
@@ -82,37 +90,52 @@ export async function GET(req: Request) {
         return "-";
       });
 
-      const avg = count > 0 ? (Math.round((total / count) * 10) / 10).toFixed(1) : "0.0";
+      const avg = count > 0 ? Number((total / count).toFixed(1)) : 0;
       let predikat = "C";
-      const numAvg = parseFloat(avg);
-      if (numAvg >= 85) predikat = "A";
-      else if (numAvg >= 75) predikat = "B";
-      else if (numAvg >= 60) predikat = "C";
-      else if (numAvg > 0) predikat = "D";
+      if (avg >= 85) predikat = "A";
+      else if (avg >= 75) predikat = "B";
+      else if (avg >= 60) predikat = "C";
+      else if (avg > 0) predikat = "D";
 
-      const status = numAvg >= 75 ? "Tuntas" : numAvg > 0 ? "Remedial" : "Belum Ada Nilai";
+      const status = avg >= 75 ? "Tuntas" : avg > 0 ? "Remedial" : "Belum Ada Nilai";
 
-      rows.push(
-        [
-          idx + 1,
-          `"${st.name.replace(/"/g, '""')}"`,
-          `'${st.nisn || ""}'`,
-          `"${courseClass.name}"`,
-          ...scores,
-          avg,
-          predikat,
-          status,
-        ].join(",")
-      );
+      dataRows.push([
+        idx + 1,
+        st.name,
+        st.nisn || "-",
+        courseClass.name,
+        ...scores,
+        avg,
+        predikat,
+        status,
+      ]);
     });
 
-    const csvOutput = rows.join("\n");
-    const filename = `Rekap_Nilai_${courseClass.name.replace(/\s+/g, "_")}.csv`;
+    const aoa = [headers, ...dataRows];
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
 
-    return new NextResponse(csvOutput, {
+    // Auto set column widths
+    const colWidths = headers.map((h, i) => {
+      let maxLen = h.length;
+      dataRows.forEach((row) => {
+        const valStr = String(row[i] || "");
+        if (valStr.length > maxLen) maxLen = valStr.length;
+      });
+      return { wch: Math.min(Math.max(maxLen + 3, 10), 40) };
+    });
+    ws["!cols"] = colWidths;
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Rekap Nilai");
+
+    const buffer = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
+    const filename = `Rekap_Nilai_${courseClass.name.replace(/\s+/g, "_")}.xlsx`;
+
+    return new NextResponse(buffer, {
       status: 200,
       headers: {
-        "Content-Type": "text/csv; charset=utf-8",
+        "Content-Type":
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         "Content-Disposition": `attachment; filename="${filename}"`,
       },
     });
@@ -121,3 +144,4 @@ export async function GET(req: Request) {
     return NextResponse.json({ success: false, message }, { status: 500 });
   }
 }
+

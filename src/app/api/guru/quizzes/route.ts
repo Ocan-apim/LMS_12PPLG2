@@ -63,6 +63,21 @@ export async function POST(req: Request) {
       );
     }
 
+    const courseClass = await CourseClass.findById(courseClassId);
+    if (!courseClass) {
+      return NextResponse.json(
+        { success: false, message: "Kelas tidak ditemukan" },
+        { status: 404 }
+      );
+    }
+
+    if (session.role === "guru" && courseClass.teacherId.toString() !== session.id) {
+      return NextResponse.json(
+        { success: false, message: "Akses ditolak: Anda bukan pengampu kelas ini" },
+        { status: 403 }
+      );
+    }
+
     const quiz = await Quiz.create({
       title: title.trim(),
       teacherId: session.id,

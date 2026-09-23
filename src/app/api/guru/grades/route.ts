@@ -40,6 +40,12 @@ export async function GET(req: Request) {
         .lean();
 
       if (selectedClass) {
+        if (session.role === "guru" && selectedClass.teacherId.toString() !== session.id) {
+          return NextResponse.json(
+            { success: false, message: "Akses ditolak: Anda bukan pengampu kelas ini" },
+            { status: 403 }
+          );
+        }
         // Assignments in this class
         assignments = await Assignment.find({ courseClassId: targetClassId })
           .sort({ createdAt: 1 })

@@ -46,7 +46,10 @@ export async function GET(req: Request) {
       ];
     }
 
-    const sortOption: Record<string, 1 | -1> = sort === "nip" ? { nip: 1 } : { name: 1 };
+    const sortOption: Record<string, 1 | -1> =
+      sort === "nip" ? { nip: 1 } :
+      sort === "name_desc" ? { name: -1 } :
+      { name: 1 };
 
     const [teachers, activeClasses] = await Promise.all([
       User.find(query)
@@ -109,6 +112,7 @@ export async function POST(req: Request) {
       photoUrl,
       subjects,
       joinDate,
+      tahunBergabung,
       isHomeroomTeacher,
       homeroomClassId,
       phone,
@@ -117,6 +121,13 @@ export async function POST(req: Request) {
     if (!name || !email) {
       return NextResponse.json(
         { success: false, message: "Nama lengkap dan email wajib diisi" },
+        { status: 400 }
+      );
+    }
+
+    if (Array.isArray(subjects) && subjects.length > 2) {
+      return NextResponse.json(
+        { success: false, message: "Maksimal penugasan 2 mata pelajaran untuk 1 guru" },
         { status: 400 }
       );
     }
@@ -140,6 +151,21 @@ export async function POST(req: Request) {
     }
 
     const hashedPassword = await bcrypt.hash(password || "password123", 10);
+    const parsedJoinDate = joinDate ? new Date(joinDate) : new Date();
+    const parsedTahunBergabung = tahunBergabung
+      ? String(tahunBergabung).trim()
+      : parsedJoinDate.getFullYear().toString();
+    const parsedJoinYear = parseInt(parsedTahunBergabung, 10) || parsedJoinDate.getFullYear();
+
+    if (isHomeroomTeacher && homeroomClassId) {
+      const targetClass = await ClassModel.findById(homeroomClassId);
+      if (targetClass && targetClass.homeroomTeacherId) {
+        return NextResponse.json(
+          { success: false, message: `Kelas ${targetClass.name} sudah memiliki wali kelas` },
+          { status: 400 }
+        );
+      }
+    }
 
     const teacher = await User.create({
       name: name.trim(),
@@ -151,7 +177,9 @@ export async function POST(req: Request) {
       lastEducation: lastEducation || "S1 / Sarjana",
       photoUrl,
       subjects: Array.isArray(subjects) ? subjects : [],
-      joinDate: joinDate ? new Date(joinDate) : new Date(),
+      joinDate: parsedJoinDate,
+      tahunBergabung: parsedTahunBergabung,
+      joinYear: parsedJoinYear,
       isHomeroomTeacher: Boolean(isHomeroomTeacher),
       homeroomClassId: isHomeroomTeacher && homeroomClassId ? homeroomClassId : undefined,
       phone,

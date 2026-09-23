@@ -72,6 +72,10 @@ export async function PATCH(req: Request, context: RouteContext) {
   }
 }
 
+export async function PUT(req: Request, context: RouteContext) {
+  return PATCH(req, context);
+}
+
 export async function DELETE(_req: Request, context: RouteContext) {
   const { error, session } = await requireRole("admin");
   if (error) return error;

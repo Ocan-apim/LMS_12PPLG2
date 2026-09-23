@@ -54,11 +54,19 @@ export async function PUT(req: Request, context: RouteContext) {
       photoUrl,
       subjects,
       joinDate,
+      tahunBergabung,
       isHomeroomTeacher,
       homeroomClassId,
       phone,
       isActive,
     } = body;
+
+    if (Array.isArray(subjects) && subjects.length > 2) {
+      return NextResponse.json(
+        { success: false, message: "Maksimal penugasan 2 mata pelajaran untuk 1 guru" },
+        { status: 400 }
+      );
+    }
 
     // Handle homeroom class updates
     const oldClassId = currentTeacher.homeroomClassId?.toString();
@@ -108,10 +116,33 @@ export async function PUT(req: Request, context: RouteContext) {
       },
     };
 
+    // Preserve existing tahunBergabung/joinYear (non-editable for all roles)
+    if (!currentTeacher.tahunBergabung && tahunBergabung !== undefined) {
+      updateQuery.$set.tahunBergabung = tahunBergabung ? String(tahunBergabung).trim() : undefined;
+      const parsedYear = parseInt(String(tahunBergabung), 10);
+      if (!isNaN(parsedYear)) {
+        updateQuery.$set.joinYear = parsedYear;
+      }
+    }
+
     if (newClassId) {
       updateQuery.$set.homeroomClassId = newClassId;
     } else {
       updateQuery.$unset = { homeroomClassId: 1 };
+    }
+
+    // Sync subjects teacherIds
+    if (Array.isArray(subjects)) {
+      await Subject.updateMany(
+        { teacherIds: id, _id: { $nin: subjects } },
+        { $pull: { teacherIds: id } }
+      );
+      if (subjects.length > 0) {
+        await Subject.updateMany(
+          { _id: { $in: subjects } },
+          { $addToSet: { teacherIds: id } }
+        );
+      }
     }
 
     const updated = await User.findByIdAndUpdate(id, updateQuery, { new: true, runValidators: true })
