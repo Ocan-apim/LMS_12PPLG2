@@ -20,7 +20,11 @@ export const metadata: Metadata = {
     "Learning Management System Learnix untuk Admin, Guru, Kurikulum, Kepsek, dan Siswa",
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   return (
     <html
       lang="id"
