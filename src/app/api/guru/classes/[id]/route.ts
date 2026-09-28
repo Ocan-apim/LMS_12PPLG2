@@ -126,12 +126,11 @@ export async function DELETE(_req: Request, context: RouteContext) {
       );
     }
 
-    await CourseClass.findByIdAndDelete(id);
+    // Soft-delete / archive to preserve student academic records
+    await CourseClass.findByIdAndUpdate(id, { isActive: false });
+    await Assignment.updateMany({ courseClassId: id }, { isArchived: true, isPublished: false });
 
-    // Delete associated assignments
-    await Assignment.deleteMany({ courseClassId: id });
-
-    return NextResponse.json({ success: true, message: "Kelas berhasil dihapus" });
+    return NextResponse.json({ success: true, message: "Kelas berhasil diarsipkan" });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Gagal menghapus kelas";
     return NextResponse.json({ success: false, message }, { status: 500 });

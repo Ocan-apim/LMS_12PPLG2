@@ -47,5 +47,9 @@ const CourseClassSchema = new Schema<ICourseClass>(
   { timestamps: true }
 );
 
+CourseClassSchema.index({ teacherId: 1, isActive: 1 });
+CourseClassSchema.index({ studentIds: 1, isActive: 1 });
+
 export const CourseClass =
   models.CourseClass || model<ICourseClass>("CourseClass", CourseClassSchema);
+

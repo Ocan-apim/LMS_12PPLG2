@@ -255,17 +255,32 @@ export function TopNav({ userName, roleLabel, role, onMenuClick }: TopNavProps) 
       </div>
 
       <div className="ml-auto flex items-center gap-3">
-        <button
-          aria-label="Notifikasi"
-          className="relative rounded-full p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-800 transition"
-        >
-          <Bell className="size-4.5" />
-          <span className="absolute top-1.5 right-1.5 size-1.5 rounded-full bg-red-500" />
-        </button>
+        {role === "siswa" ? (
+          <Link
+            href="/siswa/notifications"
+            aria-label="Notifikasi Siswa"
+            className="relative rounded-full p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-800 transition"
+          >
+            <Bell className="size-4.5" />
+            <span className="absolute top-1.5 right-1.5 size-1.5 rounded-full bg-red-500" />
+          </Link>
+        ) : (
+          <button
+            type="button"
+            aria-label="Notifikasi"
+            className="relative rounded-full p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-800 transition"
+          >
+            <Bell className="size-4.5" />
+            <span className="absolute top-1.5 right-1.5 size-1.5 rounded-full bg-red-500" />
+          </button>
+        )}
 
         {/* Profile Section: Hidden for role === "admin" as requested! */}
         {role !== "admin" && (
-          <div className="flex items-center gap-2.5 pl-2 border-l border-slate-200">
+          <Link
+            href={role === "siswa" ? "/siswa/profile" : role === "guru" ? "/guru/profile" : "#"}
+            className="flex items-center gap-2.5 pl-2 border-l border-slate-200 hover:opacity-85 transition"
+          >
             <div className="text-right hidden sm:block">
               <p className="text-xs font-bold text-slate-900 leading-tight">
                 {userName || "Pengguna"}
@@ -277,7 +292,7 @@ export function TopNav({ userName, roleLabel, role, onMenuClick }: TopNavProps) 
             <div className="size-8 rounded-full bg-blue-100 border border-blue-200 overflow-hidden flex items-center justify-center text-xs font-bold text-blue-700">
               {userName ? userName.charAt(0).toUpperCase() : "U"}
             </div>
-          </div>
+          </Link>
         )}
       </div>
       <span className="sr-only">{roleLabel}</span>

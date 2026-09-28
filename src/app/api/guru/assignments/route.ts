@@ -16,6 +16,7 @@ export async function GET(req: Request) {
 
     const query: Record<string, unknown> = {
       teacherId: session.id,
+      isArchived: { $ne: true },
     };
 
     if (courseClassId && courseClassId !== "all") {
@@ -98,6 +99,22 @@ export async function POST(req: Request) {
         { success: false, message: "Pilih kelas untuk tugas ini" },
         { status: 400 }
       );
+    }
+
+    if (courseClassId) {
+      const targetClass = await CourseClass.findById(courseClassId);
+      if (!targetClass) {
+        return NextResponse.json(
+          { success: false, message: "Kelas tidak ditemukan" },
+          { status: 404 }
+        );
+      }
+      if (session.role === "guru" && targetClass.teacherId.toString() !== session.id) {
+        return NextResponse.json(
+          { success: false, message: "Akses ditolak: Anda bukan pengampu kelas ini" },
+          { status: 403 }
+        );
+      }
     }
 
     const newAssignment = await Assignment.create({

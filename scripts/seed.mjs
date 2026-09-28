@@ -25,6 +25,10 @@ async function runSeed() {
     "academicyears",
     "academicassignments",
     "schoolsettings",
+    "courseclasses",
+    "assignments",
+    "quizzes",
+    "submissions",
   ];
   for (const name of collections) {
     try {
@@ -352,9 +356,22 @@ async function runSeed() {
       createdAt: new Date(),
       updatedAt: new Date(),
     },
+    {
+      name: "Basis Data",
+      code: "BD",
+      category: "Kejuruan",
+      departmentId: pplgDeptId,
+      grade: "10",
+      teacherIds: [teacherBudiPId],
+      description: "Perancangan database relasional, SQL (DDL, DML), normalisasi data",
+      isActive: true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    },
   ];
 
-  await db.collection("subjects").insertMany(subjectsData);
+  const subjectInsertResult = await db.collection("subjects").insertMany(subjectsData);
+  const subjectBdId = subjectInsertResult.insertedIds[subjectsData.length - 1];
 
   // 6. Seed Classes (Rombel)
   console.log("Seeding Classes...");
@@ -459,6 +476,7 @@ async function runSeed() {
   const classInsertResult = await db.collection("classes").insertMany(classesData);
   const classXiiPplg2Id = classInsertResult.insertedIds[0];
   const classXiPplg1Id = classInsertResult.insertedIds[3];
+  const classXPplg1Id = classInsertResult.insertedIds[5];
 
   // Update teacher homeroom class references
   await db.collection("users").updateOne(
@@ -574,6 +592,253 @@ async function runSeed() {
     { _id: classXiiPplg2Id },
     { $set: { studentIds: [studentIds[1], studentIds[2]] } }
   );
+
+  // 8. Seed CourseClass (Kelas Mapel)
+  console.log("Seeding CourseClass (Kelas Mapel)...");
+  const courseClassDoc = {
+    name: "BASISDATA10PPLG",
+    code: "29QRV",
+    password: "bucantik",
+    teacherId: teacherBudiPId,
+    classRombelId: classXPplg1Id,
+    subjectId: subjectBdId,
+    academicYear: "2024/2025 - Genap",
+    bannerColor: "blue",
+    studentIds: [studentIds[0], studentIds[3], studentIds[4]],
+    sharedFiles: [
+      {
+        name: "Silabus-Basis-Data-10PPLG.pdf",
+        url: "/uploads/silabus-basis-data.pdf",
+        type: "pdf",
+        size: "1.4 MB",
+        uploadedAt: new Date(),
+      },
+      {
+        name: "Modul-01-Pengenalan-RDBMS.pdf",
+        url: "/uploads/modul-01-rdbms.pdf",
+        type: "pdf",
+        size: "3.2 MB",
+        uploadedAt: new Date(),
+      },
+    ],
+    isActive: true,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+
+  const courseClassResult = await db.collection("courseclasses").insertOne(courseClassDoc);
+  const courseClassId = courseClassResult.insertedId;
+
+  // 9. Seed Quiz
+  console.log("Seeding Quiz...");
+  const quizDoc = {
+    title: "Kuis Konsep Relasi & Normalisasi Database",
+    teacherId: teacherBudiPId,
+    courseClassId: courseClassId,
+    durationSeconds: 1800,
+    questions: [
+      {
+        id: "q1",
+        type: "pilihan_ganda",
+        question: "Perintah SQL yang digunakan untuk mengambil data dari tabel adalah...",
+        options: ["SELECT", "UPDATE", "DELETE", "INSERT"],
+        correctAnswer: 0,
+        points: 20,
+      },
+      {
+        id: "q2",
+        type: "pilihan_ganda",
+        question: "Kunci utama (primary key) dalam tabel relasional berfungsi untuk...",
+        options: [
+          "Menghubungkan tabel anak",
+          "Mengidentifikasi baris secara unik tanpa duplikasi",
+          "Menyimpan nilai NULL",
+          "Mengurutkan index",
+        ],
+        correctAnswer: 1,
+        points: 20,
+      },
+      {
+        id: "q3",
+        type: "pilihan_ganda",
+        question: "Klausul WHERE dalam query SELECT digunakan untuk...",
+        options: [
+          "Mengelompokkan baris",
+          "Menyaring record berdasarkan kondisi tertentu",
+          "Mengurutkan baris",
+          "Menghitung jumlah kolom",
+        ],
+        correctAnswer: 1,
+        points: 20,
+      },
+      {
+        id: "q4",
+        type: "pilihan_ganda",
+        question: "Bentuk normalisasi pertama (1NF) mensyaratkan setiap kolom bernilai...",
+        options: ["Atomik (tunggal)", "Ganda", "Foreign key", "Terenkripsi"],
+        correctAnswer: 0,
+        points: 20,
+      },
+      {
+        id: "q5",
+        type: "pilihan_ganda",
+        question: "Perintah DDL yang digunakan untuk menghapus struktur tabel adalah...",
+        options: ["DROP TABLE", "DELETE FROM", "TRUNCATE", "REMOVE"],
+        correctAnswer: 0,
+        points: 20,
+      },
+    ],
+    totalPoints: 100,
+    isPublished: true,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+
+  const quizResult = await db.collection("quizzes").insertOne(quizDoc);
+  const quizId = quizResult.insertedId;
+
+  // 10. Seed Assignments (Tasks)
+  console.log("Seeding Assignments...");
+  const assignment1 = {
+    title: "Praktikum DDL & DML MySQL",
+    description: "Kerjakan perintah CREATE TABLE dan INSERT INTO berdasarkan skema database penjualan toko buku.",
+    instructions: "1. Buat database tokobuku\n2. Buat tabel buku dan kategori\n3. Input minimal 5 data dummy\n4. Simpan script dalam file .sql dan upload",
+    bannerUrl: "",
+    type: "tugas",
+    subjectId: subjectBdId,
+    classId: classXPplg1Id,
+    courseClassId: courseClassId,
+    teacherId: teacherBudiPId,
+    attachments: [
+      {
+        name: "Lembar-Kerja-Praktikum-1.pdf",
+        url: "/uploads/lkpd-1.pdf",
+        type: "pdf",
+        size: "850 KB",
+        uploadedAt: new Date(),
+      },
+    ],
+    comments: [
+      {
+        userId: teacherBudiPId,
+        userName: "Budi Pratama, S.Pd.",
+        userRole: "guru",
+        message: "Silakan tanyakan di sini jika ada kendala saat eksekusi query DDL.",
+        createdAt: new Date(),
+      },
+    ],
+    dueDate: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000),
+    maxScore: 100,
+    isPublished: true,
+    isArchived: false,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+
+  const assignment2 = {
+    title: "Kuis Basis Data: Normalisasi",
+    description: "Kuis evaluasi pemahaman bentuk normal 1NF, 2NF, dan 3NF.",
+    instructions: "Waktu pengerjaan 30 menit. Kerjakan dengan jujur dan teliti.",
+    bannerUrl: "",
+    type: "kuis",
+    subjectId: subjectBdId,
+    classId: classXPplg1Id,
+    courseClassId: courseClassId,
+    teacherId: teacherBudiPId,
+    quizId: quizId,
+    attachments: [],
+    comments: [],
+    dueDate: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),
+    maxScore: 100,
+    isPublished: true,
+    isArchived: false,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+
+  const assignmentResult = await db.collection("assignments").insertMany([assignment1, assignment2]);
+  const assignment1Id = assignmentResult.insertedIds[0];
+
+  // 11. Seed Submissions
+  console.log("Seeding Submissions...");
+  const submissionsData = [
+    {
+      assignmentId: assignment1Id,
+      studentId: studentIds[0],
+      courseClassId: courseClassId,
+      content: "Tugas praktikum DDL dan DML telah selesai pak. File script .sql terlampir.",
+      attachments: [
+        {
+          name: "tugas_basisdata_ahmad.sql",
+          url: "/uploads/tugas_basisdata_ahmad.sql",
+          type: "document",
+          size: "45 KB",
+          uploadedAt: new Date(Date.now() - 24 * 60 * 60 * 1000),
+        },
+      ],
+      score: 95,
+      status: "graded",
+      feedback: "Sintaks SQL sangat rapi, primary key dan foreign key didefinisikan dengan tepat.",
+      privateComments: [
+        {
+          senderId: teacherBudiPId,
+          senderName: "Budi Pratama, S.Pd.",
+          senderRole: "guru",
+          message: "Kerja bagus, perhatikan constraint ON DELETE CASCADE di masa depan.",
+          createdAt: new Date(),
+        },
+      ],
+      submittedAt: new Date(Date.now() - 24 * 60 * 60 * 1000),
+      gradedAt: new Date(),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    },
+    {
+      assignmentId: assignment1Id,
+      studentId: studentIds[3],
+      courseClassId: courseClassId,
+      content: "Berikut laporan praktikum SQL saya pak.",
+      attachments: [
+        {
+          name: "laporan_sql_kartini.pdf",
+          url: "/uploads/laporan_sql_kartini.pdf",
+          type: "pdf",
+          size: "1.2 MB",
+          uploadedAt: new Date(Date.now() - 12 * 60 * 60 * 1000),
+        },
+      ],
+      score: 88,
+      status: "graded",
+      feedback: "Sudah baik, tambahkan keterangan pada query JOIN.",
+      privateComments: [],
+      submittedAt: new Date(Date.now() - 12 * 60 * 60 * 1000),
+      gradedAt: new Date(),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    },
+    {
+      assignmentId: assignment1Id,
+      studentId: studentIds[4],
+      courseClassId: courseClassId,
+      content: "Pengumpulan tugas DML Basis Data",
+      attachments: [
+        {
+          name: "tugas_dml_rizky.sql",
+          url: "/uploads/tugas_dml_rizky.sql",
+          type: "document",
+          size: "38 KB",
+          uploadedAt: new Date(),
+        },
+      ],
+      status: "turned_in",
+      privateComments: [],
+      submittedAt: new Date(),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    },
+  ];
+
+  await db.collection("submissions").insertMany(submissionsData);
 
   console.log("Seeding completed successfully!");
   await mongoose.disconnect();

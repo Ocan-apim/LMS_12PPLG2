@@ -5,6 +5,7 @@ export interface ISubmissionAttachment {
   url: string;
   type: string;
   size: string;
+  uploadedAt?: Date;
 }
 
 export interface IPrivateComment {
@@ -17,6 +18,7 @@ export interface IPrivateComment {
 
 export interface ISubmission {
   assignmentId: mongoose.Types.ObjectId;
+  quizId?: mongoose.Types.ObjectId;
   studentId: mongoose.Types.ObjectId;
   courseClassId?: mongoose.Types.ObjectId;
   content?: string;
@@ -33,6 +35,7 @@ export interface ISubmission {
     isCorrect?: boolean;
     scoreAwarded?: number;
   }>;
+  startedAt?: Date;
   submittedAt: Date;
   gradedAt?: Date;
   createdAt: Date;
@@ -46,6 +49,10 @@ const SubmissionSchema = new Schema<ISubmission>(
       ref: "Assignment",
       required: true,
     },
+    quizId: {
+      type: Schema.Types.ObjectId,
+      ref: "Quiz",
+    },
     studentId: { type: Schema.Types.ObjectId, ref: "User", required: true },
     courseClassId: { type: Schema.Types.ObjectId, ref: "CourseClass" },
     content: { type: String },
@@ -56,6 +63,7 @@ const SubmissionSchema = new Schema<ISubmission>(
         url: { type: String, required: true },
         type: { type: String, default: "document" },
         size: { type: String, default: "1.0 MB" },
+        uploadedAt: { type: Date, default: Date.now },
       },
     ],
     score: { type: Number },
@@ -83,6 +91,7 @@ const SubmissionSchema = new Schema<ISubmission>(
         scoreAwarded: { type: Number },
       },
     ],
+    startedAt: { type: Date },
     submittedAt: { type: Date, default: Date.now },
     gradedAt: { type: Date },
   },
@@ -90,6 +99,8 @@ const SubmissionSchema = new Schema<ISubmission>(
 );
 
 SubmissionSchema.index({ assignmentId: 1, studentId: 1 }, { unique: true });
+SubmissionSchema.index({ studentId: 1, status: 1 });
+SubmissionSchema.index({ courseClassId: 1 });
 
 export const Submission =
   models.Submission || model<ISubmission>("Submission", SubmissionSchema);

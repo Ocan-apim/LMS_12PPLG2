@@ -112,7 +112,7 @@ export async function GET(req: Request) {
     const classAverage =
       validAverages.length > 0
         ? Math.round((validAverages.reduce((s, m) => s + m.average, 0) / validAverages.length) * 10) / 10
-        : 84.2;
+        : 0;
 
     // Recent submissions across teacher's assignments
     const teacherAssignments = await Assignment.find({ teacherId: session.id }).select("_id");

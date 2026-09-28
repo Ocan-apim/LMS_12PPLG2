@@ -11,3 +11,4 @@ export { SchoolSetting } from "./SchoolSetting";
 export { CourseClass } from "./CourseClass";
 export { Quiz } from "./Quiz";
 export { ClassPost } from "./ClassPost";
+export { Notification } from "./Notification";

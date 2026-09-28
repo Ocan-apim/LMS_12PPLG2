@@ -24,7 +24,10 @@ interface AssignmentAttachment {
 
 interface CommentItem {
   _id?: string;
-  senderName: string;
+  userId?: string;
+  userName?: string;
+  senderName?: string;
+  userRole?: string;
   message: string;
   isReply?: boolean;
   createdAt: string;
@@ -65,39 +68,31 @@ export default function AssignmentDetailPage({
 
   const [assignment, setAssignment] = useState<AssignmentDetail | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  // Comments state matching Screenshot 3 Left
-  const [comments, setComments] = useState<CommentItem[]>([
-    {
-      senderName: "Hosanna Serafim",
-      message: "Lorem ipsum dolor amet",
-      createdAt: "2 jam yang lalu",
-    },
-    {
-      senderName: "Hosanna Serafim",
-      message: "Lorem ipsum dolor amet",
-      isReply: true,
-      createdAt: "1 jam yang lalu",
-    },
-    {
-      senderName: "Hosanna Serafim",
-      message: "Lorem ipsum dolor amet",
-      createdAt: "30 menit yang lalu",
-    },
-  ]);
+  // Real comments state
+  const [comments, setComments] = useState<CommentItem[]>([]);
   const [newComment, setNewComment] = useState("");
   const [showCommentInput, setShowCommentInput] = useState(false);
+  const [submittingComment, setSubmittingComment] = useState(false);
 
   useEffect(() => {
     async function loadDetail() {
       try {
+        setError(null);
         const res = await fetch(`/api/guru/assignments/${id}`);
         const json = await res.json();
         if (json.success) {
           setAssignment(json.data);
+          if (json.data.comments && Array.isArray(json.data.comments)) {
+            setComments(json.data.comments);
+          }
+        } else {
+          setError(json.message || "Gagal memuat detail tugas");
         }
-      } catch (err) {
+      } catch (err: unknown) {
         console.error("Gagal memuat tugas:", err);
+        setError("Terjadi kesalahan jaringan saat memuat tugas");
       } finally {
         setLoading(false);
       }
@@ -105,19 +100,31 @@ export default function AssignmentDetailPage({
     loadDetail();
   }, [id]);
 
-  function handleAddComment(e: React.FormEvent) {
+  async function handleAddComment(e: React.FormEvent) {
     e.preventDefault();
-    if (!newComment.trim()) return;
+    if (!newComment.trim() || submittingComment) return;
 
-    setComments((prev) => [
-      ...prev,
-      {
-        senderName: "Bu Guru",
-        message: newComment.trim(),
-        createdAt: "Baru saja",
-      },
-    ]);
-    setNewComment("");
+    setSubmittingComment(true);
+    try {
+      const res = await fetch(`/api/guru/assignments/${id}/comments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: newComment.trim() }),
+      });
+      const json = await res.json();
+      if (json.success && json.data) {
+        setComments((prev) => [...prev, json.data]);
+        setNewComment("");
+        setShowCommentInput(false);
+      } else {
+        alert(json.message || "Gagal menambahkan komentar");
+      }
+    } catch (err) {
+      console.error("Gagal menambahkan komentar:", err);
+      alert("Gagal menambahkan komentar");
+    } finally {
+      setSubmittingComment(false);
+    }
   }
 
   async function handleToggleStatus() {
@@ -146,6 +153,21 @@ export default function AssignmentDetailPage({
     );
   }
 
+  if (error) {
+    return (
+      <div className="rounded-2xl border border-red-200 bg-red-50 p-8 text-center max-w-lg mx-auto">
+        <h2 className="text-base font-bold text-red-900">Gagal Memuat Tugas</h2>
+        <p className="mt-2 text-xs text-red-600">{error}</p>
+        <button
+          onClick={() => window.location.reload()}
+          className="mt-4 rounded-xl bg-red-600 px-4 py-2 text-xs font-semibold text-white hover:bg-red-700 transition"
+        >
+          Coba Lagi
+        </button>
+      </div>
+    );
+  }
+
   if (!assignment) {
     return (
       <div className="rounded-2xl border border-slate-200 bg-white p-12 text-center shadow-xs">
@@ -162,25 +184,9 @@ export default function AssignmentDetailPage({
     );
   }
 
-  const className = assignment.courseClassId?.name || "10 PPLG 1";
+  const className = assignment.courseClassId?.name || "Kelas";
   const classId = assignment.courseClassId?._id;
-  const attachments =
-    assignment.attachments && assignment.attachments.length > 0
-      ? assignment.attachments
-      : [
-          {
-            name: "lorem ipsum dolor",
-            url: "#",
-            type: "lorem dolor",
-            size: "2.4 MB",
-          },
-          {
-            name: "lorem ipsum dolor",
-            url: "#",
-            type: "lorem dolor",
-            size: "2.4 MB",
-          },
-        ];
+  const attachments = assignment.attachments || [];
 
   return (
     <div className="space-y-6 pb-24 max-w-7xl mx-auto">
@@ -285,37 +291,41 @@ export default function AssignmentDetailPage({
           {/* File yang dibagi Section matching Screenshot 3 Left */}
           <div className="space-y-3">
             <h3 className="text-sm font-bold text-slate-900">File yang dibagi</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {attachments.map((file, idx) => (
-                <div
-                  key={idx}
-                  className="flex items-center justify-between rounded-2xl border border-slate-200 bg-white p-3.5 shadow-xs hover:border-slate-300 transition"
-                >
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-500">
-                      <FileText className="size-5" />
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-xs font-bold text-slate-900 truncate">
-                        {file.name}
-                      </p>
-                      <p className="text-[11px] text-slate-400">
-                        {file.size || "2.4 MB"} • {file.type || "lorem dolor"}
-                      </p>
-                    </div>
-                  </div>
-
-                  <a
-                    href={file.url}
-                    download
-                    className="p-2 text-slate-400 hover:text-blue-600 transition"
-                    title="Unduh file"
+            {attachments.length === 0 ? (
+              <p className="text-xs text-slate-400 italic">Belum ada file yang dibagikan.</p>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {attachments.map((file, idx) => (
+                  <div
+                    key={idx}
+                    className="flex items-center justify-between rounded-2xl border border-slate-200 bg-white p-3.5 shadow-xs hover:border-slate-300 transition"
                   >
-                    <Download className="size-4" />
-                  </a>
-                </div>
-              ))}
-            </div>
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-500">
+                        <FileText className="size-5" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold text-slate-900 truncate">
+                          {file.name}
+                        </p>
+                        <p className="text-[11px] text-slate-400">
+                          {file.size || "-"} • {file.type || "file"}
+                        </p>
+                      </div>
+                    </div>
+
+                    <a
+                      href={`/api/files/download?url=${encodeURIComponent(file.url)}&name=${encodeURIComponent(file.name)}`}
+                      download
+                      className="p-2 text-slate-400 hover:text-blue-600 transition"
+                      title="Unduh file"
+                    >
+                      <Download className="size-4" />
+                    </a>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 
@@ -342,11 +352,12 @@ export default function AssignmentDetailPage({
                   placeholder="Tulis komentar..."
                   value={newComment}
                   onChange={(e) => setNewComment(e.target.value)}
+                  disabled={submittingComment}
                   className="flex-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-800 placeholder-slate-400 focus:border-blue-500 focus:bg-white focus:outline-none"
                 />
                 <button
                   type="submit"
-                  disabled={!newComment.trim()}
+                  disabled={!newComment.trim() || submittingComment}
                   className="rounded-xl bg-blue-600 p-2 text-white hover:bg-blue-700 disabled:opacity-50 transition"
                 >
                   <Send className="size-3.5" />
@@ -354,29 +365,36 @@ export default function AssignmentDetailPage({
               </form>
             )}
 
-            {/* Comments List with nested reply style matching Screenshot 3 Left */}
+            {/* Comments List */}
             <div className="space-y-3 pt-2">
-              {comments.map((c, i) => (
-                <div
-                  key={i}
-                  className={`flex items-start gap-2.5 text-xs ${
-                    c.isReply ? "pl-5" : ""
-                  }`}
-                >
-                  {c.isReply && (
-                    <CornerDownRight className="size-3.5 text-slate-400 shrink-0 mt-1" />
-                  )}
-                  {/* Black circular avatar */}
-                  <div className="size-6 shrink-0 rounded-full bg-slate-900 text-white flex items-center justify-center text-[10px] font-bold">
-                    {c.senderName.charAt(0)}
-                  </div>
-                  <div className="min-w-0 flex-1 leading-snug">
-                    <span className="font-bold text-slate-900">{c.senderName}</span>
-                    <span className="text-slate-400 mx-1">:</span>
-                    <span className="text-slate-600">{c.message}</span>
-                  </div>
-                </div>
-              ))}
+              {comments.length === 0 ? (
+                <p className="text-xs text-slate-400 italic">Belum ada komentar.</p>
+              ) : (
+                comments.map((c, i) => {
+                  const author = c.userName || c.senderName || "Pengguna";
+                  return (
+                    <div
+                      key={c._id || i}
+                      className={`flex items-start gap-2.5 text-xs ${
+                        c.isReply ? "pl-5" : ""
+                      }`}
+                    >
+                      {c.isReply && (
+                        <CornerDownRight className="size-3.5 text-slate-400 shrink-0 mt-1" />
+                      )}
+                      {/* Black circular avatar */}
+                      <div className="size-6 shrink-0 rounded-full bg-slate-900 text-white flex items-center justify-center text-[10px] font-bold">
+                        {author.charAt(0).toUpperCase()}
+                      </div>
+                      <div className="min-w-0 flex-1 leading-snug">
+                        <span className="font-bold text-slate-900">{author}</span>
+                        <span className="text-slate-400 mx-1">:</span>
+                        <span className="text-slate-600">{c.message}</span>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
             </div>
           </div>
         </div>

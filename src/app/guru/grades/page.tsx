@@ -57,6 +57,7 @@ function PenilaianContent() {
   const [classes, setClasses] = useState<TeacherClassOption[]>([]);
   const [selectedClassId, setSelectedClassId] = useState(initialClassId);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   // Report Controls matching Figma Page 4 Left
   const [generateReport, setGenerateReport] = useState(false);
@@ -84,6 +85,7 @@ function PenilaianContent() {
   useEffect(() => {
     async function loadData() {
       setLoading(true);
+      setError(null);
       try {
         const query = selectedClassId ? `?courseClassId=${selectedClassId}` : "";
         const [gradesRes, classesRes] = await Promise.all([
@@ -106,8 +108,8 @@ function PenilaianContent() {
             (s: any, idx: number) => ({
               _id: s._id || `sub-${idx}`,
               studentName: s.studentId?.name || "Siswa",
-              studentClass: gradesJson.data.selectedClass?.name || "10 PPLG 1",
-              assignmentTitle: s.assignmentId?.title || "Lorem ipsum dolor amet",
+              studentClass: gradesJson.data.selectedClass?.name || "Kelas",
+              assignmentTitle: s.assignmentId?.title || "Tugas",
               assignmentType: "Tugas",
               assignmentId: s.assignmentId?._id || "",
               submittedDate: s.submittedAt
@@ -118,16 +120,21 @@ function PenilaianContent() {
                     hour: "2-digit",
                     minute: "2-digit",
                   })
-                : "14 Jun 2024 • 09:12",
-              status: s.status === "graded" ? "graded" : idx % 2 === 0 ? "needs_review" : "pending",
+                : "-",
+              status: s.status === "graded" ? "graded" : s.status === "late" ? "late" : s.status === "turned_in" ? "needs_review" : "pending",
               score: s.score,
               maxScore: s.assignmentId?.maxScore || 100,
             })
           );
           setSubmissions(mapped);
+        } else if (!gradesJson.success) {
+          setError(gradesJson.message || "Gagal memuat data penilaian");
+        } else {
+          setSubmissions([]);
         }
       } catch (err) {
         console.error("Gagal memuat data penilaian:", err);
+        setError("Terjadi kesalahan jaringan saat memuat data penilaian");
       } finally {
         setLoading(false);
       }
@@ -184,60 +191,8 @@ function PenilaianContent() {
     }
   }
 
-  // Realistic mock submissions matching Figma Page 4 Left if empty
-  const rawSubmissions: RecentSubmissionItem[] =
-    submissions.length > 0
-      ? submissions
-      : [
-          {
-            _id: "m-1",
-            studentName: "Raden Ajeng Kartini",
-            studentClass: "10 PPLG 1",
-            assignmentTitle: "Lorem ipsum dolor amet",
-            assignmentType: "Tugas",
-            assignmentId: "as-1",
-            submittedDate: "14 Jun 2024 • 09:12",
-            status: "needs_review",
-            score: undefined,
-            maxScore: 100,
-          },
-          {
-            _id: "m-2",
-            studentName: "James Bond",
-            studentClass: "10 PPLG 1",
-            assignmentTitle: "Lorem ipsum dolor amet",
-            assignmentType: "Tugas",
-            assignmentId: "as-2",
-            submittedDate: "14 Jun 2024 • 08:45",
-            status: "graded",
-            score: 95,
-            maxScore: 100,
-          },
-          {
-            _id: "m-3",
-            studentName: "Lorem Ipsum",
-            studentClass: "10 PPLG 1",
-            assignmentTitle: "Lorem ipsum dolor amet",
-            assignmentType: "Tugas",
-            assignmentId: "as-3",
-            submittedDate: "14 Jun 2024 • 08:20",
-            status: "needs_review",
-            score: undefined,
-            maxScore: 100,
-          },
-          {
-            _id: "m-4",
-            studentName: "Alan Ripley",
-            studentClass: "10 PPLG 1",
-            assignmentTitle: "Lorem ipsum dolor amet",
-            assignmentType: "Tugas",
-            assignmentId: "as-4",
-            submittedDate: "13 Jun 2024 • 17:10",
-            status: "late",
-            score: undefined,
-            maxScore: 100,
-          },
-        ];
+  // Submissions list
+  const rawSubmissions: RecentSubmissionItem[] = submissions;
 
   // Apply active drawer filters
   const displaySubmissions: RecentSubmissionItem[] = rawSubmissions.filter((row) => {
@@ -270,23 +225,16 @@ function PenilaianContent() {
           gradedItems.reduce((acc, curr) => acc + (curr.score || 0), 0) /
           gradedItems.length
         ).toFixed(1)
-      : "84.2";
+      : "-";
 
-  const topPerformers: TopPerformer[] =
-    gradedItems.length > 0
-      ? [...gradedItems]
-          .sort((a, b) => (b.score || 0) - (a.score || 0))
-          .slice(0, 3)
-          .map((item, idx) => ({
-            rank: idx + 1,
-            name: item.studentName,
-            score: item.score || 0,
-          }))
-      : [
-          { rank: 1, name: "Raden Ajeng Kartini", score: 98.5 },
-          { rank: 2, name: "James Bond", score: 97.2 },
-          { rank: 3, name: "Alan Ripley", score: 95.4 },
-        ];
+  const topPerformers: TopPerformer[] = [...gradedItems]
+    .sort((a, b) => (b.score || 0) - (a.score || 0))
+    .slice(0, 3)
+    .map((item, idx) => ({
+      rank: idx + 1,
+      name: item.studentName,
+      score: item.score || 0,
+    }));
 
   const totalGradedCount = gradedItems.length || 1;
   const distCounts = {
@@ -302,40 +250,40 @@ function PenilaianContent() {
       count:
         gradedItems.length > 0
           ? `${Math.round((distCounts.c1 / totalGradedCount) * 100)}%`
-          : "3%",
-      height: "h-6",
+          : "0%",
+      height: distCounts.c1 > 0 ? "h-6" : "h-1",
     },
     {
       label: "60-70",
       count:
         gradedItems.length > 0
           ? `${Math.round((distCounts.c2 / totalGradedCount) * 100)}%`
-          : "12%",
-      height: "h-12",
+          : "0%",
+      height: distCounts.c2 > 0 ? "h-12" : "h-1",
     },
     {
       label: "71-80",
       count:
         gradedItems.length > 0
           ? `${Math.round((distCounts.c3 / totalGradedCount) * 100)}%`
-          : "35%",
-      height: "h-20",
+          : "0%",
+      height: distCounts.c3 > 0 ? "h-20" : "h-1",
     },
     {
       label: "81-90",
       count:
         gradedItems.length > 0
           ? `${Math.round((distCounts.c4 / totalGradedCount) * 100)}%`
-          : "40%",
-      height: "h-24",
+          : "0%",
+      height: distCounts.c4 > 0 ? "h-24" : "h-1",
     },
     {
       label: "91-100",
       count:
         gradedItems.length > 0
           ? `${Math.round((distCounts.c5 / totalGradedCount) * 100)}%`
-          : "10%",
-      height: "h-14",
+          : "0%",
+      height: distCounts.c5 > 0 ? "h-14" : "h-1",
     },
   ];
 
@@ -344,11 +292,11 @@ function PenilaianContent() {
   const lateCount = displaySubmissions.filter((s) => s.status === "late").length;
 
   const onTimePct =
-    displaySubmissions.length > 0 ? Math.round((onTimeCount / totalSubs) * 100) : 84;
+    displaySubmissions.length > 0 ? Math.round((onTimeCount / totalSubs) * 100) : 0;
   const latePct =
-    displaySubmissions.length > 0 ? Math.round((lateCount / totalSubs) * 100) : 11;
+    displaySubmissions.length > 0 ? Math.round((lateCount / totalSubs) * 100) : 0;
   const missingPct =
-    displaySubmissions.length > 0 ? Math.max(0, 100 - onTimePct - latePct) : 5;
+    displaySubmissions.length > 0 ? Math.max(0, 100 - onTimePct - latePct) : 0;
 
   function handleResetFilters() {
     setFilterStatuses([]);
@@ -364,7 +312,7 @@ function PenilaianContent() {
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Penilaian</h1>
           <p className="text-xs text-slate-500 mt-0.5">
-            You have {displaySubmissions.filter((s) => s.status !== "graded").length} pending submissions across {classes.length || 3} active classes.
+            You have {displaySubmissions.filter((s) => s.status !== "graded").length} pending submissions across {classes.length} active classes.
           </p>
         </div>
 
@@ -383,6 +331,25 @@ function PenilaianContent() {
           </div>
         </div>
       </div>
+
+      {error && (
+        <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-center">
+          <p className="text-sm font-semibold text-red-700">{error}</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="mt-3 rounded-xl bg-red-600 px-4 py-1.5 text-xs font-semibold text-white hover:bg-red-700 transition"
+          >
+            Coba Lagi
+          </button>
+        </div>
+      )}
+
+      {/* If no classes at all */}
+      {classes.length === 0 && !loading && (
+        <div className="rounded-2xl border border-slate-200 bg-white p-12 text-center shadow-xs">
+          <p className="text-sm font-semibold text-slate-600">Belum ada kelas.</p>
+        </div>
+      )}
 
       {/* Card 1: Generate Academic Report matching Figma Page 4 Left */}
       <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs space-y-4">
@@ -408,11 +375,15 @@ function PenilaianContent() {
                 onChange={(e) => setSelectedClassId(e.target.value)}
                 className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-800 focus:border-blue-500 focus:outline-none"
               >
-                {classes.map((c) => (
-                  <option key={c._id} value={c._id}>
-                    {c.name}
-                  </option>
-                ))}
+                {classes.length === 0 ? (
+                  <option value="">Belum ada kelas.</option>
+                ) : (
+                  classes.map((c) => (
+                    <option key={c._id} value={c._id}>
+                      {c.name}
+                    </option>
+                  ))
+                )}
               </select>
             </div>
 
@@ -496,7 +467,19 @@ function PenilaianContent() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {displaySubmissions.map((row) => (
+                {displaySubmissions.length === 0 ? (
+                  <tr>
+                    <td
+                      colSpan={5}
+                      className="py-12 text-center text-xs font-medium text-slate-500"
+                    >
+                      {classes.length === 0
+                        ? "Belum ada kelas."
+                        : "Belum ada pengumpulan tugas."}
+                    </td>
+                  </tr>
+                ) : (
+                  displaySubmissions.map((row) => (
                   <tr key={row._id} className="hover:bg-slate-50/70 transition">
                     {/* Student Name with Circle Avatar */}
                     <td className="py-3.5 px-4">
@@ -571,37 +554,40 @@ function PenilaianContent() {
                       )}
                     </td>
                   </tr>
-                ))}
+                ))
+              )}
               </tbody>
             </table>
 
             {/* Pagination matching Figma Page 4 Left */}
-            <div className="flex items-center justify-between border-t border-slate-100 px-4 py-3 text-xs text-slate-400">
-              <span>Showing 1 to 10 of 42 submissions</span>
-              <div className="flex items-center gap-3">
-                <span className="font-semibold text-slate-700">
-                  Page {currentPage} of {totalPages}
-                </span>
-                <div className="flex items-center gap-1 text-slate-600">
-                  <button
-                    type="button"
-                    disabled={currentPage === 1}
-                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                    className="p-1 rounded hover:bg-slate-100 disabled:opacity-30"
-                  >
-                    <ChevronLeft className="size-4" />
-                  </button>
-                  <button
-                    type="button"
-                    disabled={currentPage === totalPages}
-                    onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                    className="p-1 rounded hover:bg-slate-100 disabled:opacity-30"
-                  >
-                    <ChevronRight className="size-4" />
-                  </button>
+            {displaySubmissions.length > 0 && (
+              <div className="flex items-center justify-between border-t border-slate-100 px-4 py-3 text-xs text-slate-400">
+                <span>Showing 1 to {displaySubmissions.length} of {displaySubmissions.length} submissions</span>
+                <div className="flex items-center gap-3">
+                  <span className="font-semibold text-slate-700">
+                    Page {currentPage} of {totalPages}
+                  </span>
+                  <div className="flex items-center gap-1 text-slate-600">
+                    <button
+                      type="button"
+                      disabled={currentPage === 1}
+                      onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                      className="p-1 rounded hover:bg-slate-100 disabled:opacity-30"
+                    >
+                      <ChevronLeft className="size-4" />
+                    </button>
+                    <button
+                      type="button"
+                      disabled={currentPage === totalPages}
+                      onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                      className="p-1 rounded hover:bg-slate-100 disabled:opacity-30"
+                    >
+                      <ChevronRight className="size-4" />
+                    </button>
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
           </div>
         )}
       </div>
@@ -618,23 +604,29 @@ function PenilaianContent() {
           </div>
 
           <div className="space-y-3">
-            {topPerformers.map((st) => (
-              <div
-                key={st.rank}
-                className="flex items-center justify-between text-xs py-1"
-              >
-                <div className="flex items-center gap-2.5">
-                  <span className="font-bold text-slate-400 w-3">{st.rank}.</span>
-                  <div className="size-6 rounded-full bg-slate-100 flex items-center justify-center font-bold text-[10px] text-slate-700">
-                    {st.name.charAt(0)}
+            {topPerformers.length === 0 ? (
+              <p className="text-xs text-slate-400 italic text-center py-6">
+                Belum ada data nilai.
+              </p>
+            ) : (
+              topPerformers.map((st) => (
+                <div
+                  key={st.rank}
+                  className="flex items-center justify-between text-xs py-1"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <span className="font-bold text-slate-400 w-3">{st.rank}.</span>
+                    <div className="size-6 rounded-full bg-slate-100 flex items-center justify-center font-bold text-[10px] text-slate-700">
+                      {st.name.charAt(0)}
+                    </div>
+                    <span className="font-medium text-slate-800">{st.name}</span>
                   </div>
-                  <span className="font-medium text-slate-800">{st.name}</span>
+                  <span className="font-mono font-bold text-slate-900">
+                    {st.score}
+                  </span>
                 </div>
-                <span className="font-mono font-bold text-slate-900">
-                  {st.score}
-                </span>
-              </div>
-            ))}
+              ))
+            )}
           </div>
         </div>
 
@@ -648,26 +640,32 @@ function PenilaianContent() {
           </div>
 
           {/* Simple Clean Bar Chart Representation */}
-          <div className="flex items-end justify-between gap-2 h-28 pt-2">
-            {distributionCols.map((col) => (
-              <div
-                key={col.label}
-                className="flex flex-col items-center flex-1 gap-1"
-              >
-                <div className="w-full bg-slate-100 rounded-t-md flex items-end justify-center h-20">
-                  <div
-                    className={`w-full bg-blue-600 rounded-t-md ${col.height} transition-all`}
-                  />
+          {gradedItems.length === 0 ? (
+            <p className="text-xs text-slate-400 italic text-center py-8">
+              Belum ada data distribusi nilai.
+            </p>
+          ) : (
+            <div className="flex items-end justify-between gap-2 h-28 pt-2">
+              {distributionCols.map((col) => (
+                <div
+                  key={col.label}
+                  className="flex flex-col items-center flex-1 gap-1"
+                >
+                  <div className="w-full bg-slate-100 rounded-t-md flex items-end justify-center h-20">
+                    <div
+                      className={`w-full bg-blue-600 rounded-t-md ${col.height} transition-all`}
+                    />
+                  </div>
+                  <span className="text-[10px] text-slate-400 font-medium">
+                    {col.label}
+                  </span>
+                  <span className="text-[9px] font-bold text-slate-600 font-mono">
+                    {col.count}
+                  </span>
                 </div>
-                <span className="text-[10px] text-slate-400 font-medium">
-                  {col.label}
-                </span>
-                <span className="text-[9px] font-bold text-slate-600 font-mono">
-                  {col.count}
-                </span>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Card 3: SUBMISSION STATS */}
@@ -679,40 +677,46 @@ function PenilaianContent() {
             <PieChart className="size-4 text-emerald-600" />
           </div>
 
-          <div className="space-y-3 pt-1">
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-slate-500">On-time</span>
-              <span className="font-bold text-slate-900 font-mono">{onTimePct}%</span>
-            </div>
-            <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-              <div
-                className="bg-emerald-500 h-full transition-all duration-300"
-                style={{ width: `${onTimePct}%` }}
-              />
-            </div>
+          {displaySubmissions.length === 0 ? (
+            <p className="text-xs text-slate-400 italic text-center py-8">
+              Belum ada data pengumpulan tugas.
+            </p>
+          ) : (
+            <div className="space-y-3 pt-1">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-slate-500">On-time</span>
+                <span className="font-bold text-slate-900 font-mono">{onTimePct}%</span>
+              </div>
+              <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                <div
+                  className="bg-emerald-500 h-full transition-all duration-300"
+                  style={{ width: `${onTimePct}%` }}
+                />
+              </div>
 
-            <div className="flex items-center justify-between text-xs pt-1">
-              <span className="text-slate-500">Late</span>
-              <span className="font-bold text-slate-900 font-mono">{latePct}%</span>
-            </div>
-            <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-              <div
-                className="bg-amber-500 h-full transition-all duration-300"
-                style={{ width: `${latePct}%` }}
-              />
-            </div>
+              <div className="flex items-center justify-between text-xs pt-1">
+                <span className="text-slate-500">Late</span>
+                <span className="font-bold text-slate-900 font-mono">{latePct}%</span>
+              </div>
+              <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                <div
+                  className="bg-amber-500 h-full transition-all duration-300"
+                  style={{ width: `${latePct}%` }}
+                />
+              </div>
 
-            <div className="flex items-center justify-between text-xs pt-1">
-              <span className="text-slate-500">Missing / Pending</span>
-              <span className="font-bold text-slate-900 font-mono">{missingPct}%</span>
+              <div className="flex items-center justify-between text-xs pt-1">
+                <span className="text-slate-500">Missing / Pending</span>
+                <span className="font-bold text-slate-900 font-mono">{missingPct}%</span>
+              </div>
+              <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                <div
+                  className="bg-rose-500 h-full transition-all duration-300"
+                  style={{ width: `${missingPct}%` }}
+                />
+              </div>
             </div>
-            <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-              <div
-                className="bg-rose-500 h-full transition-all duration-300"
-                style={{ width: `${missingPct}%` }}
-              />
-            </div>
-          </div>
+          )}
         </div>
       </div>
 

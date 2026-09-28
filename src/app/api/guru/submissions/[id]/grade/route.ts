@@ -104,3 +104,6 @@ export async function POST(req: Request, context: RouteContext) {
     return NextResponse.json({ success: false, message }, { status: 500 });
   }
 }
+
+export const PUT = POST;
+

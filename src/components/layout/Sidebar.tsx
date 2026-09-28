@@ -226,6 +226,34 @@ export function Sidebar({ role, pathname, onNavigate }: SidebarProps) {
             </button>
           </>
         )}
+        {role === "siswa" && (
+          <>
+            <Link
+              href="/siswa/settings"
+              onClick={onNavigate}
+              className={`flex h-8 w-full items-center gap-3 px-2 rounded-lg text-left text-xs font-medium transition ${
+                pathname === "/siswa/settings"
+                  ? "bg-blue-50 text-blue-600 font-semibold"
+                  : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+              }`}
+            >
+              <Settings className="size-4 text-slate-500" />
+              Pengaturan
+            </Link>
+            <Link
+              href="/siswa/profile"
+              onClick={onNavigate}
+              className={`flex h-8 w-full items-center gap-3 px-2 rounded-lg text-left text-xs font-medium transition ${
+                pathname === "/siswa/profile"
+                  ? "bg-blue-50 text-blue-600 font-semibold"
+                  : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+              }`}
+            >
+              <Users className="size-4 text-slate-500" />
+              Profil Saya
+            </Link>
+          </>
+        )}
         <div>
           <button
             type="button"

@@ -52,6 +52,7 @@ export default function GuruAssignmentsPage() {
   const [assignments, setAssignments] = useState<AssignmentItem[]>([]);
   const [classes, setClasses] = useState<TeacherClass[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   // Selected checkboxes
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -74,29 +75,34 @@ export default function GuruAssignmentsPage() {
   const [deleteTarget, setDeleteTarget] = useState<AssignmentItem | null>(null);
   const [deleting, setDeleting] = useState(false);
 
-  useEffect(() => {
-    async function loadData() {
-      try {
-        const [assignRes, classRes] = await Promise.all([
-          fetch("/api/guru/assignments"),
-          fetch("/api/guru/classes"),
-        ]);
+  async function loadData() {
+    setLoading(true);
+    setError(null);
+    try {
+      const [assignRes, classRes] = await Promise.all([
+        fetch("/api/guru/assignments"),
+        fetch("/api/guru/classes"),
+      ]);
 
-        const assignJson = await assignRes.json();
-        const classJson = await classRes.json();
+      const assignJson = await assignRes.json();
+      const classJson = await classRes.json();
 
-        if (assignJson.success) setAssignments(assignJson.data);
-        if (classJson.success) {
-          setClasses(classJson.data);
-          // Default filter all classes selected
-          setFilterClassIds(classJson.data.map((c: TeacherClass) => c._id));
-        }
-      } catch (err) {
-        console.error("Gagal memuat tugas guru:", err);
-      } finally {
-        setLoading(false);
+      if (assignJson.success) setAssignments(assignJson.data);
+      else setError(assignJson.message || "Gagal memuat daftar tugas");
+
+      if (classJson.success) {
+        setClasses(classJson.data);
+        // Default filter all classes selected
+        setFilterClassIds(classJson.data.map((c: TeacherClass) => c._id));
       }
+    } catch {
+      setError("Terjadi kesalahan jaringan saat memuat daftar tugas");
+    } finally {
+      setLoading(false);
     }
+  }
+
+  useEffect(() => {
     loadData();
   }, []);
 
@@ -273,7 +279,18 @@ export default function GuruAssignmentsPage() {
 
       {/* Main Table Card matching Figma Page 3 Bottom Left */}
       <div className="rounded-2xl border border-slate-200 bg-white shadow-xs overflow-hidden">
-        {loading ? (
+        {error ? (
+          <div className="p-12 text-center text-rose-600 space-y-2">
+            <p className="text-sm font-semibold">Gagal memuat daftar tugas</p>
+            <p className="text-xs text-rose-500">{error}</p>
+            <button
+              onClick={loadData}
+              className="mt-3 inline-flex items-center gap-1.5 rounded-xl bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-700 transition"
+            >
+              Coba Lagi
+            </button>
+          </div>
+        ) : loading ? (
           <div className="p-12 text-center">
             <Spinner size="lg" />
           </div>
@@ -302,8 +319,23 @@ export default function GuruAssignmentsPage() {
               <tbody className="divide-y divide-slate-100">
                 {sorted.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="py-12 text-center text-slate-400">
-                      Tidak ada tugas yang sesuai dengan filter.
+                    <td colSpan={6} className="py-16 text-center text-slate-400">
+                      {assignments.length === 0 ? (
+                        <div className="space-y-3">
+                          <p className="text-base font-semibold text-slate-800">Belum ada tugas.</p>
+                          <p className="text-xs text-slate-400 max-w-sm mx-auto">
+                            Anda belum membuat tugas atau kuis pembelajaran.
+                          </p>
+                          <Link
+                            href="/guru/assignments/new"
+                            className="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-700 transition"
+                          >
+                            <Plus className="size-3.5" /> Buat Tugas Baru
+                          </Link>
+                        </div>
+                      ) : (
+                        "Tidak ada tugas yang sesuai dengan filter."
+                      )}
                     </td>
                   </tr>
                 ) : (

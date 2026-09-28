@@ -150,17 +150,15 @@ export async function DELETE(_req: Request, context: RouteContext) {
       );
     }
 
-    await Assignment.findByIdAndDelete(id);
-
-    // Clean up submissions and class stream posts
-    await Promise.all([
-      Submission.deleteMany({ assignmentId: id }),
-      ClassPost.deleteMany({ refId: id }),
-    ]);
+    // Soft-delete / archive to preserve academic data and student submissions
+    await Assignment.findByIdAndUpdate(id, {
+      isArchived: true,
+      isPublished: false,
+    });
 
     return NextResponse.json({
       success: true,
-      message: "Tugas beserta pengumpulannya berhasil dihapus",
+      message: "Tugas berhasil diarsipkan",
     });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Gagal menghapus tugas";

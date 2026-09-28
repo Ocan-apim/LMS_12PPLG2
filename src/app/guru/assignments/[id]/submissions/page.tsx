@@ -107,6 +107,7 @@ export default function GoogleClassroomSubmissionsPage({
   const [assignment, setAssignment] = useState<AssignmentInfo | null>(null);
   const [items, setItems] = useState<SubmissionData[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   // Filter & Selected student
   const [filterTab, setFilterTab] = useState<"all" | "turned_in" | "graded" | "assigned">("all");
@@ -125,17 +126,21 @@ export default function GoogleClassroomSubmissionsPage({
   useEffect(() => {
     async function loadData() {
       try {
+        setError(null);
         const res = await fetch(`/api/guru/assignments/${id}/submissions`);
         const json = await res.json();
         if (json.success) {
           setAssignment(json.data.assignment);
-          setItems(json.data.items);
-          if (json.data.items.length > 0) {
+          setItems(json.data.items || []);
+          if (json.data.items && json.data.items.length > 0) {
             setSelectedStudentId(json.data.items[0].student._id);
           }
+        } else {
+          setError(json.message || "Gagal memuat data submisi");
         }
       } catch (err) {
         console.error("Gagal memuat data submisi:", err);
+        setError("Terjadi kesalahan jaringan saat memuat data pengumpulan");
       } finally {
         setLoading(false);
       }
@@ -350,6 +355,21 @@ export default function GoogleClassroomSubmissionsPage({
     );
   }
 
+  if (error) {
+    return (
+      <div className="rounded-2xl border border-red-200 bg-red-50 p-8 text-center max-w-lg mx-auto mt-12">
+        <h2 className="text-base font-bold text-red-900">Gagal Memuat Submisi</h2>
+        <p className="mt-2 text-xs text-red-600">{error}</p>
+        <button
+          onClick={() => window.location.reload()}
+          className="mt-4 rounded-xl bg-red-600 px-4 py-2 text-xs font-semibold text-white hover:bg-red-700 transition"
+        >
+          Coba Lagi
+        </button>
+      </div>
+    );
+  }
+
   if (!assignment) {
     return (
       <div className="rounded-2xl border border-border bg-card p-12 text-center">
@@ -499,8 +519,10 @@ export default function GoogleClassroomSubmissionsPage({
           {/* Student Roster List Items */}
           <div className="flex-1 overflow-y-auto divide-y divide-border">
             {filteredItems.length === 0 ? (
-              <div className="p-6 text-center text-xs text-muted-foreground">
-                Tidak ada siswa dalam kategori ini.
+              <div className="p-6 text-center text-xs text-muted-foreground font-medium">
+                {items.length === 0
+                  ? "Belum ada pengumpulan tugas."
+                  : "Tidak ada siswa yang sesuai."}
               </div>
             ) : (
               filteredItems.map((item) => {
@@ -945,8 +967,10 @@ export default function GoogleClassroomSubmissionsPage({
               )}
             </div>
           ) : (
-            <div className="flex h-full items-center justify-center p-8 text-center text-muted-foreground text-xs">
-              Pilih siswa dari daftar sebelah kiri untuk melihat hasil pengerjaan tugasnya.
+            <div className="flex h-full items-center justify-center p-8 text-center text-muted-foreground text-xs font-medium">
+              {items.length === 0
+                ? "Belum ada pengumpulan tugas."
+                : "Pilih siswa dari daftar sebelah kiri untuk melihat hasil pengerjaan tugasnya."}
             </div>
           )}
         </div>
@@ -1096,8 +1120,8 @@ export default function GoogleClassroomSubmissionsPage({
               </div>
             </div>
           ) : (
-            <div className="flex h-full items-center justify-center p-4 text-center text-xs text-muted-foreground">
-              Pilih siswa untuk menilai
+            <div className="flex h-full items-center justify-center p-4 text-center text-xs text-muted-foreground font-medium">
+              {items.length === 0 ? "Belum ada pengumpulan tugas." : "Pilih siswa untuk menilai"}
             </div>
           )}
         </div>

@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
+import Link from "next/link";
 import {
   AlarmClock,
   CalendarPlus,
@@ -10,18 +11,29 @@ import {
   Filter,
   MapPin,
   Plus,
+  Loader2,
+  RefreshCw,
+  FolderOpen,
+  BookOpen,
+  AlertCircle,
 } from "lucide-react";
 import { FooterBar } from "@/components/student/StudentDashboardComponents";
 
-type CalendarEvent = {
+interface CalendarEvent {
   id: number;
+  assignmentId: string;
+  quizId?: string | null;
   date: string;
   title: string;
   subject: string;
+  className: string;
+  teacherName?: string;
   time: string;
   color: "orange" | "purple" | "blue" | "green" | "red";
   type: "tugas" | "ujian" | "event";
-};
+  status: "pending" | "completed" | "late";
+  href: string;
+}
 
 const monthNames = [
   "Januari",
@@ -38,355 +50,343 @@ const monthNames = [
   "Desember",
 ];
 
-const weekdays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-
-const activeTasks = [
-  {
-    title: "Konten KIK minggu 1",
-    subject: "KIK",
-    date: "2026-07-01",
-    time: "09:00 AM",
-    type: "tugas" as const,
-  },
-  {
-    title: "Quiz: PBO Bab 1-2",
-    subject: "PPLG",
-    date: "2026-07-02",
-    time: "11:30 AM",
-    type: "ujian" as const,
-  },
-  {
-    title: "Surat lamaran pekerjaan",
-    subject: "Bahasa Indonesia",
-    date: "2026-07-04",
-    time: "11:59 PM",
-    type: "tugas" as const,
-  },
-  {
-    title: "Ujian Algoritma",
-    subject: "PWPB",
-    date: "2026-07-08",
-    time: "10:00 AM",
-    type: "ujian" as const,
-  },
-];
-
-const initialEvents: CalendarEvent[] = [
-  {
-    id: 1,
-    date: "2026-07-01",
-    title: "Konten KIK minggu 1",
-    subject: "KIK",
-    time: "09:00 AM",
-    color: "purple",
-    type: "tugas",
-  },
-  {
-    id: 2,
-    date: "2026-07-02",
-    title: "Quiz: PBO Bab 1-2",
-    subject: "PPLG",
-    time: "11:30 AM",
-    color: "green",
-    type: "ujian",
-  },
-  {
-    id: 3,
-    date: "2026-07-04",
-    title: "Surat lamaran pekerjaan",
-    subject: "Bahasa Indonesia",
-    time: "11:59 PM",
-    color: "red",
-    type: "tugas",
-  },
-  {
-    id: 4,
-    date: "2026-07-08",
-    title: "Ujian Algoritma",
-    subject: "PWPB",
-    time: "10:00 AM",
-    color: "orange",
-    type: "ujian",
-  },
-];
-
-const colorClass: Record<CalendarEvent["color"], string> = {
-  orange: "bg-[#ffe8a8] text-[#9a5a00]",
-  purple: "bg-[#ded8ff] text-[#4f35d6]",
-  blue: "bg-[#cfe7ff] text-[#075ab5]",
-  green: "bg-[#d8f4d8] text-[#087a35]",
-  red: "bg-[#ffe0e0] text-[#c41f1f]",
-};
-
-function formatKey(date: Date) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
-function buildMonthCells(year: number, month: number) {
-  const first = new Date(year, month, 1);
-  const start = new Date(year, month, 1 - first.getDay());
-
-  return Array.from({ length: 42 }, (_, index) => {
-    const date = new Date(start);
-    date.setDate(start.getDate() + index);
-    return date;
-  });
-}
+const weekdays = ["Min", "Sen", "Sel", "Rab", "Kam", "Jum", "Sab"];
 
 export function StudentCalendar() {
-  const [view, setView] = useState<"month" | "week">("month");
-  const [cursor, setCursor] = useState(new Date(2026, 6, 1));
-  const [events, setEvents] = useState<CalendarEvent[]>(initialEvents);
-  const [selectedDate, setSelectedDate] = useState<string | null>(null);
-  const [title, setTitle] = useState("");
-  const [selectedTask, setSelectedTask] = useState("");
-  const [selectedColor, setSelectedColor] =
-    useState<CalendarEvent["color"]>("orange");
-  const [time, setTime] = useState("14:00");
+  const [currentDate, setCurrentDate] = useState(() => new Date());
+  const [events, setEvents] = useState<CalendarEvent[]>([]);
+  const [activeTasks, setActiveTasks] = useState<CalendarEvent[]>([]);
+  const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
+  const [filterType, setFilterType] = useState<"all" | "tugas" | "ujian">("all");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const cells = useMemo(() => {
-    if (view === "month") return buildMonthCells(cursor.getFullYear(), cursor.getMonth());
-
-    const weekStart = new Date(cursor);
-    weekStart.setDate(cursor.getDate() - cursor.getDay());
-    return Array.from({ length: 7 }, (_, index) => {
-      const date = new Date(weekStart);
-      date.setDate(weekStart.getDate() + index);
-      return date;
-    });
-  }, [cursor, view]);
-
-  const todayEvents = events
-    .filter((event) => ["2026-07-01", "2026-07-02", "2026-07-04"].includes(event.date))
-    .slice(0, 5);
-
-  function move(step: number) {
-    const next = new Date(cursor);
-    if (view === "month") {
-      next.setMonth(cursor.getMonth() + step);
-    } else {
-      next.setDate(cursor.getDate() + step * 7);
+  const fetchSchedule = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const res = await fetch("/api/siswa/schedule");
+      if (!res.ok) {
+        throw new Error("Gagal mengambil data jadwal akademik.");
+      }
+      const json = await res.json();
+      if (json.success && json.data) {
+        setEvents(json.data.events || []);
+        setActiveTasks(json.data.activeTasks || []);
+      } else {
+        throw new Error(json.message || "Data jadwal tidak valid.");
+      }
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Terjadi kesalahan saat memuat jadwal.");
+    } finally {
+      setLoading(false);
     }
-    setCursor(next);
-  }
+  };
 
-  function openDate(date: Date) {
-    setSelectedDate(formatKey(date));
-    setSelectedTask("");
-    setTitle("");
-    setSelectedColor("orange");
-  }
+  useEffect(() => {
+    fetchSchedule();
+  }, []);
 
-  function addEvent() {
-    if (!selectedDate) return;
+  const year = currentDate.getFullYear();
+  const month = currentDate.getMonth();
 
-    const task = activeTasks.find((item) => item.title === selectedTask);
-    const isExam = task?.type === "ujian" || /ujian/i.test(title);
-    const nextEvent: CalendarEvent = {
-      id: Date.now(),
-      date: task?.date ?? selectedDate,
-      title: task?.title ?? (title || "Tugas baru"),
-      subject: task?.subject ?? "Catatan pribadi",
-      time: task?.time ?? time,
-      color: isExam ? "orange" : selectedColor,
-      type: isExam ? "ujian" : task?.type ?? "event",
-    };
+  const calendarDays = useMemo(() => {
+    const firstDay = new Date(year, month, 1).getDay();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const daysInPrevMonth = new Date(year, month, 0).getDate();
 
-    setEvents((current) => [...current, nextEvent]);
-    setSelectedDate(null);
-  }
+    const days: { day: number; inMonth: boolean; dateStr: string }[] = [];
+
+    for (let i = firstDay - 1; i >= 0; i--) {
+      const prevDate = new Date(year, month - 1, daysInPrevMonth - i);
+      days.push({
+        day: daysInPrevMonth - i,
+        inMonth: false,
+        dateStr: prevDate.toISOString().split("T")[0],
+      });
+    }
+
+    for (let i = 1; i <= daysInMonth; i++) {
+      const curDate = new Date(year, month, i);
+      // Format local YYYY-MM-DD
+      const yyyy = curDate.getFullYear();
+      const mm = String(curDate.getMonth() + 1).padStart(2, "0");
+      const dd = String(i).padStart(2, "0");
+      days.push({
+        day: i,
+        inMonth: true,
+        dateStr: `${yyyy}-${mm}-${dd}`,
+      });
+    }
+
+    const remaining = 42 - days.length;
+    for (let i = 1; i <= remaining; i++) {
+      const nextDate = new Date(year, month + 1, i);
+      days.push({
+        day: i,
+        inMonth: false,
+        dateStr: nextDate.toISOString().split("T")[0],
+      });
+    }
+
+    return days;
+  }, [year, month]);
+
+  const prevMonth = () => setCurrentDate(new Date(year, month - 1, 1));
+  const nextMonth = () => setCurrentDate(new Date(year, month + 1, 1));
+  const today = () => setCurrentDate(new Date());
+
+  const filteredEvents = useMemo(() => {
+    if (filterType === "all") return events;
+    return events.filter((e) => e.type === filterType);
+  }, [events, filterType]);
+
+  const eventMap = useMemo(() => {
+    const map = new Map<string, CalendarEvent[]>();
+    filteredEvents.forEach((event) => {
+      const list = map.get(event.date) || [];
+      list.push(event);
+      map.set(event.date, list);
+    });
+    return map;
+  }, [filteredEvents]);
 
   return (
-    <div className="animate-fade-up">
-      <div className="grid min-h-[calc(100vh-92px)] gap-0 lg:grid-cols-[300px_1fr]">
-        <aside className="border-r border-[#e5e7ef] bg-white px-7 py-7">
-          <h1 className="font-[family-name:var(--font-display)] text-2xl font-extrabold">
-            Jadwal Hari Ini
+    <div className="animate-fade-up px-2 pb-12">
+      {/* Header */}
+      <div className="mb-7 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h1 className="font-[family-name:var(--font-display)] text-3xl font-extrabold tracking-[-0.03em] text-slate-900">
+            Jadwal & Kalender Akademik
           </h1>
-          <div className="mt-5 space-y-5">
-            {todayEvents.map((event) => (
-              <article
-                key={event.id}
-                className={`rounded-xl p-5 ${colorClass[event.color]} transition duration-300 hover:-translate-y-1`}
-              >
-                <div className="flex justify-end text-xs font-semibold">{event.time}</div>
-                {event.type === "ujian" ? (
-                  <span className="mt-1 inline-flex rounded bg-red-600 px-3 py-1 text-[10px] font-extrabold uppercase text-white">
-                    Ujian
-                  </span>
-                ) : null}
-                <h2 className="mt-4 text-base font-medium text-[#20232d]">{event.title}</h2>
-                <p className="mt-2 flex items-center gap-1 text-xs text-slate-500">
-                  <MapPin className="size-3.5" />
-                  {event.subject}
-                </p>
-              </article>
-            ))}
-          </div>
-        </aside>
+          <p className="mt-2 text-base text-slate-600">
+            Pantau tenggat waktu tugas, jadwal kuis, dan agenda belajar Anda.
+          </p>
+        </div>
 
-        <section className="min-w-0 bg-[#fff8ff]">
-          <header className="flex flex-wrap items-center justify-between gap-3 border-b border-[#e5e7ef] bg-white/60 px-6 py-2">
-            <div className="flex items-center gap-4">
-              <button
-                onClick={() => move(-1)}
-                className="grid size-10 place-items-center rounded-md bg-[#f6f2ff] transition hover:bg-[#eee9ff]"
-              >
-                <ChevronLeft className="size-5" />
-              </button>
-              <h2 className="font-[family-name:var(--font-display)] text-4xl font-extrabold tracking-[-0.04em]">
-                {monthNames[cursor.getMonth()]} {cursor.getFullYear()}
-              </h2>
-              <button
-                onClick={() => move(1)}
-                className="grid size-10 place-items-center rounded-md bg-[#f6f2ff] transition hover:bg-[#eee9ff]"
-              >
-                <ChevronRight className="size-5" />
-              </button>
-            </div>
-
-            <div className="flex items-center gap-3">
-              <div className="rounded-md bg-white p-1 shadow-sm">
-                {(["month", "week"] as const).map((item) => (
-                  <button
-                    key={item}
-                    onClick={() => setView(item)}
-                    className={`rounded px-5 py-2 text-xs font-bold transition ${
-                      view === item ? "bg-[#f3edff] text-[#674ce7]" : "text-slate-500"
-                    }`}
-                  >
-                    {item === "month" ? "Month" : "Week"}
-                  </button>
-                ))}
-              </div>
-              <button className="inline-flex items-center gap-2 rounded-md border border-[#d9deeb] bg-white px-4 py-2 text-sm font-semibold">
-                <Filter className="size-4" />
-                Filter
-              </button>
-            </div>
-          </header>
-
-          <div className={`grid border-b border-l border-[#e5e7ef] ${view === "month" ? "grid-cols-7" : "grid-cols-7"}`}>
-            {weekdays.map((day) => (
-              <div key={day} className="border-r border-[#e5e7ef] bg-white py-3 text-center text-xs font-bold text-slate-500">
-                {day}
-              </div>
-            ))}
-            {cells.map((date) => {
-              const key = formatKey(date);
-              const dateEvents = events.filter((event) => event.date === key);
-              const muted = date.getMonth() !== cursor.getMonth();
-
-              return (
-                <button
-                  key={key}
-                  type="button"
-                  onClick={() => openDate(date)}
-                  className={`relative min-h-[112px] border-r border-t border-[#e5e7ef] p-3 text-left transition hover:bg-white ${
-                    view === "week" ? "min-h-[510px]" : ""
-                  }`}
-                >
-                  <span className={`text-sm font-bold ${muted ? "text-slate-300" : "text-[#20232d]"}`}>
-                    {date.getDate()}
-                  </span>
-                  <div className="mt-3 space-y-1">
-                    {dateEvents.slice(0, 3).map((event) => (
-                      <div
-                        key={event.id}
-                        className={`truncate rounded px-2 py-1 text-[10px] font-bold ${colorClass[event.color]}`}
-                      >
-                        {event.title}
-                      </div>
-                    ))}
-                    {dateEvents.length > 3 ? (
-                      <p className="text-[10px] font-bold text-slate-500">+{dateEvents.length - 3} lainnya</p>
-                    ) : null}
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-
-          <FooterBar />
-        </section>
+        {/* Filter Buttons */}
+        <div className="flex gap-1 rounded-xl bg-white p-1 shadow-sm border border-slate-200">
+          {(["all", "tugas", "ujian"] as const).map((type) => (
+            <button
+              key={type}
+              onClick={() => setFilterType(type)}
+              className={`rounded-lg px-4 py-2 text-xs font-bold capitalize transition ${
+                filterType === type
+                  ? "bg-[#f4edff] text-[#674ce7]"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              {type === "all" ? "Semua" : type === "ujian" ? "Kuis / Ujian" : "Tugas"}
+            </button>
+          ))}
+        </div>
       </div>
 
-      {selectedDate ? (
-        <div className="fixed inset-0 z-50 flex items-start justify-center bg-slate-950/10 px-4 pt-28">
-          <div className="w-full max-w-md rounded-3xl border border-slate-400 bg-white p-7 shadow-[0_24px_60px_rgba(15,23,42,0.18)]">
-            <div className="flex items-center justify-between">
-              <h2 className="font-[family-name:var(--font-display)] text-2xl font-extrabold">
-                Tambahkan ke Kalender
-              </h2>
-              <button
-                onClick={() => setSelectedDate(null)}
-                className="grid size-8 place-items-center rounded-full bg-slate-100"
-              >
-                x
-              </button>
-            </div>
-            <div className="mt-5 flex items-center gap-2">
-              <button className="grid size-8 place-items-center rounded-full border border-slate-400">
-                <Plus className="size-4" />
-              </button>
-              {(["orange", "purple", "blue", "green"] as CalendarEvent["color"][]).map((color) => (
+      {loading && (
+        <div className="flex min-h-[350px] flex-col items-center justify-center gap-3 rounded-2xl border border-slate-200 bg-white p-8">
+          <Loader2 className="size-8 animate-spin text-[#674ce7]" />
+          <p className="text-sm font-semibold text-slate-600">Memuat kalender...</p>
+        </div>
+      )}
+
+      {!loading && error && (
+        <div className="flex min-h-[260px] flex-col items-center justify-center gap-3 rounded-2xl border border-red-200 bg-red-50/50 p-8 text-center">
+          <AlertCircle className="size-8 text-red-500" />
+          <p className="text-sm font-semibold text-red-700">{error}</p>
+          <button
+            onClick={fetchSchedule}
+            className="mt-2 inline-flex items-center gap-2 rounded-xl bg-[#674ce7] px-4 py-2 text-xs font-bold text-white shadow-sm hover:bg-[#563cd6]"
+          >
+            <RefreshCw className="size-3.5" />
+            Coba Lagi
+          </button>
+        </div>
+      )}
+
+      {!loading && !error && (
+        <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
+          {/* Calendar Grid Section */}
+          <section className="overflow-hidden rounded-2xl border border-[#d9deeb] bg-white shadow-sm">
+            {/* Calendar Controls */}
+            <div className="flex flex-wrap items-center justify-between border-b border-[#e5e7ef] p-5">
+              <div className="flex items-center gap-3">
+                <h2 className="font-[family-name:var(--font-display)] text-xl font-extrabold text-slate-900">
+                  {monthNames[month]} {year}
+                </h2>
                 <button
-                  key={color}
-                  onClick={() => setSelectedColor(color)}
-                  className={`size-7 rounded-full ring-offset-2 transition ${
-                    selectedColor === color ? "ring-2 ring-slate-700" : ""
-                  } ${color === "orange" ? "bg-[#f9a825]" : color === "purple" ? "bg-[#674ce7]" : color === "blue" ? "bg-[var(--primary)]" : "bg-[#00796f]"}`}
-                />
+                  onClick={today}
+                  className="rounded-lg border border-slate-200 px-3 py-1 text-xs font-bold text-slate-600 hover:bg-slate-50"
+                >
+                  Hari Ini
+                </button>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={prevMonth}
+                  className="grid size-9 place-items-center rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50"
+                >
+                  <ChevronLeft className="size-4" />
+                </button>
+                <button
+                  onClick={nextMonth}
+                  className="grid size-9 place-items-center rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50"
+                >
+                  <ChevronRight className="size-4" />
+                </button>
+              </div>
+            </div>
+
+            {/* Weekdays */}
+            <div className="grid grid-cols-7 border-b border-[#e5e7ef] bg-[#fbf8ff] text-center text-xs font-extrabold uppercase text-slate-500">
+              {weekdays.map((w) => (
+                <div key={w} className="py-3">
+                  {w}
+                </div>
               ))}
-              <select
-                value={selectedTask}
-                onChange={(event) => {
-                  const task = activeTasks.find((item) => item.title === event.target.value);
-                  setSelectedTask(event.target.value);
-                  setTitle(task?.title ?? "");
-                }}
-                className="ml-auto h-9 rounded-full border border-slate-400 bg-white px-3 text-xs outline-none"
-              >
-                <option value="">Mata Pelajaran</option>
-                {activeTasks.map((task) => (
-                  <option key={task.title} value={task.title}>
-                    {task.subject} - {task.title}
-                  </option>
-                ))}
-              </select>
             </div>
-            <input
-              value={title}
-              onChange={(event) => setTitle(event.target.value)}
-              placeholder="Nama event atau tugas"
-              className="mt-3 h-10 w-full rounded-md border border-slate-400 px-3 text-sm outline-none focus:ring-2 focus:ring-[#eee9ff]"
-            />
-            <div className="mt-6 flex items-center gap-3 font-bold">
-              <AlarmClock className="size-5" />
-              Tambahkan Pengingat
+
+            {/* Days Grid */}
+            <div className="grid grid-cols-7">
+              {calendarDays.map((item, idx) => {
+                const dayEvents = eventMap.get(item.dateStr) || [];
+                const isToday =
+                  new Date().toISOString().split("T")[0] === item.dateStr;
+
+                return (
+                  <div
+                    key={idx}
+                    className={`min-h-[105px] border-b border-r border-[#e5e7ef] p-2 transition ${
+                      !item.inMonth ? "bg-slate-50/50 text-slate-400" : "bg-white"
+                    } ${isToday ? "bg-purple-50/30" : ""}`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span
+                        className={`grid size-6 place-items-center rounded-full text-xs font-bold ${
+                          isToday
+                            ? "bg-[#674ce7] text-white"
+                            : item.inMonth
+                              ? "text-slate-800"
+                              : "text-slate-400"
+                        }`}
+                      >
+                        {item.day}
+                      </span>
+                      {dayEvents.length > 0 && (
+                        <span className="size-2 rounded-full bg-[#674ce7]" />
+                      )}
+                    </div>
+
+                    <div className="mt-1 space-y-1">
+                      {dayEvents.slice(0, 2).map((ev) => (
+                        <div
+                          key={ev.id}
+                          onClick={() => setSelectedEvent(ev)}
+                          className={`cursor-pointer truncate rounded px-1.5 py-0.5 text-[10px] font-bold ${
+                            ev.type === "ujian"
+                              ? "bg-emerald-100 text-emerald-800"
+                              : ev.status === "late"
+                                ? "bg-red-100 text-red-800"
+                                : "bg-[#f4edff] text-[#674ce7]"
+                          }`}
+                        >
+                          {ev.title}
+                        </div>
+                      ))}
+                      {dayEvents.length > 2 && (
+                        <p className="text-[9px] font-bold text-slate-400 pl-1">
+                          +{dayEvents.length - 2} agenda lainnya
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
-            <label className="mt-3 flex items-center gap-2 text-sm">
-              <Clock className="size-4" />
-              <input
-                type="time"
-                value={time}
-                onChange={(event) => setTime(event.target.value)}
-                className="rounded border border-slate-300 px-2 py-1"
-              />
-            </label>
-            <button
-              onClick={addEvent}
-              className="mt-7 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-[#674ce7] px-5 py-3 text-sm font-extrabold text-white transition hover:-translate-y-1"
-            >
-              <CalendarPlus className="size-4" />
-              Simpan Event
-            </button>
+          </section>
+
+          {/* Right Sidebar: Active Tasks & Event Details */}
+          <div className="space-y-6">
+            {/* Active Upcoming Tasks */}
+            <div className="rounded-2xl border border-[#d9deeb] bg-white p-5 shadow-sm">
+              <h3 className="flex items-center gap-2 font-[family-name:var(--font-display)] text-sm font-extrabold text-slate-900">
+                <Clock className="size-4 text-[#674ce7]" />
+                Tenggat Mendatang ({activeTasks.length})
+              </h3>
+
+              {activeTasks.length === 0 ? (
+                <div className="py-8 text-center text-xs text-slate-400 italic">
+                  Tidak ada tenggat waktu aktif dalam waktu dekat.
+                </div>
+              ) : (
+                <div className="mt-4 space-y-3">
+                  {activeTasks.map((task) => (
+                    <Link
+                      key={task.id}
+                      href={task.href}
+                      className="block rounded-xl border border-slate-100 bg-slate-50/50 p-3 hover:bg-slate-50 transition"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="rounded bg-white px-2 py-0.5 text-[10px] font-extrabold uppercase text-[#674ce7] border border-slate-200">
+                          {task.subject}
+                        </span>
+                        <span className="text-[10px] font-semibold text-slate-400">
+                          {task.time}
+                        </span>
+                      </div>
+                      <p className="mt-1.5 text-xs font-bold text-slate-900 line-clamp-1">
+                        {task.title}
+                      </p>
+                      <p className="mt-0.5 text-[10px] text-slate-500">
+                        Batas: {task.date}
+                      </p>
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Selected Event Popover Card */}
+            {selectedEvent && (
+              <div className="rounded-2xl border border-purple-200 bg-[#fbf8ff] p-5 shadow-sm">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-extrabold uppercase tracking-wide text-[#674ce7]">
+                    Detail Agenda
+                  </span>
+                  <button
+                    onClick={() => setSelectedEvent(null)}
+                    className="text-xs font-bold text-slate-400 hover:text-slate-600"
+                  >
+                    Tutup
+                  </button>
+                </div>
+                <h4 className="mt-2 text-sm font-bold text-slate-900">
+                  {selectedEvent.title}
+                </h4>
+                <p className="mt-1 text-xs text-slate-600">
+                  {selectedEvent.subject} &bull; {selectedEvent.className}
+                </p>
+                <div className="mt-3 flex items-center gap-2 text-xs font-semibold text-slate-500">
+                  <Clock className="size-3.5 text-slate-400" />
+                  <span>
+                    {selectedEvent.date} ({selectedEvent.time})
+                  </span>
+                </div>
+                <div className="mt-4 pt-3 border-t border-purple-100">
+                  <Link
+                    href={selectedEvent.href}
+                    className="inline-flex w-full justify-center rounded-xl bg-[#674ce7] py-2 text-xs font-bold text-white hover:bg-[#563cd6]"
+                  >
+                    Buka Halaman Tugas / Kuis
+                  </Link>
+                </div>
+              </div>
+            )}
           </div>
         </div>
-      ) : null}
+      )}
+
+      <FooterBar />
     </div>
   );
 }

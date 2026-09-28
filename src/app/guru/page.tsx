@@ -45,21 +45,27 @@ interface DashboardData {
 export default function GuruDashboardPage() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  async function loadDashboard() {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/guru/dashboard");
+      const json = await res.json();
+      if (json.success) {
+        setData(json.data);
+      } else {
+        setError(json.message || "Gagal memuat dashboard");
+      }
+    } catch {
+      setError("Terjadi kesalahan jaringan saat memuat dashboard");
+    } finally {
+      setLoading(false);
+    }
+  }
 
   useEffect(() => {
-    async function loadDashboard() {
-      try {
-        const res = await fetch("/api/guru/dashboard");
-        const json = await res.json();
-        if (json.success) {
-          setData(json.data);
-        }
-      } catch (err) {
-        console.error("Gagal memuat dashboard guru:", err);
-      } finally {
-        setLoading(false);
-      }
-    }
     loadDashboard();
   }, []);
 
@@ -71,10 +77,28 @@ export default function GuruDashboardPage() {
     );
   }
 
+  if (error) {
+    return (
+      <div className="mx-auto max-w-xl p-8 text-center bg-white rounded-2xl border border-rose-200 shadow-xs my-12">
+        <div className="mx-auto size-12 rounded-full bg-rose-50 flex items-center justify-center text-rose-600 mb-3">
+          <Clock className="size-6" />
+        </div>
+        <h3 className="text-base font-bold text-slate-900">Gagal Memuat Dashboard</h3>
+        <p className="text-xs text-rose-600 mt-1">{error}</p>
+        <button
+          onClick={loadDashboard}
+          className="mt-4 inline-flex items-center gap-1.5 rounded-xl bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-700 transition"
+        >
+          Coba Lagi
+        </button>
+      </div>
+    );
+  }
+
   const { teacherName, activeClasses, gradingStats, recentSubmissions } = data || {
     teacherName: "Guru",
     activeClasses: [],
-    gradingStats: { percentage: 75, gradedCount: 142, pendingCount: 48 },
+    gradingStats: { percentage: 0, gradedCount: 0, pendingCount: 0 },
     recentSubmissions: [],
   };
 
@@ -132,36 +156,15 @@ export default function GuruDashboardPage() {
 
             <div className="grid gap-4 sm:grid-cols-2">
               {activeClasses.length === 0 ? (
-                /* Figma Page 1 Top representation */
-                <>
+                <div className="col-span-full py-8 text-center bg-slate-50/70 rounded-xl border border-dashed border-slate-200">
+                  <p className="text-sm font-medium text-slate-600">Belum ada kelas.</p>
                   <Link
-                    href="/guru/classes"
-                    className="group rounded-xl border border-slate-200 bg-white p-4 transition hover:border-blue-500 hover:shadow-sm"
+                    href="/guru/classes/new"
+                    className="mt-2 inline-flex items-center gap-1.5 text-xs text-blue-600 font-semibold hover:underline"
                   >
-                    <h4 className="font-bold text-slate-900 text-sm group-hover:text-blue-600 transition">
-                      10 PPLG 1
-                    </h4>
-                    <p className="text-xs text-slate-400 mt-0.5">Gedung D • (nama walas)</p>
-                    <div className="mt-4 flex items-center gap-1.5 text-xs text-slate-500">
-                      <Users className="size-3.5 text-slate-400" />
-                      <span>32 Siswa</span>
-                    </div>
+                    <Plus className="size-3.5" /> Buat Kelas Baru
                   </Link>
-
-                  <Link
-                    href="/guru/classes"
-                    className="group rounded-xl border border-slate-200 bg-white p-4 transition hover:border-blue-500 hover:shadow-sm"
-                  >
-                    <h4 className="font-bold text-slate-900 text-sm group-hover:text-blue-600 transition">
-                      12 PPLG 2
-                    </h4>
-                    <p className="text-xs text-slate-400 mt-0.5">Gedung E • Ibu Alvisya</p>
-                    <div className="mt-4 flex items-center gap-1.5 text-xs text-slate-500">
-                      <Users className="size-3.5 text-slate-400" />
-                      <span>28 Siswa</span>
-                    </div>
-                  </Link>
-                </>
+                </div>
               ) : (
                 activeClasses.slice(0, 4).map((c) => (
                   <Link
@@ -197,7 +200,7 @@ export default function GuruDashboardPage() {
               <div className="flex items-center gap-2">
                 <h3 className="font-bold text-slate-900 text-base">Pengiriman Terbaru</h3>
                 <span className="rounded-full bg-rose-50 px-2.5 py-0.5 text-[11px] font-bold text-rose-600 border border-rose-200">
-                  {gradingStats.pendingCount || 12} Tertunda
+                  {gradingStats.pendingCount} Tertunda
                 </span>
               </div>
             </div>
@@ -215,84 +218,11 @@ export default function GuruDashboardPage() {
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {recentSubmissions.length === 0 ? (
-                    /* Mock rows from Figma Page 1 Top if empty */
-                    <>
-                      <tr className="hover:bg-slate-50/50 transition">
-                        <td className="py-3 px-3">
-                          <div className="flex items-center gap-2.5">
-                            <div className="size-7 rounded-full bg-slate-200 flex items-center justify-center font-bold text-slate-600 text-xs">
-                              LC
-                            </div>
-                            <span className="font-medium text-slate-800">Liam Carter</span>
-                          </div>
-                        </td>
-                        <td className="py-3 px-3 text-slate-600">Lorem ipsum dolor</td>
-                        <td className="py-3 px-3 text-slate-400">2j lalu</td>
-                        <td className="py-3 px-3">
-                          <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-0.5 text-[10px] font-semibold text-slate-600">
-                            Menunggu
-                          </span>
-                        </td>
-                        <td className="py-3 px-3 text-right">
-                          <Link
-                            href="/guru/grades"
-                            className="inline-flex items-center rounded-lg px-2.5 py-1 text-xs font-semibold text-blue-600 hover:bg-blue-50 transition"
-                          >
-                            Nilai
-                          </Link>
-                        </td>
-                      </tr>
-                      <tr className="hover:bg-slate-50/50 transition">
-                        <td className="py-3 px-3">
-                          <div className="flex items-center gap-2.5">
-                            <div className="size-7 rounded-full bg-amber-100 flex items-center justify-center font-bold text-amber-700 text-xs">
-                              MS
-                            </div>
-                            <span className="font-medium text-slate-800">Maya Singh</span>
-                          </div>
-                        </td>
-                        <td className="py-3 px-3 text-slate-600">Lorem ipsum dolor</td>
-                        <td className="py-3 px-3 text-slate-400">2j lalu</td>
-                        <td className="py-3 px-3">
-                          <span className="inline-flex rounded-full bg-amber-50 px-2.5 py-0.5 text-[10px] font-semibold text-amber-700">
-                            Tertunda
-                          </span>
-                        </td>
-                        <td className="py-3 px-3 text-right">
-                          <Link
-                            href="/guru/grades"
-                            className="inline-flex items-center rounded-lg px-2.5 py-1 text-xs font-semibold text-blue-600 hover:bg-blue-50 transition"
-                          >
-                            Nilai
-                          </Link>
-                        </td>
-                      </tr>
-                      <tr className="hover:bg-slate-50/50 transition">
-                        <td className="py-3 px-3">
-                          <div className="flex items-center gap-2.5">
-                            <div className="size-7 rounded-full bg-blue-100 flex items-center justify-center font-bold text-blue-700 text-xs">
-                              EH
-                            </div>
-                            <span className="font-medium text-slate-800">Ethan Hall</span>
-                          </div>
-                        </td>
-                        <td className="py-3 px-3 text-slate-600">Lorem ipsum dolor</td>
-                        <td className="py-3 px-3 text-slate-400">4j lalu</td>
-                        <td className="py-3 px-3">
-                          <span className="inline-flex rounded-full bg-amber-50 px-2.5 py-0.5 text-[10px] font-semibold text-amber-700">
-                            Tertunda
-                          </span>
-                        </td>
-                        <td className="py-3 px-3 text-right">
-                          <Link
-                            href="/guru/grades"
-                            className="inline-flex items-center rounded-lg px-2.5 py-1 text-xs font-semibold text-blue-600 hover:bg-blue-50 transition"
-                          >
-                            Nilai
-                          </Link>
-                        </td>
-                      </tr>
-                    </>
+                    <tr>
+                      <td colSpan={5} className="py-8 text-center text-slate-400">
+                        Belum ada pengumpulan tugas.
+                      </td>
+                    </tr>
                   ) : (
                     recentSubmissions.map((sub) => (
                       <tr key={sub._id} className="hover:bg-slate-50 transition">

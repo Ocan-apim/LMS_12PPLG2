@@ -26,57 +26,50 @@ interface CourseClassItem {
   assignmentCount: number;
 }
 
+interface RecentSubItem {
+  _id: string;
+  studentId?: { _id: string; name: string };
+  assignmentId?: { _id: string; title: string };
+  submittedAt: string;
+  status: string;
+}
+
 export default function GuruClassesPage() {
   const [classes, setClasses] = useState<CourseClassItem[]>([]);
+  const [recentSubmissions, setRecentSubmissions] = useState<RecentSubItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  async function loadData() {
+    setLoading(true);
+    setError(null);
+    try {
+      const [classRes, subRes] = await Promise.all([
+        fetch("/api/guru/classes"),
+        fetch("/api/guru/submissions"),
+      ]);
+      const classJson = await classRes.json();
+      const subJson = await subRes.json();
+
+      if (classJson.success) {
+        setClasses(classJson.data);
+      } else {
+        setError(classJson.message || "Gagal memuat kelas");
+      }
+
+      if (subJson.success) {
+        setRecentSubmissions(subJson.data.slice(0, 3));
+      }
+    } catch {
+      setError("Terjadi kesalahan jaringan saat memuat kelas");
+    } finally {
+      setLoading(false);
+    }
+  }
 
   useEffect(() => {
-    async function loadClasses() {
-      try {
-        const res = await fetch("/api/guru/classes");
-        const json = await res.json();
-        if (json.success) {
-          setClasses(json.data);
-        }
-      } catch (err) {
-        console.error("Gagal memuat daftar kelas:", err);
-      } finally {
-        setLoading(false);
-      }
-    }
-    loadClasses();
+    loadData();
   }, []);
-
-  // If no classes returned yet, provide realistic mock data matching Screenshot 1 Left
-  const displayClasses =
-    classes.length > 0
-      ? classes
-      : [
-          {
-            _id: "mock-1",
-            name: "10 PPLG 1",
-            code: "67G#2",
-            studentCount: 34,
-            assignmentCount: 4,
-            classRombelId: { _id: "r1", name: "10 PPLG 1", grade: "10" },
-          },
-          {
-            _id: "mock-2",
-            name: "10 PPLG +",
-            code: "PPLG+",
-            studentCount: 42,
-            assignmentCount: 3,
-            classRombelId: { _id: "r2", name: "10 PPLG +", grade: "10" },
-          },
-          {
-            _id: "mock-3",
-            name: "10 PPLG 2",
-            code: "PPLG2",
-            studentCount: 36,
-            assignmentCount: 2,
-            classRombelId: { _id: "r3", name: "10 PPLG 2", grade: "10" },
-          },
-        ];
 
   const [sortBy, setSortBy] = useState<"name-asc" | "name-desc" | "students" | "assignments">("name-asc");
   const [sortDropdownOpen, setSortDropdownOpen] = useState(false);
@@ -84,7 +77,7 @@ export default function GuruClassesPage() {
   const [copiedCodeId, setCopiedCodeId] = useState<string | null>(null);
 
   // Sorting
-  const sortedClasses = [...displayClasses].sort((a, b) => {
+  const sortedClasses = [...classes].sort((a, b) => {
     if (sortBy === "name-asc") return a.name.localeCompare(b.name);
     if (sortBy === "name-desc") return b.name.localeCompare(a.name);
     if (sortBy === "students") return (b.studentCount || 0) - (a.studentCount || 0);
@@ -102,6 +95,21 @@ export default function GuruClassesPage() {
     return (
       <div className="flex h-64 items-center justify-center">
         <Spinner size="lg" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="mx-auto max-w-xl p-8 text-center bg-white rounded-2xl border border-rose-200 shadow-xs my-12">
+        <h3 className="text-base font-bold text-slate-900">Gagal Memuat Kelas</h3>
+        <p className="text-xs text-rose-600 mt-1">{error}</p>
+        <button
+          onClick={loadData}
+          className="mt-4 inline-flex items-center gap-1.5 rounded-xl bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-700 transition"
+        >
+          Coba Lagi
+        </button>
       </div>
     );
   }
@@ -205,92 +213,107 @@ export default function GuruClassesPage() {
 
       {/* Class Cards Grid matching Figma Page 2 Top (3-column responsive) */}
       <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-        {sortedClasses.map((item) => (
-          <div
-            key={item._id}
-            className="group relative overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs transition hover:border-blue-400 hover:shadow-md"
-          >
-            {/* Top Blue Header Banner with 3-dots menu */}
-            <div className="relative h-28 bg-[#0066FF] p-3">
-              <div className="relative">
-                <button
-                  type="button"
-                  onClick={() =>
-                    setCardMenuOpenId((prev) => (prev === item._id ? null : item._id))
-                  }
-                  className="absolute right-0 top-0 text-white/80 hover:text-white p-1 rounded-md hover:bg-white/10 transition"
-                >
-                  <MoreVertical className="size-4" />
-                </button>
+        {sortedClasses.length === 0 ? (
+          <div className="col-span-full py-16 text-center text-slate-500 bg-white rounded-2xl border border-dashed border-slate-200 p-8 shadow-xs">
+            <h4 className="text-base font-semibold text-slate-800">Belum ada kelas.</h4>
+            <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
+              Anda belum membuat kelas pembelajaran. Buat kelas baru untuk memulai pembelajaran.
+            </p>
+            <Link
+              href="/guru/classes/new"
+              className="mt-4 inline-flex items-center gap-1.5 rounded-xl bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-700 transition"
+            >
+              <Plus className="size-3.5" /> Buat Kelas Baru
+            </Link>
+          </div>
+        ) : (
+          sortedClasses.map((item) => (
+            <div
+              key={item._id}
+              className="group relative overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs transition hover:border-blue-400 hover:shadow-md"
+            >
+              {/* Top Blue Header Banner with 3-dots menu */}
+              <div className="relative h-28 bg-[#0066FF] p-3">
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setCardMenuOpenId((prev) => (prev === item._id ? null : item._id))
+                    }
+                    className="absolute right-0 top-0 text-white/80 hover:text-white p-1 rounded-md hover:bg-white/10 transition"
+                  >
+                    <MoreVertical className="size-4" />
+                  </button>
 
-                {cardMenuOpenId === item._id && (
-                  <div className="absolute right-0 top-6 w-40 rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl z-50 text-xs text-slate-800 animate-in fade-in">
-                    <Link
-                      href={`/guru/classes/${item._id}`}
-                      className="block px-3 py-1.5 rounded-lg hover:bg-slate-50 font-medium text-slate-700"
-                    >
-                      Buka Kelas
-                    </Link>
-                    <Link
-                      href={`/guru/assignments/new?classId=${item._id}`}
-                      className="block px-3 py-1.5 rounded-lg hover:bg-slate-50 font-medium text-slate-700"
-                    >
-                      Buat Tugas
-                    </Link>
-                    <button
-                      type="button"
-                      onClick={() => handleCopyClassCode(item._id, item.code)}
-                      className="w-full text-left px-3 py-1.5 rounded-lg hover:bg-slate-50 font-medium text-slate-700"
-                    >
-                      {copiedCodeId === item._id ? "Kode Tersalin!" : "Salin Kode Kelas"}
-                    </button>
-                  </div>
-                )}
+                  {cardMenuOpenId === item._id && (
+                    <div className="absolute right-0 top-6 w-40 rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl z-50 text-xs text-slate-800 animate-in fade-in">
+                      <Link
+                        href={`/guru/classes/${item._id}`}
+                        className="block px-3 py-1.5 rounded-lg hover:bg-slate-50 font-medium text-slate-700"
+                      >
+                        Buka Kelas
+                      </Link>
+                      <Link
+                        href={`/guru/assignments/new?classId=${item._id}`}
+                        className="block px-3 py-1.5 rounded-lg hover:bg-slate-50 font-medium text-slate-700"
+                      >
+                        Buat Tugas
+                      </Link>
+                      <button
+                        type="button"
+                        onClick={() => handleCopyClassCode(item._id, item.code)}
+                        className="w-full text-left px-3 py-1.5 rounded-lg hover:bg-slate-50 font-medium text-slate-700"
+                      >
+                        {copiedCodeId === item._id ? "Kode Tersalin!" : "Salin Kode Kelas"}
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
 
-            {/* Bottom Card Content */}
-            <div className="p-5 space-y-4">
-              <div>
-                <Link
-                  href={`/guru/classes/${item._id}`}
-                  className="text-base font-bold text-slate-900 hover:text-blue-600 transition"
-                >
-                  {item.name}
-                </Link>
-                <p className="text-xs text-slate-400 mt-0.5">
-                  Gedung D • {item.classRombelId?.name ? `Wali Kelas ${item.classRombelId.name}` : "(Nama walas)"}
-                </p>
-              </div>
-
-              {/* Bottom row: Avatar stack on left, "Lihat Daftar Siswa ->" on right */}
-              <div className="flex items-center justify-between pt-2">
-                <div className="flex items-center -space-x-2">
-                  <div className="size-7 rounded-full border-2 border-white bg-amber-400 flex items-center justify-center text-[10px] font-bold text-amber-900">
-                    S1
-                  </div>
-                  <div className="size-7 rounded-full border-2 border-white bg-purple-400 flex items-center justify-center text-[10px] font-bold text-white">
-                    S2
-                  </div>
-                  <div className="size-7 rounded-full border-2 border-white bg-blue-400 flex items-center justify-center text-[10px] font-bold text-white">
-                    S3
-                  </div>
-                  <div className="flex size-7 items-center justify-center rounded-full border-2 border-white bg-slate-100 text-[9px] font-bold text-slate-600">
-                    +{item.studentCount || 42}
-                  </div>
+              {/* Bottom Card Content */}
+              <div className="p-5 space-y-4">
+                <div>
+                  <Link
+                    href={`/guru/classes/${item._id}`}
+                    className="text-base font-bold text-slate-900 hover:text-blue-600 transition"
+                  >
+                    {item.name}
+                  </Link>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Gedung D • {item.classRombelId?.name ? `Wali Kelas ${item.classRombelId.name}` : "(Nama walas)"}
+                  </p>
                 </div>
 
-                <Link
-                  href={`/guru/classes/${item._id}`}
-                  className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-700 transition"
-                >
-                  <span>Lihat Daftar Siswa</span>
-                  <ArrowRight className="size-3.5" />
-                </Link>
+                {/* Bottom row: Avatar stack on left, "Lihat Daftar Siswa ->" on right */}
+                <div className="flex items-center justify-between pt-2">
+                  <div className="flex items-center -space-x-2">
+                    <div className="size-7 rounded-full border-2 border-white bg-amber-400 flex items-center justify-center text-[10px] font-bold text-amber-900">
+                      S1
+                    </div>
+                    <div className="size-7 rounded-full border-2 border-white bg-purple-400 flex items-center justify-center text-[10px] font-bold text-white">
+                      S2
+                    </div>
+                    <div className="size-7 rounded-full border-2 border-white bg-blue-400 flex items-center justify-center text-[10px] font-bold text-white">
+                      S3
+                    </div>
+                    <div className="flex size-7 items-center justify-center rounded-full border-2 border-white bg-slate-100 text-[9px] font-bold text-slate-600">
+                      +{item.studentCount || 0}
+                    </div>
+                  </div>
+
+                  <Link
+                    href={`/guru/classes/${item._id}`}
+                    className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-700 transition"
+                  >
+                    <span>Lihat Daftar Siswa</span>
+                    <ArrowRight className="size-3.5" />
+                  </Link>
+                </div>
               </div>
             </div>
-          </div>
-        ))}
+          ))
+        )}
       </div>
 
       {/* Bottom Widgets Row matching Figma Page 2 Top */}
@@ -310,45 +333,38 @@ export default function GuruClassesPage() {
           </div>
 
           <div className="space-y-3">
-            <div className="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50/50 p-3 hover:bg-slate-50 transition">
-              <div className="flex items-center gap-3">
-                <div className="size-8 rounded-full bg-blue-100 flex items-center justify-center text-xs font-bold text-blue-700">
-                  R
-                </div>
-                <div>
-                  <p className="text-xs font-bold text-slate-900">ROSANNA</p>
-                  <p className="text-[11px] text-slate-400">
-                    Mengirimkan: UX Case Study Final
-                  </p>
-                </div>
+            {recentSubmissions.length === 0 ? (
+              <div className="py-8 text-center text-xs text-slate-400 bg-slate-50/50 rounded-xl border border-dashed border-slate-200">
+                Belum ada pengumpulan tugas.
               </div>
-              <Link
-                href="/guru/grades"
-                className="rounded-lg bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-600 hover:bg-blue-100 transition"
-              >
-                Kirimkan Nilai
-              </Link>
-            </div>
-
-            <div className="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50/50 p-3 hover:bg-slate-50 transition">
-              <div className="flex items-center gap-3">
-                <div className="size-8 rounded-full bg-emerald-100 flex items-center justify-center text-xs font-bold text-emerald-700">
-                  S
+            ) : (
+              recentSubmissions.map((sub) => (
+                <div
+                  key={sub._id}
+                  className="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50/50 p-3 hover:bg-slate-50 transition"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="size-8 rounded-full bg-blue-100 flex items-center justify-center text-xs font-bold text-blue-700">
+                      {sub.studentId?.name?.charAt(0) || "S"}
+                    </div>
+                    <div>
+                      <p className="text-xs font-bold text-slate-900">
+                        {sub.studentId?.name || "Siswa"}
+                      </p>
+                      <p className="text-[11px] text-slate-400">
+                        Mengirimkan: {sub.assignmentId?.title || "Tugas"}
+                      </p>
+                    </div>
+                  </div>
+                  <Link
+                    href="/guru/grades"
+                    className="rounded-lg bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-600 hover:bg-blue-100 transition"
+                  >
+                    Kirimkan Nilai
+                  </Link>
                 </div>
-                <div>
-                  <p className="text-xs font-bold text-slate-900">Nama Siswa</p>
-                  <p className="text-[11px] text-slate-400">
-                    Mengirimkan: LATSOL TKA 20 soal
-                  </p>
-                </div>
-              </div>
-              <Link
-                href="/guru/grades"
-                className="rounded-lg bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-600 hover:bg-blue-100 transition"
-              >
-                Kirimkan Nilai
-              </Link>
-            </div>
+              ))
+            )}
           </div>
         </div>
 

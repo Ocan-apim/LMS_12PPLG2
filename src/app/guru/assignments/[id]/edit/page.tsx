@@ -52,6 +52,7 @@ export default function EditTugasPage({
   const [courseClassId, setCourseClassId] = useState("");
 
   const [attachments, setAttachments] = useState<AttachedFile[]>([]);
+  const [uploadingFile, setUploadingFile] = useState(false);
   const [quizzes, setQuizzes] = useState<TeacherQuiz[]>([]);
   const [selectedQuizId, setSelectedQuizId] = useState<string>("");
   const [selectedQuizTitle, setSelectedQuizTitle] = useState<string>("");
@@ -76,27 +77,10 @@ export default function EditTugasPage({
           setTitle(a.title || "");
           setInstructions(a.instructions || a.description || "");
           setMaxScore(a.maxScore || 100);
-          setAttachments(
-            a.attachments && a.attachments.length > 0
-              ? a.attachments
-              : [
-                  {
-                    name: "Materi_Dasar_Unity_Bab1.pdf",
-                    url: "#",
-                    type: "PDF Document",
-                    size: "2.4 MB",
-                  },
-                  {
-                    name: "Video_Tutorial_Setup_Project.mp4",
-                    url: "#",
-                    type: "MP4 Video",
-                    size: "15.8 MB",
-                  },
-                ]
-          );
+          setAttachments(a.attachments || []);
 
           if (a.courseClassId) {
-            setClassName(a.courseClassId.name || "10 PPLG 1");
+            setClassName(a.courseClassId.name || "Kelas");
             setCourseClassId(a.courseClassId._id || "");
           }
 
@@ -111,11 +95,11 @@ export default function EditTugasPage({
             setSelectedQuizTitle(
               typeof a.quizId === "object"
                 ? a.quizId.title
-                : "Kuis Matematika Dasar - Bab 1"
+                : ""
             );
           } else {
-            setSelectedQuizId("quiz-mock");
-            setSelectedQuizTitle("Kuis Matematika Dasar - Bab 1");
+            setSelectedQuizId("");
+            setSelectedQuizTitle("");
           }
         }
 
@@ -131,18 +115,42 @@ export default function EditTugasPage({
     loadData();
   }, [id]);
 
-  function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
+  async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
-    const newFiles: AttachedFile[] = Array.from(files).map((f) => ({
-      name: f.name,
-      url: URL.createObjectURL(f),
-      type: f.type || "Dokumen",
-      size: `${(f.size / (1024 * 1024)).toFixed(1)} MB`,
-    }));
-
-    setAttachments((prev) => [...prev, ...newFiles]);
+    setUploadingFile(true);
+    try {
+      for (const file of Array.from(files)) {
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("entityType", "assignment");
+        const res = await fetch("/api/upload", {
+          method: "POST",
+          body: formData,
+        });
+        const json = await res.json();
+        if (json.success && json.data) {
+          setAttachments((prev) => [
+            ...prev,
+            {
+              name: json.data.name,
+              url: json.data.url,
+              type: json.data.type,
+              size: json.data.size,
+            },
+          ]);
+        } else {
+          alert(json.message || "Gagal mengunggah file");
+        }
+      }
+    } catch (err) {
+      console.error("Gagal mengunggah file:", err);
+      alert("Terjadi kesalahan saat mengunggah file");
+    } finally {
+      setUploadingFile(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
   }
 
   function handleRemoveAttachment(idx: number) {
@@ -337,13 +345,18 @@ export default function EditTugasPage({
 
               {/* Dropzone matching Screenshot 3 Right */}
               <div
-                onClick={() => fileInputRef.current?.click()}
-                className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-blue-200 bg-blue-50/20 p-8 text-center cursor-pointer hover:bg-blue-50/50 hover:border-blue-400 transition"
+                onClick={() => !uploadingFile && fileInputRef.current?.click()}
+                className={`flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-blue-200 bg-blue-50/20 p-8 text-center transition ${
+                  uploadingFile
+                    ? "opacity-60 cursor-not-allowed"
+                    : "cursor-pointer hover:bg-blue-50/50 hover:border-blue-400"
+                }`}
               >
                 <input
                   type="file"
                   ref={fileInputRef}
                   multiple
+                  disabled={uploadingFile}
                   onChange={handleFileUpload}
                   className="hidden"
                 />
@@ -351,10 +364,12 @@ export default function EditTugasPage({
                   <UploadCloud className="size-5" />
                 </div>
                 <p className="text-xs font-semibold text-blue-600">
-                  Klik untuk unggah file baru
+                  {uploadingFile ? "Mengunggah file..." : "Klik untuk unggah file baru"}
                 </p>
                 <p className="text-[11px] text-slate-400 mt-0.5">
-                  atau seret dan lepas file ke area ini (Maks. 50MB)
+                  {uploadingFile
+                    ? "Harap tunggu sebentar"
+                    : "atau seret dan lepas file ke area ini (Maks. 50MB)"}
                 </p>
               </div>
             </div>

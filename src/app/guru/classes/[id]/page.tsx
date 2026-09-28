@@ -15,6 +15,10 @@ import {
   ArrowUpDown,
   X,
   ChevronDown,
+  Download,
+  Trash2,
+  Send,
+  Upload,
 } from "lucide-react";
 import { Button, Spinner } from "@/components/ui";
 
@@ -92,6 +96,13 @@ export default function GuruClassDetailPage({
   const [addFileModalOpen, setAddFileModalOpen] = useState(false);
   const [newFileName, setNewFileName] = useState("");
   const [newFileUrl, setNewFileUrl] = useState("");
+  const [selectedUploadFile, setSelectedUploadFile] = useState<File | null>(null);
+  const [uploadingFile, setUploadingFile] = useState(false);
+
+  // Post comments state
+  const [expandedPostId, setExpandedPostId] = useState<string | null>(null);
+  const [postCommentInput, setPostCommentInput] = useState<{ [postId: string]: string }>({});
+  const [submittingCommentId, setSubmittingCommentId] = useState<string | null>(null);
 
   const [copiedCode, setCopiedCode] = useState(false);
   const [plusMenuOpen, setPlusMenuOpen] = useState(false);
@@ -145,17 +156,75 @@ export default function GuruClassDetailPage({
 
   async function handleAddSharedFile(e: React.FormEvent) {
     e.preventDefault();
-    if (!newFileName.trim() || !newFileUrl.trim() || !courseClass) return;
+    if (!courseClass) return;
 
-    const newFiles = [
-      ...(courseClass.sharedFiles || []),
-      {
-        name: newFileName.trim(),
-        url: newFileUrl.trim(),
-        type: "link",
-        size: "2.4 MB",
-      },
-    ];
+    setUploadingFile(true);
+    try {
+      let fileData: SharedFile;
+
+      if (selectedUploadFile) {
+        const formData = new FormData();
+        formData.append("file", selectedUploadFile);
+        formData.append("entityType", "classes");
+        formData.append("entityId", id);
+
+        const uploadRes = await fetch("/api/upload", {
+          method: "POST",
+          body: formData,
+        });
+        const uploadJson = await uploadRes.json();
+        if (!uploadJson.success) {
+          alert(uploadJson.message || "Gagal mengunggah file");
+          setUploadingFile(false);
+          return;
+        }
+
+        fileData = {
+          name: uploadJson.data.name,
+          url: uploadJson.data.url,
+          type: uploadJson.data.type,
+          size: uploadJson.data.size,
+        };
+      } else if (newFileName.trim() && newFileUrl.trim()) {
+        fileData = {
+          name: newFileName.trim(),
+          url: newFileUrl.trim(),
+          type: "link",
+          size: "Link Dokumen",
+        };
+      } else {
+        alert("Pilih file untuk diunggah atau masukkan URL dokumen");
+        setUploadingFile(false);
+        return;
+      }
+
+      const newFiles = [...(courseClass.sharedFiles || []), fileData];
+
+      const res = await fetch(`/api/guru/classes/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sharedFiles: newFiles }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        setCourseClass((prev) => (prev ? { ...prev, sharedFiles: newFiles } : prev));
+        setAddFileModalOpen(false);
+        setSelectedUploadFile(null);
+        setNewFileName("");
+        setNewFileUrl("");
+      }
+    } catch (err) {
+      console.error("Gagal menambahkan file:", err);
+      alert("Terjadi kesalahan saat menambahkan file");
+    } finally {
+      setUploadingFile(false);
+    }
+  }
+
+  async function handleDeleteSharedFile(idx: number) {
+    if (!courseClass || !window.confirm("Hapus file yang dibagikan ini?")) return;
+    const currentFiles = courseClass.sharedFiles || [];
+    const newFiles = currentFiles.filter((_, i) => i !== idx);
 
     try {
       const res = await fetch(`/api/guru/classes/${id}`, {
@@ -166,12 +235,38 @@ export default function GuruClassDetailPage({
       const json = await res.json();
       if (json.success) {
         setCourseClass((prev) => (prev ? { ...prev, sharedFiles: newFiles } : prev));
-        setAddFileModalOpen(false);
-        setNewFileName("");
-        setNewFileUrl("");
       }
     } catch (err) {
-      console.error("Gagal menambahkan file:", err);
+      console.error("Gagal menghapus file:", err);
+    }
+  }
+
+  async function handleAddPostComment(postId: string) {
+    const message = postCommentInput[postId]?.trim();
+    if (!message) return;
+
+    setSubmittingCommentId(postId);
+    try {
+      const res = await fetch(`/api/guru/classes/${id}/posts`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "comment",
+          postId,
+          message,
+        }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        setPosts((prev) =>
+          prev.map((p) => (p._id === postId ? json.data : p))
+        );
+        setPostCommentInput((prev) => ({ ...prev, [postId]: "" }));
+      }
+    } catch (err) {
+      console.error("Gagal mengirim komentar:", err);
+    } finally {
+      setSubmittingCommentId(null);
     }
   }
 
@@ -198,11 +293,7 @@ export default function GuruClassDetailPage({
   }
 
   const studentsList = courseClass.studentIds || [];
-  const sharedFiles = courseClass.sharedFiles || [
-    { name: "Lorem Ipsum Dolor", url: "#", size: "2.4 MB", type: "Tugas" },
-    { name: "Lorem Ipsum Dolor", url: "#", size: "1.2 MB", type: "Tugas" },
-    { name: "Lorem Ipsum Dolor", url: "#", size: "3.5 MB", type: "Tugas" },
-  ];
+  const sharedFiles = courseClass.sharedFiles || [];
 
   return (
     <div className="space-y-6 pb-20">
@@ -306,78 +397,29 @@ export default function GuruClassDetailPage({
         {/* Left Column: Stream/Feed */}
         <div className="lg:col-span-8 space-y-4">
           {posts.length === 0 ? (
-            <div className="space-y-4">
-              {/* Default Mock feed matching Screenshot 1 Right if no real posts yet */}
-              <div
-                onClick={() => router.push(`/guru/assignments/new?classId=${courseClass._id}`)}
-                className="cursor-pointer rounded-2xl border border-slate-200 bg-white p-5 shadow-xs hover:border-blue-300 hover:shadow-sm transition"
-              >
-                <div className="flex items-start gap-4">
-                  <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-blue-50 text-blue-600">
-                    <FileText className="size-5" />
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-bold text-slate-900">
-                      Anda memposting tugas baru
-                    </h3>
-                    <p className="text-xs text-slate-400 mt-0.5">25 July 2026</p>
-                  </div>
-                </div>
+            <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-8 text-center text-slate-500 shadow-xs">
+              <div className="mx-auto size-12 rounded-full bg-blue-50 flex items-center justify-center text-blue-600 mb-3">
+                <FileText className="size-6" />
               </div>
-
-              <div
-                onClick={() => router.push(`/guru/quizzes/new?classId=${courseClass._id}`)}
-                className="cursor-pointer rounded-2xl border border-slate-200 bg-white p-5 shadow-xs hover:border-blue-300 hover:shadow-sm transition space-y-3"
-              >
-                <div className="flex items-start gap-4">
-                  <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-indigo-50 text-indigo-600">
-                    <HelpCircle className="size-5" />
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-bold text-slate-900">
-                      Anda memulai Quiz!
-                    </h3>
-                    <p className="text-xs text-slate-400 mt-0.5">20 - 21 July 2026</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-1.5 text-xs font-semibold text-blue-600 pl-14">
-                  <MessageSquare className="size-3.5" />
-                  <span>3 Komentar Kelas</span>
-                </div>
-              </div>
-
-              <div
-                onClick={() => router.push(`/guru/assignments/new?classId=${courseClass._id}`)}
-                className="cursor-pointer rounded-2xl border border-slate-200 bg-white p-5 shadow-xs hover:border-blue-300 hover:shadow-sm transition"
-              >
-                <div className="flex items-start gap-4">
-                  <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-blue-50 text-blue-600">
-                    <FileText className="size-5" />
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-bold text-slate-900">
-                      Anda memposting tugas baru
-                    </h3>
-                    <p className="text-xs text-slate-400 mt-0.5">17 July 2026</p>
-                  </div>
-                </div>
-              </div>
-
-              <div
-                onClick={() => router.push(`/guru/assignments/new?classId=${courseClass._id}`)}
-                className="cursor-pointer rounded-2xl border border-slate-200 bg-white p-5 shadow-xs hover:border-blue-300 hover:shadow-sm transition"
-              >
-                <div className="flex items-start gap-4">
-                  <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-blue-50 text-blue-600">
-                    <FileText className="size-5" />
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-bold text-slate-900">
-                      Anda memposting tugas baru
-                    </h3>
-                    <p className="text-xs text-slate-400 mt-0.5">17 July 2026</p>
-                  </div>
-                </div>
+              <h4 className="text-sm font-semibold text-slate-800">
+                Belum ada postingan atau aktivitas di kelas ini.
+              </h4>
+              <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
+                Mulai pembelajaran dengan membuat tugas atau kuis untuk siswa di kelas ini.
+              </p>
+              <div className="mt-4 flex items-center justify-center gap-2">
+                <Link
+                  href={`/guru/assignments/new?classId=${courseClass._id}`}
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 transition"
+                >
+                  <Plus className="size-3.5" /> Buat Tugas
+                </Link>
+                <Link
+                  href={`/guru/quizzes/new?classId=${courseClass._id}`}
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-purple-600 px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-purple-700 transition"
+                >
+                  <HelpCircle className="size-3.5" /> Buat Kuis
+                </Link>
               </div>
             </div>
           ) : (
@@ -386,45 +428,132 @@ export default function GuruClassDetailPage({
               const targetUrl = post.refId
                 ? `/guru/assignments/${post.refId}`
                 : `/guru/assignments/new?classId=${courseClass._id}`;
+              const isExpanded = expandedPostId === post._id;
+              const commentsCount = post.comments?.length || 0;
 
               return (
                 <div
                   key={post._id}
-                  onClick={() => router.push(targetUrl)}
-                  className="cursor-pointer rounded-2xl border border-slate-200 bg-white p-5 shadow-xs hover:border-blue-300 hover:shadow-sm transition space-y-2.5"
+                  className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs hover:border-blue-300 transition space-y-3"
                 >
-                  <div className="flex items-start gap-4">
+                  <div className="flex items-start justify-between gap-4">
                     <div
-                      className={`flex size-10 shrink-0 items-center justify-center rounded-full ${
-                        isQuiz
-                          ? "bg-indigo-50 text-indigo-600"
-                          : "bg-blue-50 text-blue-600"
-                      }`}
+                      onClick={() => router.push(targetUrl)}
+                      className="flex items-start gap-4 cursor-pointer flex-1"
                     >
-                      {isQuiz ? (
-                        <HelpCircle className="size-5" />
-                      ) : (
-                        <FileText className="size-5" />
-                      )}
+                      <div
+                        className={`flex size-10 shrink-0 items-center justify-center rounded-full ${
+                          isQuiz
+                            ? "bg-indigo-50 text-indigo-600"
+                            : "bg-blue-50 text-blue-600"
+                        }`}
+                      >
+                        {isQuiz ? (
+                          <HelpCircle className="size-5" />
+                        ) : (
+                          <FileText className="size-5" />
+                        )}
+                      </div>
+                      <div>
+                        <h3 className="text-sm font-bold text-slate-900 hover:text-blue-600 transition">
+                          {post.title || (isQuiz ? "Anda memulai Quiz!" : "Anda memposting tugas baru")}
+                        </h3>
+                        <p className="text-xs text-slate-400 mt-0.5">
+                          {new Date(post.createdAt).toLocaleDateString("id-ID", {
+                            day: "numeric",
+                            month: "long",
+                            year: "numeric",
+                          })}
+                        </p>
+                        {post.content && (
+                          <p className="text-xs text-slate-600 mt-1 line-clamp-2">
+                            {post.content}
+                          </p>
+                        )}
+                      </div>
                     </div>
-                    <div>
-                      <h3 className="text-sm font-bold text-slate-900">
-                        {post.title || (isQuiz ? "Anda memulai Quiz!" : "Anda memposting tugas baru")}
-                      </h3>
-                      <p className="text-xs text-slate-400 mt-0.5">
-                        {new Date(post.createdAt).toLocaleDateString("id-ID", {
-                          day: "numeric",
-                          month: "long",
-                          year: "numeric",
-                        })}
-                      </p>
-                    </div>
+
+                    <Link
+                      href={targetUrl}
+                      className="shrink-0 text-xs font-semibold text-blue-600 hover:underline"
+                    >
+                      Buka
+                    </Link>
                   </div>
 
-                  {post.comments && post.comments.length > 0 && (
-                    <div className="flex items-center gap-1.5 text-xs font-semibold text-blue-600 pl-14">
+                  {/* Toggle Comments Button */}
+                  <div className="border-t border-slate-100 pt-2.5 flex items-center justify-between">
+                    <button
+                      type="button"
+                      onClick={() => setExpandedPostId(isExpanded ? null : post._id)}
+                      className="flex items-center gap-1.5 text-xs font-semibold text-blue-600 hover:text-blue-700 transition"
+                    >
                       <MessageSquare className="size-3.5" />
-                      <span>{post.comments.length} Komentar Kelas</span>
+                      <span>
+                        {commentsCount > 0
+                          ? `${commentsCount} Komentar Kelas`
+                          : "Tulis Komentar Kelas"}
+                      </span>
+                    </button>
+                  </div>
+
+                  {/* Expanded Comments List & Form */}
+                  {isExpanded && (
+                    <div className="space-y-3 pt-2 border-t border-slate-100">
+                      {post.comments && post.comments.length > 0 && (
+                        <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                          {post.comments.map((c, cIdx) => (
+                            <div
+                              key={cIdx}
+                              className="rounded-xl bg-slate-50 p-2.5 text-xs space-y-1"
+                            >
+                              <div className="flex items-center justify-between">
+                                <span className="font-bold text-slate-900">
+                                  {c.senderName || "Pengguna"}
+                                </span>
+                                <span className="text-[10px] text-slate-400">
+                                  {new Date(c.createdAt).toLocaleTimeString("id-ID", {
+                                    hour: "2-digit",
+                                    minute: "2-digit",
+                                  })}
+                                </span>
+                              </div>
+                              <p className="text-slate-600 leading-relaxed">{c.message}</p>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      <form
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          handleAddPostComment(post._id);
+                        }}
+                        className="flex items-center gap-2"
+                      >
+                        <input
+                          type="text"
+                          placeholder="Tambahkan komentar kelas..."
+                          value={postCommentInput[post._id] || ""}
+                          onChange={(e) =>
+                            setPostCommentInput((prev) => ({
+                              ...prev,
+                              [post._id]: e.target.value,
+                            }))
+                          }
+                          className="flex-1 rounded-xl border border-slate-200 px-3 py-1.5 text-xs focus:border-blue-500 focus:outline-none"
+                        />
+                        <button
+                          type="submit"
+                          disabled={
+                            submittingCommentId === post._id ||
+                            !postCommentInput[post._id]?.trim()
+                          }
+                          className="rounded-xl bg-blue-600 p-2 text-white hover:bg-blue-700 disabled:opacity-50 transition"
+                        >
+                          <Send className="size-3.5" />
+                        </button>
+                      </form>
                     </div>
                   )}
                 </div>
@@ -448,24 +577,51 @@ export default function GuruClassDetailPage({
             </div>
 
             <div className="space-y-2.5">
-              {sharedFiles.map((file, idx) => (
-                <div
-                  key={idx}
-                  className="flex items-center gap-3 rounded-xl border border-slate-100 bg-slate-50/70 p-3 hover:bg-slate-100/80 transition"
-                >
-                  <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-slate-200/70 text-slate-500">
-                    <FileText className="size-5" />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-xs font-bold text-slate-900 truncate">
-                      {file.name}
-                    </p>
-                    <p className="text-[11px] text-slate-400">
-                      {file.type || "Tugas"}
-                    </p>
-                  </div>
+              {sharedFiles.length === 0 ? (
+                <div className="py-6 text-center text-xs text-slate-400 bg-slate-50/50 rounded-xl border border-dashed border-slate-200">
+                  Belum ada file yang dibagikan.
                 </div>
-              ))}
+              ) : (
+                sharedFiles.map((file, idx) => (
+                  <div
+                    key={idx}
+                    className="flex items-center justify-between gap-3 rounded-xl border border-slate-100 bg-slate-50/70 p-3 hover:bg-slate-100/80 transition"
+                  >
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                      <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
+                        <FileText className="size-5" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs font-bold text-slate-900 truncate" title={file.name}>
+                          {file.name}
+                        </p>
+                        <p className="text-[11px] text-slate-400 truncate">
+                          {file.size || "1.2 MB"} • {file.type || "Dokumen"}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-1 shrink-0">
+                      <a
+                        href={`/api/files/download?path=${encodeURIComponent(file.url)}&name=${encodeURIComponent(file.name)}`}
+                        download={file.name}
+                        title="Unduh File"
+                        className="rounded-lg p-1.5 text-slate-400 hover:bg-blue-50 hover:text-blue-600 transition"
+                      >
+                        <Download className="size-4" />
+                      </a>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteSharedFile(idx)}
+                        title="Hapus File"
+                        className="rounded-lg p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600 transition"
+                      >
+                        <Trash2 className="size-4" />
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           </div>
         </div>
@@ -582,7 +738,24 @@ export default function GuruClassDetailPage({
             <form onSubmit={handleAddSharedFile} className="space-y-3">
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Nama File
+                  Pilih File dari Komputer
+                </label>
+                <input
+                  type="file"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) {
+                      setSelectedUploadFile(f);
+                      if (!newFileName.trim()) setNewFileName(f.name);
+                    }
+                  }}
+                  className="w-full rounded-xl border border-slate-200 p-2 text-xs focus:border-blue-500 focus:outline-none file:mr-2 file:rounded-lg file:border-0 file:bg-blue-50 file:px-3 file:py-1 file:text-xs file:font-semibold file:text-blue-700 hover:file:bg-blue-100"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Nama Tampilan File
                 </label>
                 <input
                   type="text"
@@ -594,35 +767,41 @@ export default function GuruClassDetailPage({
                 />
               </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  URL Dokumen / Link Drive
-                </label>
-                <input
-                  type="url"
-                  placeholder="https://drive.google.com/..."
-                  value={newFileUrl}
-                  onChange={(e) => setNewFileUrl(e.target.value)}
-                  required
-                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs focus:border-blue-500 focus:outline-none"
-                />
-              </div>
+              {!selectedUploadFile && (
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Atau Masukkan URL Dokumen / Drive Link
+                  </label>
+                  <input
+                    type="url"
+                    placeholder="https://drive.google.com/..."
+                    value={newFileUrl}
+                    onChange={(e) => setNewFileUrl(e.target.value)}
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs focus:border-blue-500 focus:outline-none"
+                  />
+                </div>
+              )}
 
               <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
                 <Button
                   type="button"
                   variant="outline"
                   size="sm"
-                  onClick={() => setAddFileModalOpen(false)}
+                  onClick={() => {
+                    setAddFileModalOpen(false);
+                    setSelectedUploadFile(null);
+                  }}
+                  disabled={uploadingFile}
                 >
                   Batal
                 </Button>
                 <Button
                   type="submit"
                   size="sm"
+                  disabled={uploadingFile}
                   className="bg-blue-600 hover:bg-blue-700 text-white font-semibold"
                 >
-                  Simpan File
+                  {uploadingFile ? "Mengunggah..." : "Simpan File"}
                 </Button>
               </div>
             </form>
