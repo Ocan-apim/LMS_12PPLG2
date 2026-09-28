@@ -20,7 +20,8 @@ export type NavIcon =
   | "import"
   | "settings"
   | "schedule"
-  | "curriculum";
+  | "curriculum"
+  | "support";
 
 export type NavItem = {
   href: string;
@@ -47,6 +48,7 @@ export const ROLE_NAV: Record<Role, NavItem[]> = {
     { href: "/admin/departments", label: "Manajemen Jurusan", icon: "departments" },
     { href: "/admin/subjects", label: "Mata Pelajaran", icon: "subjects" },
     { href: "/admin/academic-years", label: "Tahun Ajaran", icon: "academic" },
+    { href: "/admin/support", label: "Bantuan Siswa", icon: "support" },
   ],
   guru: [
     { href: "/guru", label: "Dashboard", icon: "dashboard" },
@@ -61,6 +63,7 @@ export const ROLE_NAV: Record<Role, NavItem[]> = {
     { href: "/kurikulum/grades/classes", label: "Nilai Kelas", icon: "grades" },
     { href: "/kurikulum/grades/subjects", label: "Nilai Mapel", icon: "academic" },
     { href: "/kurikulum/reports", label: "Laporan", icon: "reports" },
+    { href: "/kurikulum/files", label: "Berkas Akademik", icon: "materials" },
   ],
   kepsek: [
     { href: "/kepsek", label: "Dashboard", icon: "dashboard" },
@@ -75,6 +78,7 @@ export const ROLE_NAV: Record<Role, NavItem[]> = {
     { href: "/siswa/assignments", label: "Tugas", icon: "assignments" },
     { href: "/siswa/grades", label: "Penilaian", icon: "grades" },
     { href: "/siswa/files", label: "File", icon: "materials" },
+    { href: "/siswa/support", label: "Bantuan", icon: "support" },
   ],
 };
 

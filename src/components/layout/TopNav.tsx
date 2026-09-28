@@ -278,7 +278,15 @@ export function TopNav({ userName, roleLabel, role, onMenuClick }: TopNavProps) 
         {/* Profile Section: Hidden for role === "admin" as requested! */}
         {role !== "admin" && (
           <Link
-            href={role === "siswa" ? "/siswa/profile" : role === "guru" ? "/guru/profile" : "#"}
+            href={
+              role === "siswa"
+                ? "/siswa/profile"
+                : role === "guru"
+                ? "/guru/profile"
+                : role === "kurikulum"
+                ? "/kurikulum/profile"
+                : "#"
+            }
             className="flex items-center gap-2.5 pl-2 border-l border-slate-200 hover:opacity-85 transition"
           >
             <div className="text-right hidden sm:block">

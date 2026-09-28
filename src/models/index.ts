@@ -12,3 +12,5 @@ export { CourseClass } from "./CourseClass";
 export { Quiz } from "./Quiz";
 export { ClassPost } from "./ClassPost";
 export { Notification } from "./Notification";
+export { SupportTicket } from "./SupportTicket";
+export { SupportMessage } from "./SupportMessage";

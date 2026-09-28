@@ -22,6 +22,7 @@ import {
   UserCheck,
   ChevronDown,
   ChevronRight,
+  LifeBuoy,
 } from "lucide-react";
 import { useState } from "react";
 import type { Role } from "@/types";
@@ -52,6 +53,7 @@ const iconMap: Record<
   settings: Settings,
   schedule: Calendar,
   curriculum: FileText,
+  support: LifeBuoy,
 };
 
 type SidebarProps = {
