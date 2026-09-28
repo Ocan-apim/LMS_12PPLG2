@@ -57,8 +57,9 @@ export const ROLE_NAV: Record<Role, NavItem[]> = {
   ],
   kurikulum: [
     { href: "/kurikulum", label: "Dashboard", icon: "dashboard" },
-    { href: "/kurikulum/subjects", label: "Mata Pelajaran", icon: "subjects" },
-    { href: "/kurikulum/syllabus", label: "Silabus", icon: "syllabus" },
+    { href: "/kurikulum/teachers", label: "Data Guru", icon: "teachers" },
+    { href: "/kurikulum/grades/classes", label: "Nilai Kelas", icon: "grades" },
+    { href: "/kurikulum/grades/subjects", label: "Nilai Mapel", icon: "academic" },
     { href: "/kurikulum/reports", label: "Laporan", icon: "reports" },
   ],
   kepsek: [

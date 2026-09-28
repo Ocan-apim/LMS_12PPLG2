@@ -8,7 +8,7 @@ import { CourseClass, Material, Assignment, Submission } from "@/models";
 
 export async function GET(req: Request) {
   // 1. Role & Session Verification
-  const { session, error } = await requireRole(["guru", "admin", "siswa"]);
+  const { session, error } = await requireRole(["guru", "admin", "siswa", "kurikulum"]);
   if (error || !session) return error;
 
   try {
