@@ -27,7 +27,7 @@ export async function GET(req: NextRequest, context: RouteContext) {
     const ticket: any = await SupportTicket.findById(id)
       .populate({
         path: "userId",
-        select: "name email nis nisn grade classId phone createdAt",
+        select: "name email role nip nis nisn grade classId phone createdAt",
         populate: { path: "classId", select: "name grade" },
       })
       .lean();
@@ -54,7 +54,7 @@ export async function GET(req: NextRequest, context: RouteContext) {
         createdAt: m.createdAt,
         sender: {
           id: senderIdStr,
-          name: sender.name || (isSenderAdmin ? "Admin Learnix" : "Siswa"),
+          name: sender.name || (isSenderAdmin ? "Admin Learnix" : "Pengguna"),
           role: sender.role || (isSenderAdmin ? "admin" : "siswa"),
           isAdmin: isSenderAdmin,
         },
@@ -62,6 +62,7 @@ export async function GET(req: NextRequest, context: RouteContext) {
     });
 
     const u = ticket.userId || {};
+    const userRole = u.role || "siswa";
     return NextResponse.json({
       success: true,
       data: {
@@ -75,12 +76,13 @@ export async function GET(req: NextRequest, context: RouteContext) {
           resolvedAt: ticket.resolvedAt || null,
           student: {
             id: u._id ? String(u._id) : null,
-            name: u.name || "Siswa",
+            name: u.name || "Pengguna",
             email: u.email || "-",
-            nis: u.nis || u.nisn || "-",
+            role: userRole,
+            nis: u.nis || u.nisn || u.nip || "-",
             phone: u.phone || "-",
             grade: u.grade || "-",
-            className: u.classId?.name || "-",
+            className: u.classId?.name || (userRole !== "siswa" ? userRole.toUpperCase() : "-"),
             joinedAt: u.createdAt || null,
           },
         },

@@ -17,6 +17,8 @@ export interface ISupportTicket {
   category: SupportCategory;
   subject: string;
   status: SupportStatus;
+  ticketAccessTokenHash?: string;
+  ticketAccessExpiresAt?: Date;
   lastMessageAt?: Date;
   resolvedAt?: Date;
   createdAt: Date;
@@ -54,6 +56,15 @@ const SupportTicketSchema = new Schema<ISupportTicket>(
       type: String,
       enum: ["WAITING", "IN_PROGRESS", "RESOLVED"],
       default: "WAITING",
+      index: true,
+    },
+    ticketAccessTokenHash: {
+      type: String,
+      index: true,
+      sparse: true,
+    },
+    ticketAccessExpiresAt: {
+      type: Date,
       index: true,
     },
     lastMessageAt: {

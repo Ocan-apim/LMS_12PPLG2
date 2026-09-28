@@ -33,10 +33,10 @@ export async function POST(req: NextRequest, context: RouteContext) {
       );
     }
 
-    const student = await User.findById(ticket.userId);
-    if (!student || student.role !== "siswa") {
+    const targetUser = await User.findById(ticket.userId);
+    if (!targetUser || targetUser.role === "admin") {
       return NextResponse.json(
-        { success: false, message: "Akun siswa tidak ditemukan" },
+        { success: false, message: "Akun pengguna tidak ditemukan atau tidak dapat direset" },
         { status: 404 }
       );
     }
@@ -47,8 +47,8 @@ export async function POST(req: NextRequest, context: RouteContext) {
 
     // Hash securely using bcrypt
     const hashedPassword = await bcrypt.hash(tempPassword, 10);
-    student.password = hashedPassword;
-    await student.save();
+    targetUser.password = hashedPassword;
+    await targetUser.save();
 
     // Post automated resolution message in the ticket thread
     const resetMessage = `Kata sandi akun Anda telah berhasil direset oleh Admin ke kata sandi sementara:\n\n🔑 Kata Sandi Sementara: ${tempPassword}\n\nSilakan segera login menggunakan kata sandi tersebut. Demi keamanan, Anda dapat mengganti kata sandi setelah berhasil masuk.`;
@@ -64,14 +64,14 @@ export async function POST(req: NextRequest, context: RouteContext) {
     ticket.lastMessageAt = new Date();
     await ticket.save();
 
-    // Notify student
+    // Notify user
     try {
       await Notification.create({
-        recipientId: student._id,
+        recipientId: targetUser._id,
         type: "general",
         title: "Reset Password Berhasil",
         message: "Admin telah mereset kata sandi akun Anda. Buka tiket bantuan untuk melihat kata sandi sementara.",
-        link: `/siswa/support/${ticket._id}`,
+        link: targetUser.role === "siswa" ? `/siswa/support/${ticket._id}` : undefined,
         relatedEntityId: ticket._id,
       });
     } catch (notifErr) {
@@ -80,7 +80,7 @@ export async function POST(req: NextRequest, context: RouteContext) {
 
     return NextResponse.json({
       success: true,
-      message: "Kata sandi siswa berhasil direset",
+      message: "Kata sandi pengguna berhasil direset",
       data: {
         tempPassword,
         message: {

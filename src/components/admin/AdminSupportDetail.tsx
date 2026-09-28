@@ -48,6 +48,7 @@ export interface AdminTicketDetail {
     id: string | null;
     name: string;
     email: string;
+    role?: string;
     nis: string;
     phone: string;
     grade: string;
@@ -279,7 +280,12 @@ export function AdminSupportDetail() {
               className="inline-flex h-9.5 items-center gap-1.5 rounded-xl border border-amber-200 bg-amber-50/80 px-3.5 text-xs font-bold text-amber-800 hover:bg-amber-100 transition shadow-2xs"
             >
               <Key className="size-3.5 text-amber-700" />
-              <span>Reset Password Siswa</span>
+              <span>
+                Reset Password{" "}
+                {ticket.student?.role && ticket.student.role !== "siswa"
+                  ? ticket.student.role.toUpperCase()
+                  : "Siswa"}
+              </span>
             </button>
           )}
 
@@ -533,13 +539,13 @@ export function AdminSupportDetail() {
                     <span>Password Berhasil Direset!</span>
                   </div>
                   <p>
-                    Kata sandi akun siswa <strong>{ticket?.student.name}</strong> telah diganti dengan kata sandi sementara berikut:
+                    Kata sandi akun <strong>{ticket?.student.name}</strong> telah diganti dengan kata sandi sementara berikut:
                   </p>
                   <div className="rounded-xl bg-white border border-emerald-300 p-2.5 text-center font-mono font-bold text-sm text-slate-900 select-all">
                     {resetSuccessData}
                   </div>
                   <p className="text-[11px] text-emerald-700">
-                    Pesan otomatis telah diposting pada percakapan tiket ini agar dapat langsung dilihat oleh siswa.
+                    Pesan otomatis telah diposting pada percakapan tiket ini agar dapat langsung dilihat oleh pemohon.
                   </p>
                 </div>
 
@@ -558,7 +564,7 @@ export function AdminSupportDetail() {
                 <div className="rounded-2xl border border-amber-200 bg-amber-50/70 p-4 text-xs text-amber-800 flex items-start gap-2.5">
                   <AlertTriangle className="size-5 shrink-0 text-amber-600 mt-0.5" />
                   <p className="leading-relaxed">
-                    Tindakan ini akan mengenerate kata sandi sementara baru dan mengganti kata sandi lama siswa <strong>{ticket?.student.name}</strong> di database. Kata sandi lama tidak dapat digunakan kembali.
+                    Tindakan ini akan mengenerate kata sandi sementara baru dan mengganti kata sandi lama <strong>{ticket?.student.name}</strong> di database. Kata sandi lama tidak dapat digunakan kembali.
                   </p>
                 </div>
 

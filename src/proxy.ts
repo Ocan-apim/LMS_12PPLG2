@@ -2,13 +2,15 @@ import { NextRequest, NextResponse } from "next/server";
 import { COOKIE_NAME, verifySessionToken } from "@/lib/auth";
 import { ROLE_DASHBOARD, isRole } from "@/lib/roles";
 
-const PUBLIC_PATHS = ["/", "/login"];
+const PUBLIC_PATHS = ["/", "/login", "/forgot-password"];
 
 function isPublicPath(pathname: string) {
   return (
     PUBLIC_PATHS.includes(pathname) ||
     pathname.startsWith("/login/") ||
+    pathname.startsWith("/forgot-password/") ||
     pathname.startsWith("/api/auth/login") ||
+    pathname.startsWith("/api/auth/forgot-password") ||
     pathname.startsWith("/_next") ||
     pathname.startsWith("/favicon")
   );
@@ -22,7 +24,7 @@ export async function proxy(request: NextRequest) {
   const token = request.cookies.get(COOKIE_NAME)?.value;
   const session = token ? await verifySessionToken(token) : null;
 
-  if (pathname.startsWith("/login") && session) {
+  if ((pathname.startsWith("/login") || pathname.startsWith("/forgot-password")) && session) {
     return NextResponse.redirect(
       new URL(ROLE_DASHBOARD[session.role], request.url)
     );

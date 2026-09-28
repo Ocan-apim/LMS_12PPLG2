@@ -373,10 +373,10 @@ async function runSupportTestSuite() {
   const adminHtml = await adminPageRes.text();
   assert(adminHtml.includes("Bantuan Siswa") || adminHtml.includes("Tiket Siswa"), "Page contains Admin support text");
 
-  const adminDetailRes = await fetch(`${BASE_URL}/admin/support/${ticket1Id}`, {
+  const adminDetailPageRes = await fetch(`${BASE_URL}/admin/support/${ticket1Id}`, {
     headers: { Cookie: admin.cookie },
   });
-  assert(adminDetailRes.status === 200, "GET /admin/support/[id] rendered with 200 OK");
+  assert(adminDetailPageRes.status === 200, "GET /admin/support/[id] rendered with 200 OK");
   console.log("  ✓ All 4 Helpdesk frontend pages rendered successfully with 200 OK");
 
   // Restore student password to password123 for downstream regression suites
@@ -387,15 +387,22 @@ async function runSupportTestSuite() {
   await mongoose.default.connect(MONGODB_URI);
   const hash = await bcrypt.default.hash("password123", 10);
   await mongoose.default.connection.collection("users").updateOne(
-    { email: "0098273645@sekolah.sch.id" },
-    { $set: { password: hash } }
-  );
-  await mongoose.default.connection.collection("users").updateOne(
     { nis: "0098273645" },
     { $set: { password: hash } }
   );
   await mongoose.default.disconnect();
-  console.log("  ✓ Student 1 password restored to 'password123'");
+
+  const verifyRestored = await fetch(`${BASE_URL}/api/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      identifier: "0098273645",
+      password: "password123",
+      role: "siswa",
+    }),
+  });
+  assert(verifyRestored.status === 200, "Student 1 successfully logs in with restored password123");
+  console.log("  ✓ Student 1 password restored to 'password123' and verified via login API");
 
   console.log("\n==================================================");
   console.log("🎉 ALL HELPDESK & SUPPORT SYSTEM TESTS PASSED!");

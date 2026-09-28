@@ -28,12 +28,12 @@ export async function GET(req: NextRequest) {
     if (searchParam && searchParam.trim()) {
       const q = searchParam.trim();
       const matchingUsers = await User.find({
-        role: "siswa",
         $or: [
           { name: { $regex: q, $options: "i" } },
           { email: { $regex: q, $options: "i" } },
           { nis: { $regex: q, $options: "i" } },
           { nisn: { $regex: q, $options: "i" } },
+          { nip: { $regex: q, $options: "i" } },
         ],
       })
         .select("_id")
@@ -50,7 +50,7 @@ export async function GET(req: NextRequest) {
     const tickets: any[] = await SupportTicket.find(query)
       .populate({
         path: "userId",
-        select: "name email nis nisn grade classId",
+        select: "name email role nis nisn nip grade classId",
         populate: { path: "classId", select: "name grade" },
       })
       .sort({ lastMessageAt: -1, updatedAt: -1 })
@@ -66,6 +66,7 @@ export async function GET(req: NextRequest) {
 
     const formatted = tickets.map((t) => {
       const u = t.userId || {};
+      const userRole = u.role || "siswa";
       return {
         id: String(t._id),
         category: t.category,
@@ -77,10 +78,11 @@ export async function GET(req: NextRequest) {
         lastMessageAt: t.lastMessageAt || t.updatedAt,
         student: {
           id: u._id ? String(u._id) : null,
-          name: u.name || "Siswa",
+          name: u.name || "Pengguna",
           email: u.email || "-",
-          nis: u.nis || u.nisn || "-",
-          className: u.classId?.name || "-",
+          role: userRole,
+          nis: u.nis || u.nisn || u.nip || "-",
+          className: u.classId?.name || (userRole !== "siswa" ? userRole.toUpperCase() : "-"),
         },
       };
     });

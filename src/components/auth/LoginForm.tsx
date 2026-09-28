@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useState } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Eye, EyeOff, LogIn, LockKeyhole, UserRound } from "lucide-react";
 import { Button } from "@/components/ui/Button";
@@ -141,11 +142,11 @@ export function LoginForm({ role }: LoginFormProps) {
 
 function LinkLike() {
   return (
-    <button
-      type="button"
-      className="text-xs font-bold text-[var(--primary)] hover:text-[var(--primary-hover)]"
+    <Link
+      href="/forgot-password"
+      className="text-xs font-bold text-[var(--primary)] hover:text-[var(--primary-hover)] transition"
     >
       Lupa Password?
-    </button>
+    </Link>
   );
 }
