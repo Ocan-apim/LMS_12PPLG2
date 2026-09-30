@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import {
   Plus,
   Search,
@@ -13,6 +14,7 @@ import {
   AlertCircle,
   Lightbulb,
   CheckCircle,
+  Eye,
 } from "lucide-react";
 import {
   Button,
@@ -372,7 +374,12 @@ export default function AdminClassesPage() {
                         {c.grade}
                       </div>
                       <div>
-                        <div className="font-semibold text-slate-900">{c.name}</div>
+                        <Link
+                          href={`/admin/classes/${c._id}`}
+                          className="font-semibold text-slate-900 hover:text-blue-600 transition"
+                        >
+                          {c.name}
+                        </Link>
                         <div className="text-xs text-slate-400">{c.departmentId?.name ?? "Umum"}</div>
                       </div>
                     </div>
@@ -416,6 +423,13 @@ export default function AdminClassesPage() {
                   </td>
                   <td className="py-4 px-6 text-right">
                     <div className="flex items-center justify-end gap-1">
+                      <Link
+                        href={`/admin/classes/${c._id}`}
+                        className="rounded-lg p-1.5 text-slate-400 hover:bg-blue-50 hover:text-blue-600 transition"
+                        title="Lihat Detail Kelas"
+                      >
+                        <Eye className="size-4" />
+                      </Link>
                       <button
                         onClick={() => handleViewStudents(c)}
                         className="rounded-lg p-1.5 text-slate-400 hover:bg-blue-50 hover:text-blue-600 transition"

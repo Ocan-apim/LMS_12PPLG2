@@ -28,12 +28,6 @@ interface AttachedFile {
   size: string;
 }
 
-interface TeacherQuiz {
-  _id: string;
-  title: string;
-  totalPoints: number;
-}
-
 export default function EditTugasPage({
   params,
 }: {
@@ -53,9 +47,6 @@ export default function EditTugasPage({
 
   const [attachments, setAttachments] = useState<AttachedFile[]>([]);
   const [uploadingFile, setUploadingFile] = useState(false);
-  const [quizzes, setQuizzes] = useState<TeacherQuiz[]>([]);
-  const [selectedQuizId, setSelectedQuizId] = useState<string>("");
-  const [selectedQuizTitle, setSelectedQuizTitle] = useState<string>("");
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -64,13 +55,8 @@ export default function EditTugasPage({
   useEffect(() => {
     async function loadData() {
       try {
-        const [assignRes, quizzesRes] = await Promise.all([
-          fetch(`/api/guru/assignments/${id}`),
-          fetch("/api/guru/quizzes"),
-        ]);
-
+        const assignRes = await fetch(`/api/guru/assignments/${id}`);
         const assignJson = await assignRes.json();
-        const quizzesJson = await quizzesRes.json();
 
         if (assignJson.success) {
           const a = assignJson.data;
@@ -89,22 +75,6 @@ export default function EditTugasPage({
             setDueDate(d.toISOString().split("T")[0]);
             setDueTime(d.toTimeString().slice(0, 5));
           }
-
-          if (a.quizId) {
-            setSelectedQuizId(typeof a.quizId === "object" ? a.quizId._id : a.quizId);
-            setSelectedQuizTitle(
-              typeof a.quizId === "object"
-                ? a.quizId.title
-                : ""
-            );
-          } else {
-            setSelectedQuizId("");
-            setSelectedQuizTitle("");
-          }
-        }
-
-        if (quizzesJson.success && Array.isArray(quizzesJson.data)) {
-          setQuizzes(quizzesJson.data);
         }
       } catch (err) {
         console.error("Gagal memuat detail tugas:", err);
@@ -182,7 +152,6 @@ export default function EditTugasPage({
           dueDate: combinedDueDate,
           maxScore: Number(maxScore) || 100,
           attachments,
-          quizId: selectedQuizId === "quiz-mock" ? undefined : selectedQuizId || undefined,
         }),
       });
 
@@ -411,75 +380,7 @@ export default function EditTugasPage({
               </div>
             </div>
 
-            {/* Box 2: Kuis Tersemat matching Screenshot 3 Right */}
-            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs space-y-3">
-              <div className="flex items-center gap-2 text-slate-900 font-bold text-xs">
-                <HelpCircle className="size-4 text-blue-600" />
-                <span>Kuis Tersemat</span>
-              </div>
-
-              {selectedQuizId ? (
-                <div className="space-y-2.5">
-                  <p className="text-xs font-semibold text-slate-800">
-                    {selectedQuizTitle || "Kuis Matematika Dasar - Bab 1"}
-                  </p>
-                  <div className="flex items-center gap-2">
-                    <Link
-                      href={`/guru/quizzes/new?classId=${courseClassId}`}
-                      target="_blank"
-                      className="flex-1"
-                    >
-                      <button
-                        type="button"
-                        className="w-full rounded-xl border border-blue-200 bg-blue-50/50 py-1.5 text-xs font-semibold text-blue-600 hover:bg-blue-100/70 transition"
-                      >
-                        Edit Kuis
-                      </button>
-                    </Link>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSelectedQuizId("");
-                        setSelectedQuizTitle("");
-                      }}
-                      className="rounded-xl border border-slate-200 px-2.5 py-1.5 text-xs text-slate-500 hover:text-red-600 hover:border-red-200 transition"
-                      title="Lepas Kuis"
-                    >
-                      Lepas
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  <select
-                    value={selectedQuizId}
-                    onChange={(e) => {
-                      const qId = e.target.value;
-                      setSelectedQuizId(qId);
-                      const q = quizzes.find((item) => item._id === qId);
-                      setSelectedQuizTitle(q ? q.title : "");
-                    }}
-                    className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3 py-2 text-xs text-slate-800 focus:border-blue-500 focus:outline-none"
-                  >
-                    <option value="">-- Pilih Kuis yang Ada --</option>
-                    {quizzes.map((q) => (
-                      <option key={q._id} value={q._id}>
-                        {q.title} ({q.totalPoints} Poin)
-                      </option>
-                    ))}
-                  </select>
-
-                  <Link
-                    href={`/guru/quizzes/new?classId=${courseClassId}`}
-                    className="block text-center rounded-xl border border-dashed border-blue-300 py-1.5 text-xs font-semibold text-blue-600 hover:bg-blue-50/60 transition"
-                  >
-                    + Buat Kuis Baru
-                  </Link>
-                </div>
-              )}
-            </div>
-
-            {/* Box 3: Penilaian matching Screenshot 3 Right */}
+            {/* Box 2: Penilaian matching Screenshot 3 Right */}
             <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs space-y-3">
               <div className="flex items-center gap-2 text-slate-900 font-bold text-xs">
                 <Star className="size-4 text-blue-600" />

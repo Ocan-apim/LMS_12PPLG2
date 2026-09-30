@@ -9,7 +9,7 @@ type RouteContext = {
 };
 
 export async function GET(_req: Request, context: RouteContext) {
-  const { session, error } = await requireRole(["siswa"]);
+  const { session, error } = await requireRole(["siswa", "guru", "admin", "kurikulum", "kepsek"]);
   if (error || !session) return error;
 
   try {
@@ -23,15 +23,11 @@ export async function GET(_req: Request, context: RouteContext) {
       );
     }
 
-    // 1. Resolve Quiz & Associated Assignment
+    // 1. Resolve Quiz
     let quiz: any = await Quiz.findById(id).lean();
-    let assignment: any = null;
-
-    if (quiz) {
-      assignment = await Assignment.findOne({ quizId: quiz._id, isArchived: { $ne: true } }).lean();
-    } else {
-      // Maybe id is the Assignment ID
-      assignment = await Assignment.findById(id).lean();
+    if (!quiz) {
+      // Check if id is an Assignment that has quizId
+      const assignment: any = await Assignment.findById(id).lean();
       if (assignment && assignment.quizId) {
         quiz = await Quiz.findById(assignment.quizId).lean();
       }
@@ -44,67 +40,40 @@ export async function GET(_req: Request, context: RouteContext) {
       );
     }
 
-    // 2. Security Check: Enforce class membership
+    // 2. Class Membership Check
     const courseClass: any = await CourseClass.findById(quiz.courseClassId).lean();
-    if (
-      !courseClass ||
-      !Array.isArray(courseClass.studentIds) ||
-      !courseClass.studentIds.map((sid: any) => sid.toString()).includes(session.id)
-    ) {
-      return NextResponse.json(
-        { success: false, message: "Akses ditolak: Anda tidak terdaftar di kelas kuis ini" },
-        { status: 403 }
-      );
+    const isStudent = session.role === "siswa";
+    const isStaff = ["guru", "admin", "kurikulum", "kepsek"].includes(session.role);
+
+    if (isStudent) {
+      if (
+        !courseClass ||
+        !Array.isArray(courseClass.studentIds) ||
+        !courseClass.studentIds.map((sid: any) => sid.toString()).includes(session.id)
+      ) {
+        return NextResponse.json(
+          { success: false, message: "Akses ditolak: Anda tidak terdaftar di kelas kuis ini" },
+          { status: 403 }
+        );
+      }
     }
 
-    // 3. Check student's submission / attempt
-    const queryCond: any[] = [{ quizId: quiz._id, studentId: session.id }];
-    if (assignment) {
-      queryCond.push({ assignmentId: assignment._id, studentId: session.id });
+    // 3. Check student's submission (STRICTLY for this quizId)
+    let studentSubmission: any = null;
+    if (isStudent) {
+      studentSubmission = await Submission.findOne({
+        quizId: quiz._id,
+        studentId: session.id,
+      })
+        .sort({ submittedAt: -1 })
+        .lean();
     }
-
-    const studentSubmission: any = await Submission.findOne({
-      $or: queryCond,
-    }).lean();
 
     const isCompleted = Boolean(
-      studentSubmission && ["graded", "turned_in", "late"].includes(studentSubmission.status)
+      studentSubmission && ["graded", "turned_in"].includes(studentSubmission.status)
     );
 
-    // If completed, return result summary
-    if (isCompleted) {
-      const correctCount = (studentSubmission.quizAnswers || []).filter((a: any) => a.isCorrect).length;
-      const totalQuestions = quiz.questions.length;
-      const incorrectCount = totalQuestions - correctCount;
-
-      return NextResponse.json({
-        success: true,
-        data: {
-          _id: quiz._id.toString(),
-          assignmentId: assignment?._id?.toString() || null,
-          title: quiz.title,
-          durationSeconds: quiz.durationSeconds || 60,
-          totalPoints: quiz.totalPoints || 100,
-          totalQuestions,
-          courseClass: {
-            _id: courseClass._id,
-            name: courseClass.name,
-            bannerColor: courseClass.bannerColor || "blue",
-          },
-          isCompleted: true,
-          result: {
-            score: studentSubmission.score ?? 0,
-            maxScore: quiz.totalPoints || 100,
-            correctCount,
-            incorrectCount,
-            totalQuestions,
-            submittedAt: studentSubmission.submittedAt,
-          },
-        },
-      });
-    }
-
-    // 4. CRITICAL SECURITY: Sanitize questions - DO NOT SEND correctAnswer or isCorrect
+    // Calculate sanitized questions
     const sanitizedQuestions = (quiz.questions || []).map((q: any) => ({
       id: q.id,
       type: q.type || "pilihan_ganda",
@@ -114,11 +83,11 @@ export async function GET(_req: Request, context: RouteContext) {
       points: q.points || 10,
     }));
 
-    // Calculate remaining seconds if attempt is active
+    // If student has an active taking session
     let remainingSeconds = quiz.durationSeconds || 60;
     let isStarted = false;
 
-    if (studentSubmission && studentSubmission.startedAt) {
+    if (studentSubmission && studentSubmission.startedAt && !isCompleted) {
       isStarted = true;
       const elapsed = Math.floor(
         (Date.now() - new Date(studentSubmission.startedAt).getTime()) / 1000
@@ -126,25 +95,44 @@ export async function GET(_req: Request, context: RouteContext) {
       remainingSeconds = Math.max(0, (quiz.durationSeconds || 60) - elapsed);
     }
 
+    // Calculate real result if completed
+    let result = null;
+    if (isCompleted && studentSubmission) {
+      const correctCount = (studentSubmission.quizAnswers || []).filter((a: any) => a.isCorrect).length;
+      const totalQuestions = sanitizedQuestions.length;
+      const incorrectCount = Math.max(0, totalQuestions - correctCount);
+
+      result = {
+        score: studentSubmission.score ?? 0,
+        maxScore: quiz.totalPoints || 100,
+        correctCount,
+        incorrectCount,
+        totalQuestions,
+        submittedAt: studentSubmission.submittedAt,
+      };
+    }
+
     return NextResponse.json({
       success: true,
       data: {
         _id: quiz._id.toString(),
-        assignmentId: assignment?._id?.toString() || null,
         title: quiz.title,
-        description: assignment?.instructions || assignment?.description || "Kerjakan kuis dengan teliti.",
+        description: quiz.description || "Kerjakan kuis dengan cermat dan teliti sebelum waktu berakhir.",
         durationSeconds: quiz.durationSeconds || 60,
         totalPoints: quiz.totalPoints || 100,
         totalQuestions: sanitizedQuestions.length,
         courseClass: {
-          _id: courseClass._id,
-          name: courseClass.name,
-          bannerColor: courseClass.bannerColor || "blue",
+          _id: courseClass?._id?.toString() || quiz.courseClassId.toString(),
+          name: courseClass?.name || "Mata Pelajaran",
+          bannerColor: courseClass?.bannerColor || "blue",
         },
+        isStaffView: isStaff,
+        currentUserRole: session.role,
         isStarted,
         startedAt: studentSubmission?.startedAt || null,
         remainingSeconds,
-        isCompleted: false,
+        isCompleted,
+        result,
         questions: sanitizedQuestions,
       },
     });

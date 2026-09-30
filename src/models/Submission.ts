@@ -17,7 +17,7 @@ export interface IPrivateComment {
 }
 
 export interface ISubmission {
-  assignmentId: mongoose.Types.ObjectId;
+  assignmentId?: mongoose.Types.ObjectId;
   quizId?: mongoose.Types.ObjectId;
   studentId: mongoose.Types.ObjectId;
   courseClassId?: mongoose.Types.ObjectId;
@@ -47,7 +47,7 @@ const SubmissionSchema = new Schema<ISubmission>(
     assignmentId: {
       type: Schema.Types.ObjectId,
       ref: "Assignment",
-      required: true,
+      required: false,
     },
     quizId: {
       type: Schema.Types.ObjectId,
@@ -98,7 +98,8 @@ const SubmissionSchema = new Schema<ISubmission>(
   { timestamps: true }
 );
 
-SubmissionSchema.index({ assignmentId: 1, studentId: 1 }, { unique: true });
+SubmissionSchema.index({ assignmentId: 1, studentId: 1 }, { unique: true, sparse: true });
+SubmissionSchema.index({ quizId: 1, studentId: 1 }, { sparse: true });
 SubmissionSchema.index({ studentId: 1, status: 1 });
 SubmissionSchema.index({ courseClassId: 1 });
 

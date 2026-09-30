@@ -56,13 +56,8 @@ export async function POST(req: Request, context: RouteContext) {
       );
     }
 
-    // 3. Check for existing completed submission (cegah duplicate attempt)
-    const queryCond: any[] = [{ quizId: quiz._id, studentId: session.id }];
-    if (assignment) {
-      queryCond.push({ assignmentId: assignment._id, studentId: session.id });
-    }
-
-    let submission = await Submission.findOne({ $or: queryCond });
+    // 3. Check for existing completed submission strictly by quizId and studentId
+    let submission = await Submission.findOne({ quizId: quiz._id, studentId: session.id });
 
     if (submission && ["graded", "turned_in"].includes(submission.status)) {
       return NextResponse.json(
@@ -92,6 +87,17 @@ export async function POST(req: Request, context: RouteContext) {
     let correctCount = 0;
     let incorrectCount = 0;
 
+    const letterToIndex = (val: any) => {
+      if (typeof val === "string" && /^[A-Fa-f]$/.test(val.trim())) {
+        return val.trim().toUpperCase().charCodeAt(0) - 65;
+      }
+      if (typeof val === "number" && !isNaN(val)) return val;
+      if (typeof val === "string" && !isNaN(Number(val)) && val.trim() !== "") {
+        return Number(val);
+      }
+      return null;
+    };
+
     const enrichedAnswers = (quiz.questions || []).map((q: any) => {
       const qPoints = Number(q.points) || 10;
       totalPossibleQuestionPoints += qPoints;
@@ -100,12 +106,17 @@ export async function POST(req: Request, context: RouteContext) {
       let isCorrect = false;
 
       if (studentAns !== undefined && studentAns !== null) {
-        if (typeof q.correctAnswer === "number") {
-          isCorrect = Number(studentAns) === Number(q.correctAnswer);
+        const correctIdx = letterToIndex(q.correctAnswer);
+        const studentIdx = letterToIndex(studentAns);
+
+        if (correctIdx !== null && studentIdx !== null) {
+          isCorrect = correctIdx === studentIdx;
+        } else if (Array.isArray(q.options) && studentIdx !== null && q.options[studentIdx] !== undefined) {
+          isCorrect = String(q.options[studentIdx]).trim().toLowerCase() === String(q.correctAnswer).trim().toLowerCase();
+        } else if (Array.isArray(q.options) && correctIdx !== null && q.options[correctIdx] !== undefined) {
+          isCorrect = String(studentAns).trim().toLowerCase() === String(q.options[correctIdx]).trim().toLowerCase();
         } else {
-          isCorrect =
-            String(studentAns).trim().toLowerCase() ===
-            String(q.correctAnswer).trim().toLowerCase();
+          isCorrect = String(studentAns).trim().toLowerCase() === String(q.correctAnswer).trim().toLowerCase();
         }
       }
 
@@ -130,7 +141,7 @@ export async function POST(req: Request, context: RouteContext) {
     if (totalPossibleQuestionPoints > 0) {
       finalScore = Math.round((totalEarnedPoints / totalPossibleQuestionPoints) * targetMaxPoints);
     } else {
-      finalScore = totalEarnedPoints;
+      finalScore = 0;
     }
 
     // Cap between 0 and targetMaxPoints
@@ -147,9 +158,7 @@ export async function POST(req: Request, context: RouteContext) {
       submission.gradedAt = now;
       await submission.save();
     } else {
-      const targetAssignmentId = assignment?._id || new mongoose.Types.ObjectId();
       submission = await Submission.create({
-        assignmentId: targetAssignmentId,
         quizId: quiz._id,
         studentId: session.id,
         courseClassId: quiz.courseClassId,

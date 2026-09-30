@@ -8,7 +8,7 @@ type RouteContext = {
 };
 
 export async function GET(_req: Request, context: RouteContext) {
-  const { session, error } = await requireRole(["guru", "admin", "siswa"]);
+  const { session, error } = await requireRole(["guru", "admin", "siswa", "kurikulum", "kepsek"]);
   if (error || !session) return error;
 
   try {
@@ -58,6 +58,7 @@ export async function GET(_req: Request, context: RouteContext) {
         ...assignment.toObject(),
         turnedInCount,
         gradedCount,
+        currentUserRole: session.role,
       },
     });
   } catch (err: unknown) {
@@ -67,7 +68,7 @@ export async function GET(_req: Request, context: RouteContext) {
 }
 
 export async function PUT(req: Request, context: RouteContext) {
-  const { session, error } = await requireRole(["guru", "admin"]);
+  const { session, error } = await requireRole(["guru"]);
   if (error || !session) return error;
 
   try {

@@ -8,7 +8,7 @@ type RouteContext = {
 };
 
 export async function GET(_req: Request, context: RouteContext) {
-  const { session, error } = await requireRole(["guru", "admin", "siswa"]);
+  const { session, error } = await requireRole(["guru", "admin", "siswa", "kurikulum", "kepsek"]);
   if (error || !session) return error;
 
   try {
@@ -61,7 +61,7 @@ export async function GET(_req: Request, context: RouteContext) {
 }
 
 export async function POST(req: Request, context: RouteContext) {
-  const { session, error } = await requireRole(["guru", "admin", "siswa"]);
+  const { session, error } = await requireRole(["guru", "siswa"]);
   if (error || !session) return error;
 
   try {

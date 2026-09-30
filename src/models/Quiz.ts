@@ -12,11 +12,13 @@ export interface IQuizQuestion {
 
 export interface IQuiz {
   title: string;
+  description?: string;
   teacherId: mongoose.Types.ObjectId;
   courseClassId: mongoose.Types.ObjectId;
   durationSeconds: number; // e.g. 60 or total time
   questions: IQuizQuestion[];
   totalPoints: number;
+  dueDate?: Date;
   isPublished: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -38,11 +40,13 @@ const QuizQuestionSchema = new Schema<IQuizQuestion>(
 const QuizSchema = new Schema<IQuiz>(
   {
     title: { type: String, required: true, trim: true },
+    description: { type: String, trim: true },
     teacherId: { type: Schema.Types.ObjectId, ref: "User", required: true },
     courseClassId: { type: Schema.Types.ObjectId, ref: "CourseClass", required: true },
     durationSeconds: { type: Number, default: 60 },
     questions: [QuizQuestionSchema],
     totalPoints: { type: Number, default: 100 },
+    dueDate: { type: Date },
     isPublished: { type: Boolean, default: true },
   },
   { timestamps: true }

@@ -55,6 +55,7 @@ interface AssignmentDetail {
   };
   attachments?: AssignmentAttachment[];
   isPublished?: boolean;
+  currentUserRole?: string;
   createdAt: string;
 }
 
@@ -227,65 +228,41 @@ export default function AssignmentDetailPage({
 
             {/* Status toggle & "Lihat Submisi" Button matching Screenshot 3 Left */}
             <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={handleToggleStatus}
-                title="Klik untuk mengubah status publikasi tugas"
-                className={`rounded-xl px-3 py-1.5 text-xs font-bold transition border ${
-                  assignment.isPublished !== false
-                    ? "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100"
-                    : "bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200"
-                }`}
-              >
-                {assignment.isPublished !== false ? "● AKTIF" : "○ DRAFT"}
-              </button>
-
-              <Link href={`/guru/assignments/${id}/submissions`}>
+              {["admin", "kurikulum", "kepsek"].includes(assignment.currentUserRole || "") ? (
+                <span className="rounded-xl px-3 py-1.5 text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                  Mode Pratinjau (Read-Only)
+                </span>
+              ) : (
                 <button
                   type="button"
-                  className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-800 shadow-xs hover:bg-slate-50 transition"
+                  onClick={handleToggleStatus}
+                  title="Klik untuk mengubah status publikasi tugas"
+                  className={`rounded-xl px-3 py-1.5 text-xs font-bold transition border ${
+                    assignment.isPublished !== false
+                      ? "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100"
+                      : "bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200"
+                  }`}
                 >
-                  Lihat Submisi
+                  {assignment.isPublished !== false ? "● AKTIF" : "○ DRAFT"}
                 </button>
-              </Link>
+              )}
+
+              {!["admin", "kurikulum", "kepsek"].includes(assignment.currentUserRole || "") && (
+                <Link href={`/guru/assignments/${id}/submissions`}>
+                  <button
+                    type="button"
+                    className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-800 shadow-xs hover:bg-slate-50 transition"
+                  >
+                    Lihat Submisi
+                  </button>
+                </Link>
+              )}
             </div>
           </div>
 
           {/* Description text */}
-          <div className="text-xs text-slate-700 leading-relaxed">
+          <div className="text-xs text-slate-700 leading-relaxed bg-slate-50/70 p-4 rounded-2xl border border-slate-100">
             {assignment.instructions || "Silahkan di kerjakan dan jangan nyontek!"}
-          </div>
-
-          {/* Embedded Quiz Card matching Screenshot 3 Left (Cat image background + overlay) */}
-          <div className="relative overflow-hidden rounded-2xl bg-slate-900 text-white shadow-md aspect-16/9 sm:aspect-21/9 flex items-center justify-center">
-            {/* Background cover image (kitten/cat photo matching screenshot) */}
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src="https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?q=80&w=1200&auto=format&fit=crop"
-              alt="Kuis Thumbnail"
-              className="absolute inset-0 size-full object-cover opacity-65"
-            />
-
-            {/* Dark overlay for contrast */}
-            <div className="absolute inset-0 bg-black/25" />
-
-            {/* Centered card on top of image */}
-            <div className="relative z-10 flex flex-col items-center justify-center text-center space-y-3 px-4">
-              <h3 className="text-base sm:text-lg font-bold text-white drop-shadow-md">
-                {assignment.quizId?.title || assignment.title}
-              </h3>
-              <p className="text-xs text-white/90 drop-shadow-sm font-medium">
-                {assignment.quizId?.questions?.length || 20} soal
-              </p>
-              <Link href={`/guru/assignments/${id}/edit`}>
-                <button
-                  type="button"
-                  className="rounded-xl bg-blue-600 px-6 py-1.5 text-xs font-semibold text-white shadow-md hover:bg-blue-700 transition"
-                >
-                  Edit
-                </button>
-              </Link>
-            </div>
           </div>
 
           {/* File yang dibagi Section matching Screenshot 3 Left */}
@@ -334,18 +311,20 @@ export default function AssignmentDetailPage({
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs space-y-4">
             <h3 className="text-sm font-bold text-slate-900">Kolom Komentar</h3>
 
-            {/* "Tambahkan Komentar" button */}
-            <button
-              type="button"
-              onClick={() => setShowCommentInput((prev) => !prev)}
-              className="flex items-center gap-2 text-xs font-bold text-blue-600 hover:text-blue-700 transition"
-            >
-              <MessageSquare className="size-4" />
-              <span>Tambahkan Komentar</span>
-            </button>
+            {/* "Tambahkan Komentar" button (hidden in read-only mode) */}
+            {!["admin", "kurikulum", "kepsek"].includes(assignment.currentUserRole || "") && (
+              <button
+                type="button"
+                onClick={() => setShowCommentInput((prev) => !prev)}
+                className="flex items-center gap-2 text-xs font-bold text-blue-600 hover:text-blue-700 transition"
+              >
+                <MessageSquare className="size-4" />
+                <span>Tambahkan Komentar</span>
+              </button>
+            )}
 
             {/* Comment Form if expanded */}
-            {showCommentInput && (
+            {showCommentInput && !["admin", "kurikulum", "kepsek"].includes(assignment.currentUserRole || "") && (
               <form onSubmit={handleAddComment} className="flex items-center gap-2 pt-1">
                 <input
                   type="text"
@@ -400,16 +379,18 @@ export default function AssignmentDetailPage({
         </div>
       </div>
 
-      {/* Floating Action Button at Bottom Right: Blue Circular Edit/Pencil matching Screenshot 3 Left */}
-      <div className="fixed bottom-6 right-8 z-40">
-        <Link
-          href={`/guru/assignments/${id}/edit`}
-          title="Edit Tugas"
-          className="flex size-12 items-center justify-center rounded-full bg-blue-600 text-white shadow-lg transition-transform hover:scale-105 hover:bg-blue-700"
-        >
-          <Pencil className="size-5" />
-        </Link>
-      </div>
+      {/* Floating Action Button at Bottom Right: Blue Circular Edit/Pencil matching Screenshot 3 Left (only for teacher owner) */}
+      {!["admin", "kurikulum", "kepsek"].includes(assignment.currentUserRole || "") && (
+        <div className="fixed bottom-6 right-8 z-40">
+          <Link
+            href={`/guru/assignments/${id}/edit`}
+            title="Edit Tugas"
+            className="flex size-12 items-center justify-center rounded-full bg-blue-600 text-white shadow-lg transition-transform hover:scale-105 hover:bg-blue-700"
+          >
+            <Pencil className="size-5" />
+          </Link>
+        </div>
+      )}
     </div>
   );
 }

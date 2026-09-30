@@ -221,16 +221,38 @@ function QuizBuilderForm() {
 
   async function handlePublishQuiz() {
     setError("");
-    const title = quizTitle.trim() || "Kuis Pembelajaran";
+    const title = quizTitle.trim() || "Ulangan Harian / Kuis";
 
     if (!selectedClassId) {
       setError("Pilih kelas tujuan terlebih dahulu");
       return;
     }
 
+    if (questions.length === 0) {
+      setError("Kuis harus memiliki minimal 1 soal");
+      return;
+    }
+
     setPublishing(true);
     try {
       const totalPoints = questions.reduce((acc, q) => acc + (q.points || 10), 0);
+      const letterMap: Record<string, number> = { A: 0, B: 1, C: 2, D: 3, E: 4, F: 5 };
+
+      const formattedQuestions = questions.map((q, idx) => {
+        const correctIdx = letterMap[q.correctAnswer] ?? (typeof q.correctAnswer === "number" ? q.correctAnswer : 0);
+        return {
+          id: q.id || `q-${idx + 1}-${Date.now()}`,
+          question: (q.prompt || `Pertanyaan ${idx + 1}`).trim(),
+          type: q.type || "pilihan_ganda",
+          options:
+            q.type === "pilihan_ganda"
+              ? q.options.map((o) => (o.text || "").trim())
+              : [],
+          correctAnswer:
+            q.type === "pilihan_ganda" ? correctIdx : "",
+          points: Number(q.points) || 10,
+        };
+      });
 
       const res = await fetch("/api/guru/quizzes", {
         method: "POST",
@@ -240,18 +262,7 @@ function QuizBuilderForm() {
           courseClassId: selectedClassId,
           durationSeconds: activeQuestion.durationSeconds || 60,
           totalPoints,
-          publishAsAssignment: true,
-          questions: questions.map((q) => ({
-            prompt: q.prompt,
-            type: q.type,
-            options:
-              q.type === "pilihan_ganda"
-                ? q.options.map((o) => o.text)
-                : [],
-            correctAnswer:
-              q.type === "pilihan_ganda" ? q.correctAnswer : "",
-            points: q.points || 10,
-          })),
+          questions: formattedQuestions,
         }),
       });
 

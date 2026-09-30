@@ -58,6 +58,8 @@ interface CourseClassDetail {
   studentIds: EnrolledStudent[];
   sharedFiles?: SharedFile[];
   assignments: ClassAssignment[];
+  isReadOnly?: boolean;
+  currentUserRole?: string;
 }
 
 interface ClassPostItem {
@@ -324,6 +326,17 @@ export default function GuruClassDetailPage({
         </div>
       </div>
 
+      {courseClass.isReadOnly && (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-center">
+          <p className="text-xs font-bold text-amber-800">
+            Mode Pratinjau Staf ({courseClass.currentUserRole?.toUpperCase()})
+          </p>
+          <p className="mt-1 text-xs text-amber-700">
+            Tampilan kelas ini bersifat baca-saja. Anda dapat memantau aktivitas kelas, namun tidak dapat membuat tugas/kuis, mengunggah berkas, atau memposting komentar.
+          </p>
+        </div>
+      )}
+
       {/* Hero Blue Banner matching Screenshot 1 Right */}
       <div className="relative overflow-visible rounded-3xl bg-blue-600 p-8 sm:p-10 text-white shadow-sm">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -426,7 +439,9 @@ export default function GuruClassDetailPage({
             posts.map((post) => {
               const isQuiz = post.type === "quiz";
               const targetUrl = post.refId
-                ? `/guru/assignments/${post.refId}`
+                ? isQuiz
+                  ? `/siswa/quiz/${post.refId}`
+                  : `/guru/assignments/${post.refId}`
                 : `/guru/assignments/new?classId=${courseClass._id}`;
               const isExpanded = expandedPostId === post._id;
               const commentsCount = post.comments?.length || 0;
@@ -434,7 +449,11 @@ export default function GuruClassDetailPage({
               return (
                 <div
                   key={post._id}
-                  className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs hover:border-blue-300 transition space-y-3"
+                  className={`rounded-2xl border p-5 shadow-xs transition space-y-3 ${
+                    isQuiz
+                      ? "bg-[#2563eb] border-blue-600 text-white hover:bg-[#1d4ed8]"
+                      : "bg-white border-slate-200 text-slate-900 hover:border-blue-300"
+                  }`}
                 >
                   <div className="flex items-start justify-between gap-4">
                     <div
@@ -442,9 +461,9 @@ export default function GuruClassDetailPage({
                       className="flex items-start gap-4 cursor-pointer flex-1"
                     >
                       <div
-                        className={`flex size-10 shrink-0 items-center justify-center rounded-full ${
+                        className={`flex size-10 shrink-0 items-center justify-center rounded-xl ${
                           isQuiz
-                            ? "bg-indigo-50 text-indigo-600"
+                            ? "bg-white/20 text-white backdrop-blur-xs"
                             : "bg-blue-50 text-blue-600"
                         }`}
                       >
@@ -455,10 +474,31 @@ export default function GuruClassDetailPage({
                         )}
                       </div>
                       <div>
-                        <h3 className="text-sm font-bold text-slate-900 hover:text-blue-600 transition">
-                          {post.title || (isQuiz ? "Anda memulai Quiz!" : "Anda memposting tugas baru")}
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={`rounded px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wider ${
+                              isQuiz
+                                ? "bg-white/20 text-white"
+                                : "bg-slate-100 text-slate-700"
+                            }`}
+                          >
+                            {isQuiz ? "Ulangan Harian / Kuis" : "Tugas"}
+                          </span>
+                        </div>
+                        <h3
+                          className={`mt-1 text-sm font-bold transition ${
+                            isQuiz
+                              ? "text-white hover:underline"
+                              : "text-slate-900 hover:text-blue-600"
+                          }`}
+                        >
+                          {post.title || (isQuiz ? "Ulangan Harian" : "Tugas Baru")}
                         </h3>
-                        <p className="text-xs text-slate-400 mt-0.5">
+                        <p
+                          className={`text-xs mt-0.5 ${
+                            isQuiz ? "text-blue-100" : "text-slate-400"
+                          }`}
+                        >
                           {new Date(post.createdAt).toLocaleDateString("id-ID", {
                             day: "numeric",
                             month: "long",
@@ -466,7 +506,13 @@ export default function GuruClassDetailPage({
                           })}
                         </p>
                         {post.content && (
-                          <p className="text-xs text-slate-600 mt-1 line-clamp-2">
+                          <p
+                            className={`text-xs mt-2 line-clamp-2 rounded-xl p-2.5 ${
+                              isQuiz
+                                ? "bg-blue-700/50 text-blue-50"
+                                : "bg-slate-50 text-slate-600 border border-slate-100"
+                            }`}
+                          >
                             {post.content}
                           </p>
                         )}
@@ -475,18 +521,30 @@ export default function GuruClassDetailPage({
 
                     <Link
                       href={targetUrl}
-                      className="shrink-0 text-xs font-semibold text-blue-600 hover:underline"
+                      className={`shrink-0 text-xs font-semibold rounded-lg px-3 py-1.5 transition ${
+                        isQuiz
+                          ? "bg-white/20 text-white hover:bg-white/30 backdrop-blur-xs"
+                          : "text-blue-600 hover:underline"
+                      }`}
                     >
                       Buka
                     </Link>
                   </div>
 
                   {/* Toggle Comments Button */}
-                  <div className="border-t border-slate-100 pt-2.5 flex items-center justify-between">
+                  <div
+                    className={`border-t pt-2.5 flex items-center justify-between ${
+                      isQuiz ? "border-blue-500/50" : "border-slate-100"
+                    }`}
+                  >
                     <button
                       type="button"
                       onClick={() => setExpandedPostId(isExpanded ? null : post._id)}
-                      className="flex items-center gap-1.5 text-xs font-semibold text-blue-600 hover:text-blue-700 transition"
+                      className={`flex items-center gap-1.5 text-xs font-semibold transition ${
+                        isQuiz
+                          ? "text-blue-100 hover:text-white"
+                          : "text-blue-600 hover:text-blue-700"
+                      }`}
                     >
                       <MessageSquare className="size-3.5" />
                       <span>
@@ -499,61 +557,97 @@ export default function GuruClassDetailPage({
 
                   {/* Expanded Comments List & Form */}
                   {isExpanded && (
-                    <div className="space-y-3 pt-2 border-t border-slate-100">
+                    <div
+                      className={`space-y-3 pt-2 border-t ${
+                        isQuiz ? "border-blue-500/50" : "border-slate-100"
+                      }`}
+                    >
                       {post.comments && post.comments.length > 0 && (
                         <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
                           {post.comments.map((c, cIdx) => (
                             <div
                               key={cIdx}
-                              className="rounded-xl bg-slate-50 p-2.5 text-xs space-y-1"
+                              className={`rounded-xl p-2.5 text-xs space-y-1 ${
+                                isQuiz
+                                  ? "bg-white/10 text-white"
+                                  : "bg-slate-50 text-slate-900"
+                              }`}
                             >
                               <div className="flex items-center justify-between">
-                                <span className="font-bold text-slate-900">
+                                <span className="font-bold">
                                   {c.senderName || "Pengguna"}
                                 </span>
-                                <span className="text-[10px] text-slate-400">
+                                <span
+                                  className={`text-[10px] ${
+                                    isQuiz ? "text-blue-200" : "text-slate-400"
+                                  }`}
+                                >
                                   {new Date(c.createdAt).toLocaleTimeString("id-ID", {
                                     hour: "2-digit",
                                     minute: "2-digit",
                                   })}
                                 </span>
                               </div>
-                              <p className="text-slate-600 leading-relaxed">{c.message}</p>
+                              <p
+                                className={`leading-relaxed ${
+                                  isQuiz ? "text-blue-50" : "text-slate-600"
+                                }`}
+                              >
+                                {c.message}
+                              </p>
                             </div>
                           ))}
                         </div>
                       )}
 
-                      <form
-                        onSubmit={(e) => {
-                          e.preventDefault();
-                          handleAddPostComment(post._id);
-                        }}
-                        className="flex items-center gap-2"
-                      >
-                        <input
-                          type="text"
-                          placeholder="Tambahkan komentar kelas..."
-                          value={postCommentInput[post._id] || ""}
-                          onChange={(e) =>
-                            setPostCommentInput((prev) => ({
-                              ...prev,
-                              [post._id]: e.target.value,
-                            }))
-                          }
-                          className="flex-1 rounded-xl border border-slate-200 px-3 py-1.5 text-xs focus:border-blue-500 focus:outline-none"
-                        />
-                        <button
-                          type="submit"
-                          disabled={
-                            submittingCommentId === post._id ||
-                            !postCommentInput[post._id]?.trim()
-                          }
-                          className="rounded-xl bg-blue-600 p-2 text-white hover:bg-blue-700 disabled:opacity-50 transition"
+                      {!courseClass.isReadOnly ? (
+                        <form
+                          onSubmit={(e) => {
+                            e.preventDefault();
+                            handleAddPostComment(post._id);
+                          }}
+                          className="flex items-center gap-2"
                         >
-                          <Send className="size-3.5" />
-                        </button>
-                      </form>
+                          <input
+                            type="text"
+                            placeholder="Tambahkan komentar kelas..."
+                            value={postCommentInput[post._id] || ""}
+                            onChange={(e) =>
+                              setPostCommentInput((prev) => ({
+                                ...prev,
+                                [post._id]: e.target.value,
+                              }))
+                            }
+                            className={`flex-1 rounded-xl px-3 py-1.5 text-xs focus:outline-none ${
+                              isQuiz
+                                ? "bg-white/20 text-white placeholder-blue-200 border border-white/20 focus:border-white"
+                                : "border border-slate-200 focus:border-blue-500"
+                            }`}
+                          />
+                          <button
+                            type="submit"
+                            disabled={
+                              submittingCommentId === post._id ||
+                              !postCommentInput[post._id]?.trim()
+                            }
+                            className={`rounded-xl p-2 transition ${
+                              isQuiz
+                                ? "bg-white text-blue-600 hover:bg-blue-50 disabled:opacity-50"
+                                : "bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+                            }`}
+                          >
+                            <Send className="size-3.5" />
+                          </button>
+                        </form>
+                      ) : (
+                        <p
+                          className={`text-[11px] italic ${
+                            isQuiz ? "text-blue-200" : "text-slate-400"
+                          }`}
+                        >
+                          Komentar hanya dapat ditulis oleh Pengampu Kelas dan Siswa.
+                        </p>
+                      )}
                     </div>
                   )}
                 </div>
@@ -567,13 +661,15 @@ export default function GuruClassDetailPage({
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-bold text-slate-900">File yang dibagi</h3>
-              <button
-                type="button"
-                onClick={() => setAddFileModalOpen(true)}
-                className="text-xs font-semibold text-blue-600 hover:text-blue-700 transition"
-              >
-                + Tambah
-              </button>
+              {!courseClass.isReadOnly && (
+                <button
+                  type="button"
+                  onClick={() => setAddFileModalOpen(true)}
+                  className="text-xs font-semibold text-blue-600 hover:text-blue-700 transition"
+                >
+                  + Tambah
+                </button>
+              )}
             </div>
 
             <div className="space-y-2.5">
@@ -610,14 +706,16 @@ export default function GuruClassDetailPage({
                       >
                         <Download className="size-4" />
                       </a>
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteSharedFile(idx)}
-                        title="Hapus File"
-                        className="rounded-lg p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600 transition"
-                      >
-                        <Trash2 className="size-4" />
-                      </button>
+                      {!courseClass.isReadOnly && (
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteSharedFile(idx)}
+                          title="Hapus File"
+                          className="rounded-lg p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600 transition"
+                        >
+                          <Trash2 className="size-4" />
+                        </button>
+                      )}
                     </div>
                   </div>
                 ))
@@ -656,69 +754,71 @@ export default function GuruClassDetailPage({
         </div>
 
         {/* Speed-dial floating action menu for learning content */}
-        <div className="relative">
-          {plusMenuOpen && (
-            <div className="absolute right-0 bottom-16 flex flex-col gap-1.5 rounded-2xl border border-slate-200 bg-white p-2 shadow-2xl z-50 min-w-52 animate-in slide-in-from-bottom-2 fade-in">
-              <div className="px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400 border-b border-slate-100">
-                Tambah Konten
+        {!courseClass.isReadOnly && (
+          <div className="relative">
+            {plusMenuOpen && (
+              <div className="absolute right-0 bottom-16 flex flex-col gap-1.5 rounded-2xl border border-slate-200 bg-white p-2 shadow-2xl z-50 min-w-52 animate-in slide-in-from-bottom-2 fade-in">
+                <div className="px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400 border-b border-slate-100">
+                  Tambah Konten
+                </div>
+                <Link
+                  href={`/guru/assignments/new?classId=${courseClass._id}`}
+                  onClick={() => setPlusMenuOpen(false)}
+                  className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-blue-50 hover:text-blue-600 transition"
+                >
+                  <div className="flex size-7 items-center justify-center rounded-lg bg-blue-100 text-blue-600 shrink-0">
+                    <FileText className="size-4" />
+                  </div>
+                  <div>
+                    <p className="font-bold text-slate-900 leading-tight">Buat Tugas</p>
+                    <p className="text-[10px] text-slate-400 font-normal">Penugasan materi / latihan</p>
+                  </div>
+                </Link>
+
+                <Link
+                  href={`/guru/quizzes/new?classId=${courseClass._id}`}
+                  onClick={() => setPlusMenuOpen(false)}
+                  className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 transition"
+                >
+                  <div className="flex size-7 items-center justify-center rounded-lg bg-indigo-100 text-indigo-600 shrink-0">
+                    <HelpCircle className="size-4" />
+                  </div>
+                  <div>
+                    <p className="font-bold text-slate-900 leading-tight">Buat Kuis</p>
+                    <p className="text-[10px] text-slate-400 font-normal">Pilihan ganda & evaluasi</p>
+                  </div>
+                </Link>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPlusMenuOpen(false);
+                    setAddFileModalOpen(true);
+                  }}
+                  className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-emerald-50 hover:text-emerald-600 transition text-left"
+                >
+                  <div className="flex size-7 items-center justify-center rounded-lg bg-emerald-100 text-emerald-600 shrink-0">
+                    <Plus className="size-4" />
+                  </div>
+                  <div>
+                    <p className="font-bold text-slate-900 leading-tight">Upload File / Materi</p>
+                    <p className="text-[10px] text-slate-400 font-normal">Bagikan dokumen ke kelas</p>
+                  </div>
+                </button>
               </div>
-              <Link
-                href={`/guru/assignments/new?classId=${courseClass._id}`}
-                onClick={() => setPlusMenuOpen(false)}
-                className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-blue-50 hover:text-blue-600 transition"
-              >
-                <div className="flex size-7 items-center justify-center rounded-lg bg-blue-100 text-blue-600 shrink-0">
-                  <FileText className="size-4" />
-                </div>
-                <div>
-                  <p className="font-bold text-slate-900 leading-tight">Buat Tugas</p>
-                  <p className="text-[10px] text-slate-400 font-normal">Penugasan materi / latihan</p>
-                </div>
-              </Link>
+            )}
 
-              <Link
-                href={`/guru/quizzes/new?classId=${courseClass._id}`}
-                onClick={() => setPlusMenuOpen(false)}
-                className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 transition"
-              >
-                <div className="flex size-7 items-center justify-center rounded-lg bg-indigo-100 text-indigo-600 shrink-0">
-                  <HelpCircle className="size-4" />
-                </div>
-                <div>
-                  <p className="font-bold text-slate-900 leading-tight">Buat Kuis</p>
-                  <p className="text-[10px] text-slate-400 font-normal">Pilihan ganda & evaluasi</p>
-                </div>
-              </Link>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setPlusMenuOpen(false);
-                  setAddFileModalOpen(true);
-                }}
-                className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-emerald-50 hover:text-emerald-600 transition text-left"
-              >
-                <div className="flex size-7 items-center justify-center rounded-lg bg-emerald-100 text-emerald-600 shrink-0">
-                  <Plus className="size-4" />
-                </div>
-                <div>
-                  <p className="font-bold text-slate-900 leading-tight">Upload File / Materi</p>
-                  <p className="text-[10px] text-slate-400 font-normal">Bagikan dokumen ke kelas</p>
-                </div>
-              </button>
-            </div>
-          )}
-
-          {/* Circular Blue "+" Button */}
-          <button
-            type="button"
-            onClick={() => setPlusMenuOpen((prev) => !prev)}
-            title="Tambah Konten Pembelajaran"
-            className="flex size-12 items-center justify-center rounded-full bg-blue-600 text-white shadow-lg transition-transform hover:scale-105 hover:bg-blue-700 active:scale-95"
-          >
-            <Plus className={`size-6 transition-transform duration-200 ${plusMenuOpen ? "rotate-45" : ""}`} />
-          </button>
-        </div>
+            {/* Circular Blue "+" Button */}
+            <button
+              type="button"
+              onClick={() => setPlusMenuOpen((prev) => !prev)}
+              title="Tambah Konten Pembelajaran"
+              className="flex size-12 items-center justify-center rounded-full bg-blue-600 text-white shadow-lg transition-transform hover:scale-105 hover:bg-blue-700 active:scale-95"
+            >
+              <Plus className={`size-6 transition-transform duration-200 ${plusMenuOpen ? "rotate-45" : ""}`} />
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Modal: Tambah File */}

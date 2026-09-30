@@ -8,7 +8,7 @@ type RouteContext = {
 };
 
 export async function GET(_req: Request, context: RouteContext) {
-  const { session, error } = await requireRole(["guru", "admin"]);
+  const { session, error } = await requireRole(["guru", "admin", "kurikulum", "kepsek"]);
   if (error || !session) return error;
 
   try {
@@ -49,6 +49,8 @@ export async function GET(_req: Request, context: RouteContext) {
       data: {
         ...courseClass.toObject(),
         assignments,
+        currentUserRole: session.role,
+        isReadOnly: ["admin", "kurikulum", "kepsek"].includes(session.role),
       },
     });
   } catch (err: unknown) {

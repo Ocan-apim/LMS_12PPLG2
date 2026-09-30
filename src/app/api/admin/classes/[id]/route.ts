@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import { requireRole } from "@/lib/session";
-import { ClassModel, User } from "@/models";
+import { ClassModel, User, CourseClass } from "@/models";
 
 type RouteContext = {
   params: Promise<{ id: string }>;
@@ -24,7 +24,18 @@ export async function GET(_req: Request, context: RouteContext) {
       return NextResponse.json({ success: false, message: "Kelas tidak ditemukan" }, { status: 404 });
     }
 
-    return NextResponse.json({ success: true, data: cls });
+    const courseClasses = await CourseClass.find({ classRombelId: id, isActive: true })
+      .populate("teacherId", "name nip degree email")
+      .populate("subjectId", "name code")
+      .lean();
+
+    return NextResponse.json({
+      success: true,
+      data: {
+        ...cls.toObject(),
+        courseClasses,
+      },
+    });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Terjadi kesalahan";
     return NextResponse.json({ success: false, message }, { status: 500 });

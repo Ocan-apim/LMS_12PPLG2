@@ -18,6 +18,8 @@ import {
   ShieldAlert,
   Play,
   RotateCcw,
+  Info,
+  Eye,
 } from "lucide-react";
 import { FooterBar } from "@/components/student/StudentDashboardComponents";
 
@@ -56,6 +58,8 @@ interface QuizData {
     name: string;
     bannerColor: string;
   };
+  isStaffView?: boolean;
+  currentUserRole?: string;
   isStarted: boolean;
   startedAt?: string | null;
   remainingSeconds: number;
@@ -106,14 +110,22 @@ export default function SiswaQuizTakePage({ params }: PageProps) {
         const qData: QuizData = data.data;
         setQuiz(qData);
 
-        if (qData.isCompleted && qData.result) {
+        if (qData.result) {
           setResult(qData.result);
+        }
+
+        const searchParams = new URLSearchParams(window.location.search);
+        const viewParam = searchParams.get("view") || searchParams.get("tab");
+        const modeParam = searchParams.get("mode");
+
+        if (viewParam === "result" && qData.isCompleted) {
           setViewMode("result");
-        } else if (qData.isStarted && qData.remainingSeconds > 0) {
+        } else if (modeParam === "take" && qData.isStarted && qData.remainingSeconds > 0) {
           setTimeLeft(qData.remainingSeconds);
           setViewMode("taking");
         } else {
-          setTimeLeft(qData.durationSeconds || 60);
+          // Always default to Quiz Detail (intro) view
+          setTimeLeft(qData.remainingSeconds || qData.durationSeconds || 60);
           setViewMode("intro");
         }
       } else {
@@ -379,13 +391,62 @@ export default function SiswaQuizTakePage({ params }: PageProps) {
             </div>
 
             <div className="mt-8 border-t border-slate-100 pt-6">
-              <button
-                onClick={handleStartQuiz}
-                className="inline-flex items-center gap-2 rounded-xl bg-[#674ce7] px-8 py-3.5 text-sm font-bold text-white shadow-sm transition hover:bg-[#563cd6] hover:shadow-md"
-              >
-                <Play className="size-4 fill-white" />
-                Mulai Kerjakan Kuis Sekarang
-              </button>
+              {quiz.isStaffView ? (
+                <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-center">
+                  <p className="text-xs font-bold text-amber-800">
+                    Mode Pratinjau Staf ({quiz.currentUserRole?.toUpperCase()})
+                  </p>
+                  <p className="mt-1 text-xs text-amber-600">
+                    Anda melihat detail kuis ini dalam mode pratinjau baca-saja. Pengerjaan kuis hanya dapat dilakukan oleh akun Siswa.
+                  </p>
+                </div>
+              ) : quiz.isCompleted ? (
+                <div className="space-y-4">
+                  <div className="rounded-xl border border-emerald-200 bg-[#f4fbf8] p-4 text-center">
+                    <p className="text-xs font-extrabold text-[#00796f] uppercase tracking-wider">
+                      Status: Sudah Dikerjakan
+                    </p>
+                    {result && (
+                      <p className="mt-1 text-sm font-bold text-slate-800">
+                        Nilai Akhir: <span className="text-[#00796f] font-extrabold">{result.score}</span> / {result.maxScore || 100} &bull; Benar: {result.correctCount} &bull; Salah: {result.incorrectCount}
+                      </p>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => setViewMode("result")}
+                    className="inline-flex items-center gap-2 rounded-xl bg-[#00796f] px-8 py-3.5 text-sm font-bold text-white shadow-sm transition hover:bg-[#00655d] hover:shadow-md"
+                  >
+                    <Award className="size-4" />
+                    Lihat Hasil Evaluasi Kuis
+                  </button>
+                </div>
+              ) : quiz.isStarted && timeLeft > 0 ? (
+                <div className="space-y-4">
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-center">
+                    <p className="text-xs font-extrabold text-amber-800 uppercase tracking-wider">
+                      Kuis Sedang Berlangsung
+                    </p>
+                    <p className="mt-1 text-sm font-bold text-amber-900">
+                      Sisa waktu pengerjaan: {formatTime(timeLeft)}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setViewMode("taking")}
+                    className="inline-flex items-center gap-2 rounded-xl bg-amber-600 px-8 py-3.5 text-sm font-bold text-white shadow-sm transition hover:bg-amber-700 hover:shadow-md"
+                  >
+                    <Play className="size-4 fill-white" />
+                    Lanjutkan Mengerjakan Kuis
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={handleStartQuiz}
+                  className="inline-flex items-center gap-2 rounded-xl bg-[#674ce7] px-8 py-3.5 text-sm font-bold text-white shadow-sm transition hover:bg-[#563cd6] hover:shadow-md"
+                >
+                  <Play className="size-4 fill-white" />
+                  Mulai Kerjakan Kuis Sekarang
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -662,6 +723,13 @@ export default function SiswaQuizTakePage({ params }: PageProps) {
 
             {/* Action Buttons */}
             <div className="mt-8 flex flex-wrap items-center justify-center gap-3 border-t border-slate-100 pt-6">
+              <button
+                onClick={() => setViewMode("intro")}
+                className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-6 py-2.5 text-xs font-bold text-slate-700 shadow-sm transition hover:bg-slate-50 hover:text-[#674ce7]"
+              >
+                <Info className="size-4" />
+                Lihat Detail Kuis
+              </button>
               <Link
                 href="/siswa/assignments"
                 className="inline-flex items-center gap-2 rounded-xl bg-[#674ce7] px-6 py-2.5 text-xs font-bold text-white shadow-sm transition hover:bg-[#563cd6]"

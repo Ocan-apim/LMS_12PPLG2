@@ -3,7 +3,7 @@
 import { use } from "react";
 import { SharedClassDetail } from "@/components/class/SharedClassDetail";
 
-export default function SiswaCourseDetailPage({
+export default function KepsekClassDetailPage({
   params,
 }: {
   params: Promise<{ id: string }>;
@@ -13,10 +13,10 @@ export default function SiswaCourseDetailPage({
   return (
     <SharedClassDetail
       classId={id}
-      mode="student"
-      role="siswa"
-      backHref="/siswa/courses"
-      backLabel="Mata Pelajaran"
+      mode="readonly"
+      role="kepsek"
+      backHref="/kepsek/teachers"
+      backLabel="Monitor Guru"
     />
   );
 }

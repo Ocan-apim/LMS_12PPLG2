@@ -71,48 +71,55 @@ export async function POST(req: Request) {
       );
     }
 
-    if (session.role === "guru" && courseClass.teacherId.toString() !== session.id) {
+    if (session.role !== "guru") {
       return NextResponse.json(
-        { success: false, message: "Akses ditolak: Anda bukan pengampu kelas ini" },
+        { success: false, message: "Akses ditolak: Hanya guru yang dapat membuat kuis" },
         { status: 403 }
+      );
+    }
+
+    const sanitizedQuestions = (Array.isArray(questions) ? questions : []).map((q: any, idx: number) => {
+      const qText = String(q?.question || q?.prompt || `Pertanyaan ${idx + 1}`).trim();
+      return {
+        id: String(q?.id || `q-${idx + 1}-${Date.now()}`),
+        question: qText || `Pertanyaan ${idx + 1}`,
+        type: q?.type === "essay" ? "essay" : "pilihan_ganda",
+        imageUrl: q?.imageUrl ? String(q.imageUrl) : undefined,
+        options: Array.isArray(q?.options) ? q.options.map((o: any) => String(o || "").trim()) : [],
+        correctAnswer: q?.correctAnswer !== undefined && q?.correctAnswer !== "" ? q.correctAnswer : 0,
+        points: Number(q?.points) || 10,
+      };
+    });
+
+    if (sanitizedQuestions.length === 0) {
+      return NextResponse.json(
+        { success: false, message: "Kuis wajib memiliki minimal 1 pertanyaan" },
+        { status: 400 }
       );
     }
 
     const quiz = await Quiz.create({
       title: title.trim(),
+      description: body.description ? String(body.description).trim() : undefined,
       teacherId: session.id,
       courseClassId,
       durationSeconds: Number(durationSeconds) || 60,
-      questions: Array.isArray(questions) ? questions : [],
+      questions: sanitizedQuestions,
       totalPoints: Number(totalPoints) || 100,
+      dueDate: dueDate ? new Date(dueDate) : undefined,
       isPublished: true,
     });
 
-    // Optionally publish as assignment in this class
-    if (publishAsAssignment !== false) {
-      const newAssignment = await Assignment.create({
-        title: `Kuis: ${title.trim()}`,
-        instructions: `Kerjakan kuis dengan cermat. Durasi: ${durationSeconds || 60} detik per soal.`,
-        type: "kuis",
-        courseClassId,
-        teacherId: session.id,
-        quizId: quiz._id,
-        dueDate: dueDate ? new Date(dueDate) : new Date(Date.now() + 7 * 24 * 3600 * 1000),
-        maxScore: Number(totalPoints) || 100,
-        isPublished: true,
-      });
-
-      // Post in class stream
-      await ClassPost.create({
-        courseClassId,
-        teacherId: session.id,
-        type: "quiz",
-        title: `Anda memulai Quiz: ${title.trim()}!`,
-        content: `${questions?.length || 0} Soal • Poin Total: ${totalPoints || 100}`,
-        refId: newAssignment._id,
-        comments: [],
-      });
-    }
+    // Post to class stream directly referencing the Quiz
+    await ClassPost.create({
+      courseClassId,
+      teacherId: session.id,
+      type: "quiz",
+      title: `Ulangan Harian: ${title.trim()}`,
+      content: `${sanitizedQuestions.length} Soal • Poin Total: ${Number(totalPoints) || 100}`,
+      refId: quiz._id,
+      comments: [],
+    });
 
     return NextResponse.json({ success: true, data: quiz }, { status: 201 });
   } catch (err: unknown) {

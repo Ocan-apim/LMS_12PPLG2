@@ -7,19 +7,21 @@ import type { Role } from "@/types";
 
 type RoleLayoutProps = {
   role: Role;
+  allowedRoles?: Role[];
   children: ReactNode;
 };
 
-export async function RoleLayout({ role, children }: RoleLayoutProps) {
+export async function RoleLayout({ role, allowedRoles, children }: RoleLayoutProps) {
   const session = await getSession();
 
   if (!session) {
     redirect("/login");
   }
 
-  if (session.role !== role) {
+  const validRoles = allowedRoles || [role];
+  if (!validRoles.includes(session.role)) {
     redirect(ROLE_DASHBOARD[session.role]);
   }
 
-  return <RoleShell role={role} user={session}>{children}</RoleShell>;
+  return <RoleShell role={session.role} user={session}>{children}</RoleShell>;
 }

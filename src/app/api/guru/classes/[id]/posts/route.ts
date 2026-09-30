@@ -8,7 +8,7 @@ type RouteContext = {
 };
 
 export async function GET(_req: Request, context: RouteContext) {
-  const { session, error } = await requireRole(["guru", "admin", "siswa"]);
+  const { session, error } = await requireRole(["guru", "admin", "siswa", "kurikulum", "kepsek"]);
   if (error || !session) return error;
 
   try {
@@ -28,6 +28,18 @@ export async function GET(_req: Request, context: RouteContext) {
         { success: false, message: "Akses ditolak: Anda bukan pengampu kelas ini" },
         { status: 403 }
       );
+    }
+
+    if (session.role === "siswa") {
+      const studentIds = Array.isArray(courseClass.studentIds)
+        ? courseClass.studentIds.map((s: unknown) => String(s))
+        : [];
+      if (!studentIds.includes(session.id)) {
+        return NextResponse.json(
+          { success: false, message: "Akses ditolak: Anda belum terdaftar di kelas ini" },
+          { status: 403 }
+        );
+      }
     }
 
     const posts = await ClassPost.find({ courseClassId: id })
@@ -42,7 +54,7 @@ export async function GET(_req: Request, context: RouteContext) {
 }
 
 export async function POST(req: Request, context: RouteContext) {
-  const { session, error } = await requireRole(["guru", "admin", "siswa"]);
+  const { session, error } = await requireRole(["guru", "siswa"]);
   if (error || !session) return error;
 
   try {
@@ -63,14 +75,42 @@ export async function POST(req: Request, context: RouteContext) {
         { status: 403 }
       );
     }
+
+    if (session.role === "siswa") {
+      const studentIds = Array.isArray(courseClass.studentIds)
+        ? courseClass.studentIds.map((s: unknown) => String(s))
+        : [];
+      if (!studentIds.includes(session.id)) {
+        return NextResponse.json(
+          { success: false, message: "Akses ditolak: Anda belum terdaftar di kelas ini" },
+          { status: 403 }
+        );
+      }
+    }
     const body = await req.json();
 
     const { action, title, content, postId, message } = body;
 
-    // Action: Add comment to existing post
-    if (action === "comment" && postId && message) {
+    // Action: Add comment to post or general class discussion
+    if (action === "comment" && message) {
+      let targetPostId = postId;
+      if (!targetPostId || targetPostId === "general") {
+        let targetPost = await ClassPost.findOne({ courseClassId: id }).sort({ createdAt: -1 });
+        if (!targetPost) {
+          targetPost = await ClassPost.create({
+            courseClassId: id,
+            teacherId: courseClass.teacherId,
+            type: "announcement",
+            title: `Forum Diskusi Kelas ${courseClass.name}`,
+            content: "Ruang diskusi dan komentar untuk kelas ini.",
+            comments: [],
+          });
+        }
+        targetPostId = targetPost._id;
+      }
+
       const updated = await ClassPost.findByIdAndUpdate(
-        postId,
+        targetPostId,
         {
           $push: {
             comments: {
