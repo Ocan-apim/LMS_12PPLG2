@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import { requireRole } from "@/lib/session";
-import { Assignment, CourseClass, Submission } from "@/models";
+import { Assignment, CourseClass, Submission, User } from "@/models";
 
 export async function GET(req: Request) {
   const { session, error } = await requireRole(["siswa"]);
@@ -13,17 +13,26 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
     const filterTab = searchParams.get("tab"); // "all", "active", "late", "completed"
 
-    // 1. Get all active course classes the student has joined
+    const studentUser: any = await User.findById(session.id).select("classId").lean();
+    const studentRombelId = studentUser?.classId;
+
+    // 1. Get all active course classes the student has joined or belongs to by rombel
     const joinedClasses = await CourseClass.find({
-      studentIds: session.id,
-      isArchived: { $ne: true },
+      isActive: true,
+      $or: [
+        { studentIds: session.id },
+        ...(studentRombelId ? [{ classRombelId: studentRombelId }, { assignedRombelIds: studentRombelId }] : []),
+      ],
     })
-      .select("_id name bannerColor subjectId teacherId")
+      .select("_id name bannerColor subjectId teacherId classRombelId")
       .populate("subjectId", "name code category")
       .populate("teacherId", "name email title")
       .lean();
 
     const joinedClassIds = joinedClasses.map((c) => c._id);
+    const joinedRombelIds = joinedClasses
+      .map((c: any) => c.classRombelId)
+      .filter(Boolean);
 
     if (joinedClassIds.length === 0) {
       return NextResponse.json({
@@ -42,7 +51,10 @@ export async function GET(req: Request) {
 
     // 2. Fetch all published assignments for these classes
     const assignments = await Assignment.find({
-      courseClassId: { $in: joinedClassIds },
+      $or: [
+        { courseClassId: { $in: joinedClassIds } },
+        ...(joinedRombelIds.length > 0 ? [{ classId: { $in: joinedRombelIds } }] : []),
+      ],
       isArchived: { $ne: true },
       isPublished: true,
     })
@@ -199,6 +211,12 @@ export async function GET(req: Request) {
           },
         },
         assignments: filteredList,
+      },
+    }, {
+      headers: {
+        "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+        Pragma: "no-cache",
+        Expires: "0",
       },
     });
   } catch (err: unknown) {

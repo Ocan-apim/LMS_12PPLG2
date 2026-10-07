@@ -25,10 +25,15 @@ export type SubjectCardData = {
   title: string;
   teacher: string;
   category: string;
-  progress: number;
+  progress?: number;
   tone?: "purple" | "green" | "orange" | "blue" | "gold";
   bannerColor?: string;
   avatars?: number;
+  classNameSubtitle?: string;
+  assignmentCount?: number;
+  quizCount?: number;
+  customHref?: string;
+  actionLabel?: string;
 };
 
 const toneMap: Record<string, string> = {
@@ -349,7 +354,17 @@ export function FilterControls({
   );
 }
 
-export function SubjectCourseCard({ course }: { course: SubjectCardData }) {
+export function SubjectCourseCard({
+  course,
+  customHref,
+  actionLabel,
+  onSelect,
+}: {
+  course: SubjectCardData;
+  customHref?: string;
+  actionLabel?: string;
+  onSelect?: () => void;
+}) {
   const toneKey = (course.tone || course.bannerColor || "blue") as string;
   const gradient = toneMap[toneKey] || toneMap.blue;
 
@@ -367,13 +382,32 @@ export function SubjectCourseCard({ course }: { course: SubjectCardData }) {
             <UserRound className="size-3.5" />
             {course.teacher}
           </p>
-          <div className="mt-7 flex items-center justify-between text-[10px] font-extrabold uppercase tracking-wide text-slate-500">
-            <span>Progress Tugas</span>
-            <span className="text-[#674ce7]">{course.progress}%</span>
-          </div>
-          <div className="mt-2">
-            <SmoothProgress value={course.progress} />
-          </div>
+          {course.classNameSubtitle && (
+            <p className="mt-1 text-xs text-slate-400 font-medium">
+              {course.classNameSubtitle}
+            </p>
+          )}
+
+          {course.progress !== undefined ? (
+            <>
+              <div className="mt-7 flex items-center justify-between text-[10px] font-extrabold uppercase tracking-wide text-slate-500">
+                <span>Progress Tugas</span>
+                <span className="text-[#674ce7]">{course.progress}%</span>
+              </div>
+              <div className="mt-2">
+                <SmoothProgress value={course.progress} />
+              </div>
+            </>
+          ) : (
+            <div className="mt-6 flex items-center gap-2 text-xs font-bold">
+              <span className="rounded-lg bg-slate-100 px-2.5 py-1 text-slate-700">
+                {course.assignmentCount ?? 0} Tugas
+              </span>
+              <span className="rounded-lg bg-blue-50 px-2.5 py-1 text-blue-700">
+                {course.quizCount ?? 0} Kuis
+              </span>
+            </div>
+          )}
         </div>
       </div>
       <div className="p-5 pt-0">
@@ -386,12 +420,22 @@ export function SubjectCourseCard({ course }: { course: SubjectCardData }) {
               +{course.avatars ?? 12}
             </span>
           </div>
-          <Link
-            href={course._id ? `/siswa/courses/${course._id}` : "#"}
-            className="rounded-md border border-[#ded4ff] bg-[#fbf8ff] px-5 py-2 text-xs font-semibold text-[#674ce7] transition duration-300 hover:-translate-y-0.5 hover:bg-[#eee9ff]"
-          >
-            Enter Class
-          </Link>
+          {onSelect ? (
+            <button
+              type="button"
+              onClick={onSelect}
+              className="rounded-md border border-[#ded4ff] bg-[#fbf8ff] px-5 py-2 text-xs font-semibold text-[#674ce7] transition duration-300 hover:-translate-y-0.5 hover:bg-[#eee9ff] cursor-pointer"
+            >
+              {actionLabel || course.actionLabel || "Buka Mapel"}
+            </button>
+          ) : (
+            <Link
+              href={customHref || course.customHref || (course._id ? `/siswa/courses/${course._id}` : "#")}
+              className="rounded-md border border-[#ded4ff] bg-[#fbf8ff] px-5 py-2 text-xs font-semibold text-[#674ce7] transition duration-300 hover:-translate-y-0.5 hover:bg-[#eee9ff]"
+            >
+              {actionLabel || course.actionLabel || "Enter Class"}
+            </Link>
+          )}
         </div>
       </div>
     </article>

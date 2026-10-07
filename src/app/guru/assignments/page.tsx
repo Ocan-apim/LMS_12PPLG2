@@ -703,7 +703,7 @@ export default function GuruAssignmentsPage() {
                 <AlertCircle className="size-5" />
               </div>
               <div>
-                <h3 className="font-bold text-slate-900 text-sm">Hapus Tugas Ini?</h3>
+                <h3 className="font-bold text-slate-900 text-sm">Yakin ingin menghapus tugas?</h3>
                 <p className="text-xs text-slate-500 line-clamp-1">
                   {deleteTarget.title}
                 </p>
@@ -711,7 +711,7 @@ export default function GuruAssignmentsPage() {
             </div>
 
             <p className="text-xs text-slate-500 leading-relaxed">
-              Tindakan ini akan menghapus tugas beserta data riwayat pengumpulan siswa terkait. Tindakan ini tidak dapat dibatalkan.
+              Tugas yang dihapus tidak dapat dipulihkan.
             </p>
 
             <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
@@ -729,7 +729,7 @@ export default function GuruAssignmentsPage() {
                 onClick={handleDeleteConfirm}
                 className="rounded-xl bg-red-600 px-4 py-2 text-xs font-semibold text-white hover:bg-red-700 disabled:opacity-50"
               >
-                {deleting ? "Menghapus..." : "Ya, Hapus"}
+                {deleting ? "Menghapus..." : "Hapus"}
               </button>
             </div>
           </div>

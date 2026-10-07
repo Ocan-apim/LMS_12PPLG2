@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { connectDB } from "@/lib/mongodb";
 import { requireRole } from "@/lib/session";
-import { User, ClassModel } from "@/models";
+import { User, ClassModel, CourseClass } from "@/models";
 
 export async function GET(req: Request) {
   const { error } = await requireRole("admin");
@@ -159,11 +159,20 @@ export async function POST(req: Request) {
       isActive: true,
     });
 
-    // If classId provided, add student to ClassModel
+    // If classId provided, add student to ClassModel and sync to existing CourseClass
     if (classId) {
       await ClassModel.findByIdAndUpdate(classId, {
         $addToSet: { studentIds: student._id },
       });
+      await CourseClass.updateMany(
+        {
+          $or: [
+            { classRombelId: classId },
+            { assignedRombelIds: classId },
+          ],
+        },
+        { $addToSet: { studentIds: student._id } }
+      );
     }
 
     const populated = await User.findById(student._id)

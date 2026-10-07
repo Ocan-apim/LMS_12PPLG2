@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import { requireRole } from "@/lib/session";
-import { CourseClass, User, Assignment } from "@/models";
+import { CourseClass, User, Assignment, ClassPost } from "@/models";
 
 type RouteContext = {
   params: Promise<{ id: string }>;
@@ -131,8 +131,9 @@ export async function DELETE(_req: Request, context: RouteContext) {
     // Soft-delete / archive to preserve student academic records
     await CourseClass.findByIdAndUpdate(id, { isActive: false });
     await Assignment.updateMany({ courseClassId: id }, { isArchived: true, isPublished: false });
+    await ClassPost.deleteMany({ courseClassId: id });
 
-    return NextResponse.json({ success: true, message: "Kelas berhasil diarsipkan" });
+    return NextResponse.json({ success: true, message: "Kelas berhasil dihapus" });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Gagal menghapus kelas";
     return NextResponse.json({ success: false, message }, { status: 500 });

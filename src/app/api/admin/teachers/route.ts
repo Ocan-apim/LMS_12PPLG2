@@ -127,7 +127,7 @@ export async function POST(req: Request) {
 
     if (Array.isArray(subjects) && subjects.length > 2) {
       return NextResponse.json(
-        { success: false, message: "Maksimal penugasan 2 mata pelajaran untuk 1 guru" },
+        { success: false, message: "Guru hanya dapat mengajar maksimal 2 mata pelajaran." },
         { status: 400 }
       );
     }

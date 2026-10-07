@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import { requireRole } from "@/lib/session";
-import { Assignment, CourseClass, Submission } from "@/models";
+import { Assignment, CourseClass, Submission, User } from "@/models";
 
 type RouteContext = {
   params: Promise<{ id: string }>;
@@ -33,15 +33,44 @@ export async function POST(req: Request, context: RouteContext) {
     }
 
     const courseClass = await CourseClass.findById(assignment.courseClassId);
-    if (
-      !courseClass ||
-      !Array.isArray(courseClass.studentIds) ||
-      !courseClass.studentIds.map((sid: any) => sid.toString()).includes(session.id)
-    ) {
+    if (!courseClass) {
+      return NextResponse.json(
+        { success: false, message: "Kelas tidak ditemukan" },
+        { status: 404 }
+      );
+    }
+
+    const studentUser: any = await User.findById(session.id).select("classId").lean();
+    const studentRombelId = studentUser?.classId ? String(studentUser.classId) : null;
+    const classRombelIdStr = courseClass.classRombelId
+      ? String(courseClass.classRombelId._id || courseClass.classRombelId)
+      : assignment.classId
+      ? String(assignment.classId._id || assignment.classId)
+      : null;
+    const assignedRombelIdStrs = Array.isArray(courseClass.assignedRombelIds)
+      ? courseClass.assignedRombelIds.map((r: any) => String(r._id || r))
+      : [];
+
+    const isMemberByRombel =
+      Boolean(studentRombelId) &&
+      (studentRombelId === classRombelIdStr || assignedRombelIdStrs.includes(studentRombelId));
+
+    const isEnrolled =
+      Array.isArray(courseClass.studentIds) &&
+      courseClass.studentIds.map((sid: any) => sid.toString()).includes(session.id);
+
+    if (!isEnrolled && !isMemberByRombel) {
       return NextResponse.json(
         { success: false, message: "Akses ditolak: Anda tidak terdaftar di kelas tugas ini" },
         { status: 403 }
       );
+    }
+
+    // Ensure student is in courseClass.studentIds
+    if (!isEnrolled && isMemberByRombel) {
+      await CourseClass.findByIdAndUpdate(courseClass._id, {
+        $addToSet: { studentIds: session.id },
+      });
     }
 
     // 3. Parse and Validate Request Body

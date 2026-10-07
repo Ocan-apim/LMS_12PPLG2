@@ -157,10 +157,22 @@ export async function DELETE(_req: Request, context: RouteContext) {
       isPublished: false,
     });
 
-    return NextResponse.json({
-      success: true,
-      message: "Tugas berhasil diarsipkan",
-    });
+    // Remove post from class stream
+    await ClassPost.deleteMany({ refId: id });
+
+    return NextResponse.json(
+      {
+        success: true,
+        message: "Tugas berhasil dihapus",
+      },
+      {
+        headers: {
+          "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+          Pragma: "no-cache",
+          Expires: "0",
+        },
+      }
+    );
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Gagal menghapus tugas";
     return NextResponse.json({ success: false, message }, { status: 500 });

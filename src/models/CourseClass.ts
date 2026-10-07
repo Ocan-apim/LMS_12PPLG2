@@ -5,7 +5,9 @@ export interface ICourseClass {
   code: string; // e.g. "QRV26", "87GH2"
   password: string; // e.g. "basisdata123"
   teacherId: mongoose.Types.ObjectId;
+  description?: string;
   classRombelId?: mongoose.Types.ObjectId; // e.g. 10 PPLG 1
+  assignedRombelIds?: mongoose.Types.ObjectId[]; // e.g. [10 PPLG 1, 11 PPLG 2]
   subjectId?: mongoose.Types.ObjectId;
   academicYear: string;
   bannerColor: string;
@@ -28,7 +30,9 @@ const CourseClassSchema = new Schema<ICourseClass>(
     code: { type: String, required: true, unique: true, uppercase: true, trim: true },
     password: { type: String, required: true, trim: true },
     teacherId: { type: Schema.Types.ObjectId, ref: "User", required: true },
+    description: { type: String, trim: true },
     classRombelId: { type: Schema.Types.ObjectId, ref: "Class" },
+    assignedRombelIds: [{ type: Schema.Types.ObjectId, ref: "Class" }],
     subjectId: { type: Schema.Types.ObjectId, ref: "Subject" },
     academicYear: { type: String, default: "2024/2025 - Genap" },
     bannerColor: { type: String, default: "blue" },
@@ -49,6 +53,8 @@ const CourseClassSchema = new Schema<ICourseClass>(
 
 CourseClassSchema.index({ teacherId: 1, isActive: 1 });
 CourseClassSchema.index({ studentIds: 1, isActive: 1 });
+CourseClassSchema.index({ classRombelId: 1, isActive: 1 });
+CourseClassSchema.index({ assignedRombelIds: 1, isActive: 1 });
 
 export const CourseClass =
   models.CourseClass || model<ICourseClass>("CourseClass", CourseClassSchema);

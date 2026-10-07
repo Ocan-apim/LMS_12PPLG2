@@ -8,12 +8,15 @@ type RouteContext = {
 };
 
 export async function GET(_req: Request, context: RouteContext) {
-  const { session, error } = await requireRole(["siswa"]);
+  const { session, error } = await requireRole(["siswa", "guru", "admin", "kurikulum", "kepsek"]);
   if (error || !session) return error;
 
   try {
     const { id } = await context.params;
     await connectDB();
+
+    const isStudent = session.role === "siswa";
+    const isStaff = ["guru", "admin", "kurikulum", "kepsek"].includes(session.role);
 
     // 1. Fetch assignment
     const assignment: any = await Assignment.findById(id)
@@ -29,24 +32,29 @@ export async function GET(_req: Request, context: RouteContext) {
       );
     }
 
-    // 2. Security Check: Enforce class membership
+    // 2. Security Check: Enforce class membership only for students
     const courseClass = assignment.courseClassId as any;
-    if (
-      !courseClass ||
-      !Array.isArray(courseClass.studentIds) ||
-      !courseClass.studentIds.map((sid: any) => sid.toString()).includes(session.id)
-    ) {
-      return NextResponse.json(
-        { success: false, message: "Akses ditolak: Anda tidak terdaftar di kelas tugas ini" },
-        { status: 403 }
-      );
+    if (isStudent) {
+      if (
+        !courseClass ||
+        !Array.isArray(courseClass.studentIds) ||
+        !courseClass.studentIds.map((sid: any) => sid.toString()).includes(session.id)
+      ) {
+        return NextResponse.json(
+          { success: false, message: "Akses ditolak: Anda tidak terdaftar di kelas tugas ini" },
+          { status: 403 }
+        );
+      }
     }
 
     // 3. Fetch student's own submission (strictly isolated by session.id)
-    const studentSubmission: any = await Submission.findOne({
-      assignmentId: id,
-      studentId: session.id,
-    }).lean();
+    let studentSubmission: any = null;
+    if (isStudent) {
+      studentSubmission = await Submission.findOne({
+        assignmentId: id,
+        studentId: session.id,
+      }).lean();
+    }
 
     // 4. Calculate submission status
     const now = new Date();
@@ -109,6 +117,8 @@ export async function GET(_req: Request, context: RouteContext) {
             }
           : null,
         comments,
+        isStaffView: isStaff,
+        currentUserRole: session.role,
       },
     });
   } catch (err: unknown) {

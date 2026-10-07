@@ -16,6 +16,10 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  KeyRound,
+  LogIn,
+  CheckCircle2,
+  AlertCircle,
 } from "lucide-react";
 import { Button, Spinner } from "@/components/ui";
 
@@ -142,7 +146,7 @@ export default function AdminTeachersPage() {
       return;
     }
     if (editForm.selectedSubjectIds.length > 2) {
-      setEditError("Maksimal 2 mata pelajaran yang dapat di-assign per guru");
+      setEditError("Guru hanya dapat mengajar maksimal 2 mata pelajaran.");
       return;
     }
 
@@ -171,6 +175,67 @@ export default function AdminTeachersPage() {
       setEditError("Terjadi kesalahan sistem saat menyimpan perubahan");
     } finally {
       setSavingEdit(false);
+    }
+  }
+
+  // Manage Password Modal State
+  const [managePasswordTeacher, setManagePasswordTeacher] = useState<TeacherItem | null>(null);
+  const [newPassword, setNewPassword] = useState("");
+  const [savingPassword, setSavingPassword] = useState(false);
+  const [passwordError, setPasswordError] = useState("");
+  const [passwordSuccess, setPasswordSuccess] = useState("");
+  const [impersonatingTeacherId, setImpersonatingTeacherId] = useState<string | null>(null);
+
+  async function handleLoginAsGuru(t: TeacherItem) {
+    if (!confirm(`Masuk ke sistem sebagai Guru: ${t.name}?`)) return;
+    setImpersonatingTeacherId(t._id);
+    try {
+      const res = await fetch(`/api/admin/teachers/${t._id}/impersonate`, { method: "POST" });
+      const json = await res.json();
+      if (json.success && json.redirectTo) {
+        window.location.href = json.redirectTo;
+      } else {
+        alert(json.message || "Gagal login sebagai guru");
+      }
+    } catch {
+      alert("Terjadi kesalahan sistem saat mencoba login sebagai guru");
+    } finally {
+      setImpersonatingTeacherId(null);
+    }
+  }
+
+  async function handleSavePassword(e: React.FormEvent) {
+    e.preventDefault();
+    if (!managePasswordTeacher) return;
+    if (!newPassword.trim() || newPassword.trim().length < 6) {
+      setPasswordError("Password baru minimal 6 karakter");
+      return;
+    }
+
+    setSavingPassword(true);
+    setPasswordError("");
+    setPasswordSuccess("");
+    try {
+      const res = await fetch(`/api/admin/teachers/${managePasswordTeacher._id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: newPassword.trim() }),
+      });
+      const json = await res.json();
+      if (!json.success) {
+        setPasswordError(json.message || "Gagal memperbarui password");
+      } else {
+        setPasswordSuccess(`Password akun ${managePasswordTeacher.name} berhasil diperbarui!`);
+        setTimeout(() => {
+          setManagePasswordTeacher(null);
+          setNewPassword("");
+          setPasswordSuccess("");
+        }, 1200);
+      }
+    } catch {
+      setPasswordError("Terjadi kesalahan sistem saat menyimpan password");
+    } finally {
+      setSavingPassword(false);
     }
   }
 
@@ -405,6 +470,30 @@ export default function AdminTeachersPage() {
                   </td>
                   <td className="py-4 px-6 text-right">
                     <div className="flex items-center justify-end gap-1">
+                      <button
+                        onClick={() => handleLoginAsGuru(t)}
+                        disabled={impersonatingTeacherId === t._id}
+                        className="rounded-lg p-1.5 text-slate-400 hover:bg-emerald-50 hover:text-emerald-600 transition"
+                        title="Login sebagai Guru"
+                      >
+                        {impersonatingTeacherId === t._id ? (
+                          <Spinner size="sm" />
+                        ) : (
+                          <LogIn className="size-4" />
+                        )}
+                      </button>
+                      <button
+                        onClick={() => {
+                          setManagePasswordTeacher(t);
+                          setNewPassword("");
+                          setPasswordError("");
+                          setPasswordSuccess("");
+                        }}
+                        className="rounded-lg p-1.5 text-slate-400 hover:bg-amber-50 hover:text-amber-600 transition"
+                        title="Kelola Password Guru"
+                      >
+                        <KeyRound className="size-4" />
+                      </button>
                       <button
                         onClick={() => handleOpenEditModal(t)}
                         className="rounded-lg p-1.5 text-slate-400 hover:bg-blue-50 hover:text-blue-600 transition"
@@ -832,6 +921,83 @@ export default function AdminTeachersPage() {
                 {deleting ? "Menghapus..." : "Ya, Hapus"}
               </Button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Manage Password Modal */}
+      {managePasswordTeacher && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="flex size-9 items-center justify-center rounded-xl bg-amber-50 text-amber-600">
+                  <KeyRound className="size-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-900">Kelola Password Guru</h3>
+                  <p className="text-xs text-slate-500">{managePasswordTeacher.name}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setManagePasswordTeacher(null)}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg"
+              >
+                <X className="size-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSavePassword} className="mt-4 space-y-4">
+              {passwordError && (
+                <div className="flex items-center gap-2 rounded-lg bg-rose-50 p-3 text-xs text-rose-700 border border-rose-200">
+                  <AlertCircle className="size-4 shrink-0" />
+                  <span>{passwordError}</span>
+                </div>
+              )}
+
+              {passwordSuccess && (
+                <div className="flex items-center gap-2 rounded-lg bg-emerald-50 p-3 text-xs text-emerald-700 border border-emerald-200">
+                  <CheckCircle2 className="size-4 shrink-0" />
+                  <span>{passwordSuccess}</span>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Password Baru <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  placeholder="Masukkan password baru (minimal 6 karakter)"
+                  required
+                  minLength={6}
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-800 placeholder-slate-400 focus:border-blue-500 focus:outline-hidden"
+                />
+                <p className="mt-1 text-[11px] text-slate-400">
+                  Password ini dapat langsung digunakan oleh guru bersangkutan untuk login dengan NIP atau Email.
+                </p>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setManagePasswordTeacher(null)}
+                  disabled={savingPassword}
+                >
+                  Batal
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={savingPassword}
+                  className="bg-amber-600 hover:bg-amber-700 text-white font-medium"
+                >
+                  {savingPassword ? "Menyimpan..." : "Simpan Password Baru"}
+                </Button>
+              </div>
+            </form>
           </div>
         </div>
       )}

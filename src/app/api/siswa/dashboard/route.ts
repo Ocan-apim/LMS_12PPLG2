@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import { requireRole } from "@/lib/session";
-import { CourseClass, Assignment, Submission, Material } from "@/models";
+import { CourseClass, Assignment, Submission, Material, User } from "@/models";
 
 export async function GET() {
   const { session, error } = await requireRole(["siswa"]);
@@ -10,10 +10,16 @@ export async function GET() {
   try {
     await connectDB();
 
+    const studentUser: any = await User.findById(session.id).select("classId").lean();
+    const studentRombelId = studentUser?.classId;
+
     // 1. Get student's joined classes
     const joinedClasses = await CourseClass.find({
-      studentIds: session.id,
       isActive: true,
+      $or: [
+        { studentIds: session.id },
+        ...(studentRombelId ? [{ classRombelId: studentRombelId }, { assignedRombelIds: studentRombelId }] : []),
+      ],
     })
       .populate("teacherId", "name degree")
       .populate("subjectId", "name category")
@@ -215,6 +221,12 @@ export async function GET() {
         classes: classesSummary,
         upcomingAssignments: enrichedTasks,
         recentFiles: recentFiles.slice(0, 6),
+      },
+    }, {
+      headers: {
+        "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+        Pragma: "no-cache",
+        Expires: "0",
       },
     });
   } catch (err: unknown) {

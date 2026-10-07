@@ -29,6 +29,7 @@ export type SessionUser = {
   role: Role;
   nis?: string;
   nisn?: string;
+  nip?: string;
 };
 
 export type ApiResponse<T = unknown> = {

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import { requireRole } from "@/lib/session";
-import { User, ClassModel } from "@/models";
+import { User, ClassModel, CourseClass } from "@/models";
 
 export async function POST(req: Request) {
   const { error } = await requireRole("admin");
@@ -51,6 +51,10 @@ export async function POST(req: Request) {
           await ClassModel.findByIdAndUpdate(oldClassId, {
             $pull: { studentIds: studentId },
           });
+          await CourseClass.updateMany(
+            { $or: [{ classRombelId: oldClassId }, { assignedRombelIds: oldClassId }] },
+            { $pull: { studentIds: studentId } }
+          );
         }
         await User.findByIdAndUpdate(studentId, {
           classId: targetClassId,
@@ -60,6 +64,10 @@ export async function POST(req: Request) {
         await ClassModel.findByIdAndUpdate(targetClassId, {
           $addToSet: { studentIds: studentId },
         });
+        await CourseClass.updateMany(
+          { $or: [{ classRombelId: targetClassId }, { assignedRombelIds: targetClassId }] },
+          { $addToSet: { studentIds: studentId } }
+        );
       }
     }
 

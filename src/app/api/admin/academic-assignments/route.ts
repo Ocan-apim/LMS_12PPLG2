@@ -22,7 +22,11 @@ export async function GET(req: Request) {
     const assignments = await AcademicAssignment.find(query)
       .populate("teacherId", "name nip email degree")
       .populate("subjectId", "name code category")
-      .populate("classId", "name grade")
+      .populate({
+        path: "classId",
+        select: "name grade departmentId",
+        populate: { path: "departmentId", select: "name code" },
+      })
       .sort({ createdAt: -1 })
       .lean();
 
@@ -57,6 +61,22 @@ export async function POST(req: Request) {
     }
 
     const year = academicYear || "2024/2025 - Genap";
+
+    // Enforce business rule: ONE Guru may teach a maximum of 2 distinct Mata Pelajaran
+    const existingSubjectIds = await AcademicAssignment.distinct("subjectId", {
+      teacherId,
+      academicYear: year,
+      isActive: true,
+    });
+    const distinctSubjectSet = new Set(existingSubjectIds.map(String));
+    distinctSubjectSet.add(String(subjectId));
+    if (distinctSubjectSet.size > 2) {
+      return NextResponse.json(
+        { success: false, message: "Guru hanya dapat mengajar maksimal 2 mata pelajaran." },
+        { status: 400 }
+      );
+    }
+
     const createdAssignments = [];
     const skippedClasses = [];
 

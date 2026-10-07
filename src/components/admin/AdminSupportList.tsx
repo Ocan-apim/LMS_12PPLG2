@@ -189,9 +189,9 @@ export function AdminSupportList() {
             <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
               Total Permintaan
             </span>
-            <p className="mt-1 text-2xl font-extrabold text-slate-900">
+            <div className="mt-1 text-2xl font-extrabold text-slate-900">
               {loading ? <Skeleton className="h-7 w-12" /> : summary.total}
-            </p>
+            </div>
             <p className="text-[11px] text-slate-400">Seluruh tiket masuk</p>
           </div>
           <div className="grid size-11 place-items-center rounded-xl bg-slate-100 text-slate-600">
@@ -205,9 +205,9 @@ export function AdminSupportList() {
             <span className="text-[11px] font-bold uppercase tracking-wider text-amber-600">
               Menunggu Respon
             </span>
-            <p className="mt-1 text-2xl font-extrabold text-amber-700">
+            <div className="mt-1 text-2xl font-extrabold text-amber-700">
               {loading ? <Skeleton className="h-7 w-12" /> : summary.waiting}
-            </p>
+            </div>
             <p className="text-[11px] text-slate-400">Memerlukan balasan</p>
           </div>
           <div className="grid size-11 place-items-center rounded-xl bg-amber-50 text-amber-600">
@@ -221,9 +221,9 @@ export function AdminSupportList() {
             <span className="text-[11px] font-bold uppercase tracking-wider text-blue-600">
               Sedang Diproses
             </span>
-            <p className="mt-1 text-2xl font-extrabold text-blue-700">
+            <div className="mt-1 text-2xl font-extrabold text-blue-700">
               {loading ? <Skeleton className="h-7 w-12" /> : summary.inProgress}
-            </p>
+            </div>
             <p className="text-[11px] text-slate-400">Dalam tindak lanjut</p>
           </div>
           <div className="grid size-11 place-items-center rounded-xl bg-blue-50 text-blue-600">
@@ -237,9 +237,9 @@ export function AdminSupportList() {
             <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-600">
               Telah Selesai
             </span>
-            <p className="mt-1 text-2xl font-extrabold text-emerald-700">
+            <div className="mt-1 text-2xl font-extrabold text-emerald-700">
               {loading ? <Skeleton className="h-7 w-12" /> : summary.resolved}
-            </p>
+            </div>
             <p className="text-[11px] text-slate-400">Solusi terselesaikan</p>
           </div>
           <div className="grid size-11 place-items-center rounded-xl bg-emerald-50 text-emerald-600">

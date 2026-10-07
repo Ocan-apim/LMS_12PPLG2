@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import { requireRole } from "@/lib/session";
-import { CourseClass, Assignment, Submission } from "@/models";
+import { CourseClass, Assignment, Submission, User } from "@/models";
 
 export async function GET() {
   const { session, error } = await requireRole(["siswa"]);
@@ -10,16 +10,36 @@ export async function GET() {
   try {
     await connectDB();
 
-    // Query only classes where session.id is in studentIds and class is active
-    const classes = await CourseClass.find({
-      studentIds: session.id,
+    const studentUser: any = await User.findById(session.id).select("classId").lean();
+    const studentRombelId = studentUser?.classId;
+
+    const classQuery: Record<string, unknown> = {
       isActive: true,
-    })
+      $or: [
+        { studentIds: session.id },
+        ...(studentRombelId ? [{ classRombelId: studentRombelId }, { assignedRombelIds: studentRombelId }] : []),
+      ],
+    };
+
+    const classes = await CourseClass.find(classQuery)
       .populate("teacherId", "name email degree nip")
       .populate("subjectId", "name code category")
       .populate("classRombelId", "name grade")
       .sort({ createdAt: -1 })
       .lean();
+
+    // Self-heal: ensure student is in studentIds for classes matched by rombel
+    const classesToEnroll = classes.filter(
+      (c: any) =>
+        !Array.isArray(c.studentIds) ||
+        !c.studentIds.map(String).includes(session.id)
+    );
+    if (classesToEnroll.length > 0) {
+      await CourseClass.updateMany(
+        { _id: { $in: classesToEnroll.map((c: any) => c._id) } },
+        { $addToSet: { studentIds: session.id } }
+      );
+    }
 
     // Enrich each class with assignment counts and student's progress
     const enriched = await Promise.all(
@@ -63,7 +83,16 @@ export async function GET() {
       })
     );
 
-    return NextResponse.json({ success: true, data: enriched });
+    return NextResponse.json(
+      { success: true, data: enriched },
+      {
+        headers: {
+          "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+          Pragma: "no-cache",
+          Expires: "0",
+        },
+      }
+    );
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Gagal memuat mata pelajaran";
     return NextResponse.json({ success: false, message }, { status: 500 });

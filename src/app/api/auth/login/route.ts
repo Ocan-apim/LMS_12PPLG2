@@ -40,7 +40,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          message: requestedRole === "siswa" ? "NIS wajib diisi" : "Email atau NIS wajib diisi",
+          message:
+            requestedRole === "siswa"
+              ? "NIS wajib diisi"
+              : requestedRole === "guru"
+              ? "Email atau NIP wajib diisi"
+              : "Email atau NIS wajib diisi",
         },
         { status: 400 }
       );
@@ -49,6 +54,7 @@ export async function POST(request: NextRequest) {
     await connectDB();
 
     let query: Record<string, unknown> = { isActive: true };
+    const cleanNip = rawIdentifier.replace(/\s+/g, "");
 
     if (requestedRole === "siswa") {
       query = {
@@ -60,6 +66,17 @@ export async function POST(request: NextRequest) {
           { email: rawIdentifier.toLowerCase() },
         ],
       };
+    } else if (requestedRole === "guru") {
+      query = {
+        role: "guru",
+        isActive: true,
+        $or: [
+          { email: rawIdentifier.toLowerCase() },
+          { nip: rawIdentifier },
+          { nip: cleanNip },
+          { nip: { $regex: `^${cleanNip.split("").join("\\s*")}$`, $options: "i" } },
+        ],
+      };
     } else if (requestedRole) {
       query = {
         role: requestedRole,
@@ -67,6 +84,7 @@ export async function POST(request: NextRequest) {
         $or: [
           { email: rawIdentifier.toLowerCase() },
           { nip: rawIdentifier },
+          { nip: cleanNip },
         ],
       };
     } else {
@@ -78,6 +96,7 @@ export async function POST(request: NextRequest) {
           { nis: rawIdentifier },
           { nisn: rawIdentifier },
           { nip: rawIdentifier },
+          { nip: cleanNip },
         ],
       };
     }
@@ -91,6 +110,8 @@ export async function POST(request: NextRequest) {
           message:
             requestedRole === "siswa"
               ? "NIS tidak ditemukan atau akun siswa belum aktif"
+              : requestedRole === "guru"
+              ? "Email atau NIP tidak ditemukan atau akun guru belum aktif"
               : "Email atau password salah",
         },
         { status: 401 }

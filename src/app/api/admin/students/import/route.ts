@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { connectDB } from "@/lib/mongodb";
 import { requireRole } from "@/lib/session";
-import { User, ClassModel, Department } from "@/models";
+import { User, ClassModel, Department, CourseClass } from "@/models";
 
 export interface ImportRowPayload {
   name?: string;
@@ -390,6 +390,10 @@ export async function POST(req: Request) {
         await ClassModel.findByIdAndUpdate(finalClassId, {
           $addToSet: { studentIds: committedUser._id },
         });
+        await CourseClass.updateMany(
+          { $or: [{ classRombelId: finalClassId }, { assignedRombelIds: finalClassId }] },
+          { $addToSet: { studentIds: committedUser._id } }
+        );
       }
 
       createdUsers.push(committedUser);

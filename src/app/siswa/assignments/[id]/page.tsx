@@ -89,6 +89,8 @@ interface AssignmentDetail {
     gradedAt?: string | null;
   } | null;
   comments: CommentItem[];
+  isStaffView?: boolean;
+  currentUserRole?: string;
 }
 
 export default function SiswaAssignmentDetailPage({ params }: PageProps) {
@@ -367,23 +369,33 @@ export default function SiswaAssignmentDetailPage({ params }: PageProps) {
     <div className="animate-fade-up px-2 pb-12">
       {/* Top Navigation */}
       <div className="mb-6 flex items-center justify-between">
-        <Link
-          href="/siswa/assignments"
-          className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 shadow-sm transition hover:bg-slate-50 hover:text-[#674ce7]"
+        <button
+          type="button"
+          onClick={() => window.history.back()}
+          className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 shadow-sm transition hover:bg-slate-50 hover:text-[#674ce7] cursor-pointer"
         >
           <ArrowLeft className="size-4" />
-          Kembali ke Daftar Tugas
-        </Link>
+          Kembali
+        </button>
         <div className="flex items-center gap-2">
-          <Link
-            href={`/siswa/courses/${assignment.courseClass._id}`}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-[#f4edff] px-3 py-1.5 text-xs font-bold text-[#674ce7] transition hover:bg-[#e9defc]"
-          >
+          <span className="inline-flex items-center gap-1.5 rounded-lg bg-[#f4edff] px-3 py-1.5 text-xs font-bold text-[#674ce7]">
             <BookOpen className="size-3.5" />
             {assignment.courseClass.name}
-          </Link>
+          </span>
         </div>
       </div>
+
+      {/* Staff Read-Only Notice Banner */}
+      {assignment.isStaffView && (
+        <div className="mb-6 rounded-2xl border border-blue-200 bg-blue-50/90 p-4 text-center shadow-xs">
+          <p className="text-xs font-bold text-blue-900 uppercase tracking-wide">
+            Mode Pratinjau Staf ({assignment.currentUserRole?.toUpperCase() || "BACA-SAJA"}) &bull; Baca-Saja
+          </p>
+          <p className="mt-0.5 text-xs text-blue-700">
+            Anda memantau detail tugas ini dalam mode pratinjau baca-saja. Anda dapat membaca petunjuk, mengunduh file lampiran materi dari guru, serta membaca diskusi. Pengunggahan berkas jawaban dan pengumpulan tugas dinonaktifkan.
+          </p>
+        </div>
+      )}
 
       {/* Main Grid: Left Column (Details) & Right Column (Submission Card) */}
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-[1.8fr_1fr]">
@@ -463,9 +475,8 @@ export default function SiswaAssignmentDetailPage({ params }: PageProps) {
                         </div>
                       </div>
                       <a
-                        href={file.url}
-                        target="_blank"
-                        rel="noreferrer"
+                        href={`/api/files/download?url=${encodeURIComponent(file.url)}&name=${encodeURIComponent(file.name)}`}
+                        download={file.name}
                         className="grid size-8 shrink-0 place-items-center rounded-lg text-slate-500 hover:bg-white hover:text-[#674ce7] hover:shadow-xs"
                         title="Unduh File"
                       >
@@ -521,24 +532,32 @@ export default function SiswaAssignmentDetailPage({ params }: PageProps) {
             </div>
 
             {/* Post Comment Input */}
-            <div className="mt-4 flex gap-2 border-t border-slate-100 pt-4">
-              <input
-                type="text"
-                value={newComment}
-                onChange={(e) => setNewComment(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && !commentLoading && handlePostComment()}
-                placeholder="Tulis pertanyaan atau komentar di sini..."
-                className="flex-1 rounded-xl border border-slate-200 px-4 py-2.5 text-xs text-slate-800 placeholder-slate-400 focus:border-[#674ce7] focus:outline-hidden"
-              />
-              <button
-                onClick={handlePostComment}
-                disabled={commentLoading || !newComment.trim()}
-                className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-[#674ce7] px-4 py-2.5 text-xs font-bold text-white transition hover:bg-[#563cd6] disabled:opacity-50"
-              >
-                {commentLoading ? <Loader2 className="size-3.5 animate-spin" /> : <Send className="size-3.5" />}
-                Kirim
-              </button>
-            </div>
+            {!assignment.isStaffView ? (
+              <div className="mt-4 flex gap-2 border-t border-slate-100 pt-4">
+                <input
+                  type="text"
+                  value={newComment}
+                  onChange={(e) => setNewComment(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && !commentLoading && handlePostComment()}
+                  placeholder="Tulis pertanyaan atau komentar di sini..."
+                  className="flex-1 rounded-xl border border-slate-200 px-4 py-2.5 text-xs text-slate-800 placeholder-slate-400 focus:border-[#674ce7] focus:outline-hidden"
+                />
+                <button
+                  onClick={handlePostComment}
+                  disabled={commentLoading || !newComment.trim()}
+                  className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-[#674ce7] px-4 py-2.5 text-xs font-bold text-white transition hover:bg-[#563cd6] disabled:opacity-50"
+                >
+                  {commentLoading ? <Loader2 className="size-3.5 animate-spin" /> : <Send className="size-3.5" />}
+                  Kirim
+                </button>
+              </div>
+            ) : (
+              <div className="mt-4 border-t border-slate-100 pt-3 text-center">
+                <p className="text-[11px] text-slate-400 italic">
+                  Penulisan komentar dinonaktifkan untuk akun peninjau staf (baca-saja).
+                </p>
+              </div>
+            )}
           </div>
         </div>
 
@@ -547,13 +566,15 @@ export default function SiswaAssignmentDetailPage({ params }: PageProps) {
           <div className="sticky top-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
             <div className="flex items-center justify-between border-b border-slate-100 pb-4">
               <h2 className="font-[family-name:var(--font-display)] text-base font-extrabold text-slate-900">
-                Tugas Anda
+                {assignment.isStaffView ? "Informasi Tugas" : "Tugas Anda"}
               </h2>
 
               {/* Status Badge */}
               <span
                 className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-[11px] font-extrabold uppercase tracking-wide ${
-                  isGraded
+                  assignment.isStaffView
+                    ? "bg-blue-50 text-blue-700 border border-blue-200"
+                    : isGraded
                     ? "bg-[#d4f8ec] text-[#00796f]"
                     : isSubmitted
                       ? assignment.submission?.status === "late"
@@ -564,7 +585,9 @@ export default function SiswaAssignmentDetailPage({ params }: PageProps) {
                         : "bg-slate-100 text-slate-600"
                 }`}
               >
-                {isGraded ? (
+                {assignment.isStaffView ? (
+                  <>Mode Pratinjau</>
+                ) : isGraded ? (
                   <>
                     <CheckCircle2 className="size-3" />
                     Dinilai
@@ -589,7 +612,7 @@ export default function SiswaAssignmentDetailPage({ params }: PageProps) {
             </div>
 
             {/* Score & Teacher Feedback if Graded */}
-            {isGraded && (
+            {!assignment.isStaffView && isGraded && (
               <div className="mt-4 rounded-xl border border-emerald-200 bg-[#f4fbf8] p-4 text-emerald-900">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold uppercase tracking-wide text-emerald-700">
@@ -626,8 +649,38 @@ export default function SiswaAssignmentDetailPage({ params }: PageProps) {
               </div>
             )}
 
-            {/* State A: Already Submitted & Not Re-submitting */}
-            {isSubmitted && !isResubmitting ? (
+            {/* Staff Read-Only Info Block */}
+            {assignment.isStaffView ? (
+              <div className="mt-5 space-y-4">
+                <div className="rounded-xl bg-slate-50 p-4 border border-slate-100 space-y-2.5 text-xs">
+                  <div className="flex justify-between">
+                    <span className="text-slate-500 font-semibold">Tenggat Waktu:</span>
+                    <span className="font-bold text-slate-800">{formattedDueDate}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500 font-semibold">Poin Maksimal:</span>
+                    <span className="font-bold text-[#674ce7]">{assignment.maxScore} Poin</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500 font-semibold">Guru Pengampu:</span>
+                    <span className="font-bold text-slate-800">{assignment.teacher.name}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500 font-semibold">Kelas Mapel:</span>
+                    <span className="font-bold text-slate-800">{assignment.courseClass.name}</span>
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-center">
+                  <p className="text-xs font-bold text-amber-800">
+                    Mode Pratinjau Staf (Baca-Saja)
+                  </p>
+                  <p className="mt-1 text-[11px] text-amber-700">
+                    Pengunggahan berkas jawaban dan formulir penyerahan tugas dinonaktifkan.
+                  </p>
+                </div>
+              </div>
+            ) : isSubmitted && !isResubmitting ? (
               <div className="mt-5 space-y-4">
                 <div className="rounded-xl bg-slate-50 p-3.5 border border-slate-100">
                   <p className="text-[11px] font-semibold text-slate-500">Waktu Pengumpulan:</p>

@@ -1,7 +1,8 @@
 "use client";
 
-import { use } from "react";
-import { SharedClassDetail } from "@/components/class/SharedClassDetail";
+import { use, Suspense } from "react";
+import { SharedRombelPreview } from "@/components/class/SharedRombelPreview";
+import { Loader2 } from "lucide-react";
 
 export default function KurikulumClassDetailPage({
   params,
@@ -11,12 +12,20 @@ export default function KurikulumClassDetailPage({
   const { id } = use(params);
 
   return (
-    <SharedClassDetail
-      classId={id}
-      mode="readonly"
-      role="kurikulum"
-      backHref="/kurikulum/grades/classes"
-      backLabel="Nilai Kelas"
-    />
+    <Suspense
+      fallback={
+        <div className="flex min-h-[400px] flex-col items-center justify-center gap-3">
+          <Loader2 className="size-8 animate-spin text-[#0066FF]" />
+          <p className="text-sm font-semibold text-slate-500">Memuat pratinjau kelas...</p>
+        </div>
+      }
+    >
+      <SharedRombelPreview
+        rombelId={id}
+        role="kurikulum"
+        backHref="/kurikulum/grades/classes"
+        backLabel="Nilai Kelas"
+      />
+    </Suspense>
   );
 }

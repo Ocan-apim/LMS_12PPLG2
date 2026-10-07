@@ -101,6 +101,9 @@ export async function POST(req: Request) {
       );
     }
 
+    let finalCourseClassId = courseClassId;
+    let finalClassId = classId;
+
     if (courseClassId) {
       const targetClass = await CourseClass.findById(courseClassId);
       if (!targetClass) {
@@ -115,6 +118,18 @@ export async function POST(req: Request) {
           { status: 403 }
         );
       }
+      if (!finalClassId && targetClass.classRombelId) {
+        finalClassId = targetClass.classRombelId.toString();
+      }
+    } else if (classId) {
+      const matchingCourse = await CourseClass.findOne({
+        teacherId: session.id,
+        $or: [{ classRombelId: classId }, { assignedRombelIds: classId }],
+        isActive: true,
+      });
+      if (matchingCourse) {
+        finalCourseClassId = matchingCourse._id.toString();
+      }
     }
 
     const newAssignment = await Assignment.create({
@@ -122,8 +137,8 @@ export async function POST(req: Request) {
       instructions: instructions || description || "",
       description: description || instructions || "",
       type: type || "tugas",
-      courseClassId: courseClassId || undefined,
-      classId: classId || undefined,
+      courseClassId: finalCourseClassId || undefined,
+      classId: finalClassId || undefined,
       teacherId: session.id,
       dueDate: dueDate ? new Date(dueDate) : undefined,
       maxScore: Number(maxScore) || 100,
@@ -134,9 +149,9 @@ export async function POST(req: Request) {
     });
 
     // Automatically post in class stream
-    if (courseClassId) {
+    if (finalCourseClassId) {
       await ClassPost.create({
-        courseClassId,
+        courseClassId: finalCourseClassId,
         teacherId: session.id,
         type: type === "kuis" ? "quiz" : "assignment",
         title: type === "kuis" ? `Anda memulai Quiz: ${title}` : `Anda memposting tugas baru: ${title}`,
@@ -150,7 +165,17 @@ export async function POST(req: Request) {
       .populate("courseClassId", "name code")
       .populate("classId", "name grade");
 
-    return NextResponse.json({ success: true, data: populated }, { status: 201 });
+    return NextResponse.json(
+      { success: true, data: populated },
+      {
+        status: 201,
+        headers: {
+          "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+          Pragma: "no-cache",
+          Expires: "0",
+        },
+      }
+    );
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Gagal membuat tugas";
     return NextResponse.json({ success: false, message }, { status: 500 });

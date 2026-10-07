@@ -73,6 +73,7 @@ export default function TambahGuruBaruPage() {
     if (selectedSubjects.includes(subId)) {
       setSelectedSubjects(selectedSubjects.filter((id) => id !== subId));
     } else {
+      if (selectedSubjects.length >= 2) return;
       setSelectedSubjects([...selectedSubjects, subId]);
     }
   }
@@ -87,6 +88,10 @@ export default function TambahGuruBaruPage() {
     }
     if (!email.trim()) {
       setError("Alamat email institusi wajib diisi");
+      return;
+    }
+    if (selectedSubjects.length > 2) {
+      setError("Guru hanya dapat mengajar maksimal 2 mata pelajaran.");
       return;
     }
 
@@ -288,20 +293,40 @@ export default function TambahGuruBaruPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-2">
-                  MATA PELAJARAN YANG DIAMPU
-                </label>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-xs font-semibold text-slate-700">
+                    MATA PELAJARAN YANG DIAMPU
+                  </label>
+                  <span
+                    className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                      selectedSubjects.length === 2
+                        ? "bg-amber-100 text-amber-800"
+                        : "bg-blue-50 text-blue-700"
+                    }`}
+                  >
+                    {selectedSubjects.length}/2 Terpilih
+                  </span>
+                </div>
+                {selectedSubjects.length >= 2 && (
+                  <p className="text-[11px] text-amber-600 mb-2">
+                    Guru hanya dapat mengajar maksimal 2 mata pelajaran. Hapus salah satu pilihan jika ingin memilih mapel lain.
+                  </p>
+                )}
                 <div className="flex flex-wrap gap-2">
                   {subjectsList.map((sub) => {
                     const isSelected = selectedSubjects.includes(sub._id);
+                    const isDisabled = !isSelected && selectedSubjects.length >= 2;
                     return (
                       <button
                         key={sub._id}
                         type="button"
+                        disabled={isDisabled}
                         onClick={() => toggleSubject(sub._id)}
                         className={`flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-semibold transition ${
                           isSelected
                             ? "bg-blue-600 text-white shadow-xs"
+                            : isDisabled
+                            ? "border border-slate-200 bg-slate-100/60 text-slate-400 cursor-not-allowed"
                             : "border border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100"
                         }`}
                       >
@@ -316,7 +341,7 @@ export default function TambahGuruBaruPage() {
                   })}
                 </div>
                 <p className="mt-2 text-[11px] text-slate-400">
-                  Pilih satu atau lebih mata pelajaran utama dan pendukung yang diajarkan oleh guru ini.
+                  Pilih maksimal 2 mata pelajaran utama dan pendukung yang diajarkan oleh guru ini.
                 </p>
               </div>
             </div>

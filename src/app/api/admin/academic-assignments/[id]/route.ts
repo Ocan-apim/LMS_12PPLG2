@@ -40,6 +40,23 @@ export async function PUT(req: Request, context: RouteContext) {
       );
     }
 
+    // Enforce business rule: ONE Guru may teach a maximum of 2 distinct Mata Pelajaran
+    const otherAssignments = await AcademicAssignment.find({
+      _id: { $ne: id },
+      teacherId,
+      academicYear: year,
+      isActive: true,
+    }).select("subjectId").lean();
+
+    const distinctSubjectSet = new Set(otherAssignments.map((a: any) => String(a.subjectId)));
+    distinctSubjectSet.add(String(subjectId));
+    if (distinctSubjectSet.size > 2) {
+      return NextResponse.json(
+        { success: false, message: "Guru hanya dapat mengajar maksimal 2 mata pelajaran." },
+        { status: 400 }
+      );
+    }
+
     const updated = await AcademicAssignment.findByIdAndUpdate(
       id,
       {

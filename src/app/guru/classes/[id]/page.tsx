@@ -109,6 +109,12 @@ export default function GuruClassDetailPage({
   const [copiedCode, setCopiedCode] = useState(false);
   const [plusMenuOpen, setPlusMenuOpen] = useState(false);
 
+  // Filter & Sort state
+  const [filterType, setFilterType] = useState<"all" | "assignment" | "quiz" | "announcement">("all");
+  const [sortBy, setSortBy] = useState<"newest" | "oldest" | "title" | "title-desc">("newest");
+  const [filterDropdownOpen, setFilterDropdownOpen] = useState(false);
+  const [sortDropdownOpen, setSortDropdownOpen] = useState(false);
+
   useEffect(() => {
     async function fetchData() {
       try {
@@ -297,6 +303,27 @@ export default function GuruClassDetailPage({
   const studentsList = courseClass.studentIds || [];
   const sharedFiles = courseClass.sharedFiles || [];
 
+  const filteredPosts = posts
+    .filter((post) => {
+      if (filterType === "all") return true;
+      return post.type === filterType;
+    })
+    .sort((a, b) => {
+      if (sortBy === "newest") {
+        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      }
+      if (sortBy === "oldest") {
+        return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+      }
+      if (sortBy === "title") {
+        return (a.title || "").localeCompare(b.title || "");
+      }
+      if (sortBy === "title-desc") {
+        return (b.title || "").localeCompare(a.title || "");
+      }
+      return 0;
+    });
+
   return (
     <div className="space-y-6 pb-20">
       {/* Top Header matching Screenshot 1 Right */}
@@ -309,20 +336,177 @@ export default function GuruClassDetailPage({
         </div>
 
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 shadow-xs hover:bg-slate-50 transition"
-          >
-            <SlidersHorizontal className="size-3.5 text-slate-400" />
-            <span>Filter</span>
-          </button>
-          <button
-            type="button"
-            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 shadow-xs hover:bg-slate-50 transition"
-          >
-            <ArrowUpDown className="size-3.5 text-slate-400" />
-            <span>Urutkan</span>
-          </button>
+          {/* Filter Dropdown */}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => {
+                setFilterDropdownOpen((prev) => !prev);
+                setSortDropdownOpen(false);
+              }}
+              className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium shadow-xs transition ${
+                filterType !== "all"
+                  ? "border-blue-500 bg-blue-50 text-blue-700"
+                  : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+              }`}
+            >
+              <SlidersHorizontal className="size-3.5 text-slate-400" />
+              <span>
+                Filter:{" "}
+                {filterType === "all"
+                  ? "Semua"
+                  : filterType === "assignment"
+                  ? "Tugas"
+                  : filterType === "quiz"
+                  ? "Kuis"
+                  : "Pengumuman"}
+              </span>
+              <ChevronDown className="size-3 text-slate-400" />
+            </button>
+
+            {filterDropdownOpen && (
+              <div className="absolute right-0 top-full mt-1.5 w-44 rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl z-50 text-xs text-slate-700 animate-in fade-in">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFilterType("all");
+                    setFilterDropdownOpen(false);
+                  }}
+                  className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg font-medium ${
+                    filterType === "all" ? "bg-blue-50 text-blue-600 font-semibold" : "hover:bg-slate-50"
+                  }`}
+                >
+                  <span>Semua</span>
+                  {filterType === "all" && <Check className="size-3.5" />}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFilterType("assignment");
+                    setFilterDropdownOpen(false);
+                  }}
+                  className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg font-medium ${
+                    filterType === "assignment" ? "bg-blue-50 text-blue-600 font-semibold" : "hover:bg-slate-50"
+                  }`}
+                >
+                  <span>Tugas</span>
+                  {filterType === "assignment" && <Check className="size-3.5" />}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFilterType("quiz");
+                    setFilterDropdownOpen(false);
+                  }}
+                  className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg font-medium ${
+                    filterType === "quiz" ? "bg-blue-50 text-blue-600 font-semibold" : "hover:bg-slate-50"
+                  }`}
+                >
+                  <span>Ulangan / Kuis</span>
+                  {filterType === "quiz" && <Check className="size-3.5" />}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFilterType("announcement");
+                    setFilterDropdownOpen(false);
+                  }}
+                  className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg font-medium ${
+                    filterType === "announcement" ? "bg-blue-50 text-blue-600 font-semibold" : "hover:bg-slate-50"
+                  }`}
+                >
+                  <span>Pengumuman</span>
+                  {filterType === "announcement" && <Check className="size-3.5" />}
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Sort Dropdown */}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => {
+                setSortDropdownOpen((prev) => !prev);
+                setFilterDropdownOpen(false);
+              }}
+              className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium shadow-xs transition ${
+                sortBy !== "newest"
+                  ? "border-blue-500 bg-blue-50 text-blue-700"
+                  : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+              }`}
+            >
+              <ArrowUpDown className="size-3.5 text-slate-400" />
+              <span>
+                Urutkan:{" "}
+                {sortBy === "newest"
+                  ? "Terbaru"
+                  : sortBy === "oldest"
+                  ? "Terlama"
+                  : sortBy === "title"
+                  ? "Judul (A-Z)"
+                  : "Judul (Z-A)"}
+              </span>
+              <ChevronDown className="size-3 text-slate-400" />
+            </button>
+
+            {sortDropdownOpen && (
+              <div className="absolute right-0 top-full mt-1.5 w-40 rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl z-50 text-xs text-slate-700 animate-in fade-in">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSortBy("newest");
+                    setSortDropdownOpen(false);
+                  }}
+                  className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg font-medium ${
+                    sortBy === "newest" ? "bg-blue-50 text-blue-600 font-semibold" : "hover:bg-slate-50"
+                  }`}
+                >
+                  <span>Terbaru</span>
+                  {sortBy === "newest" && <Check className="size-3.5" />}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSortBy("oldest");
+                    setSortDropdownOpen(false);
+                  }}
+                  className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg font-medium ${
+                    sortBy === "oldest" ? "bg-blue-50 text-blue-600 font-semibold" : "hover:bg-slate-50"
+                  }`}
+                >
+                  <span>Terlama</span>
+                  {sortBy === "oldest" && <Check className="size-3.5" />}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSortBy("title");
+                    setSortDropdownOpen(false);
+                  }}
+                  className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg font-medium ${
+                    sortBy === "title" ? "bg-blue-50 text-blue-600 font-semibold" : "hover:bg-slate-50"
+                  }`}
+                >
+                  <span>Judul (A-Z)</span>
+                  {sortBy === "title" && <Check className="size-3.5" />}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSortBy("title-desc");
+                    setSortDropdownOpen(false);
+                  }}
+                  className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg font-medium ${
+                    sortBy === "title-desc" ? "bg-blue-50 text-blue-600 font-semibold" : "hover:bg-slate-50"
+                  }`}
+                >
+                  <span>Judul (Z-A)</span>
+                  {sortBy === "title-desc" && <Check className="size-3.5" />}
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -435,8 +619,27 @@ export default function GuruClassDetailPage({
                 </Link>
               </div>
             </div>
+          ) : filteredPosts.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-8 text-center text-slate-500 shadow-xs space-y-3">
+              <div className="mx-auto size-12 rounded-full bg-slate-100 flex items-center justify-center text-slate-400">
+                <SlidersHorizontal className="size-5" />
+              </div>
+              <h4 className="text-sm font-semibold text-slate-800">
+                Tidak ada aktivitas atau tugas yang sesuai filter saat ini.
+              </h4>
+              <p className="text-xs text-slate-400">
+                Coba pilih filter lain atau tampilkan seluruh aktivitas kelas.
+              </p>
+              <button
+                type="button"
+                onClick={() => setFilterType("all")}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 px-3.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition"
+              >
+                Reset Filter
+              </button>
+            </div>
           ) : (
-            posts.map((post) => {
+            filteredPosts.map((post) => {
               const isQuiz = post.type === "quiz";
               const targetUrl = post.refId
                 ? isQuiz

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import { requireRole } from "@/lib/session";
-import { CourseClass, Assignment, Submission, ClassPost, Material, Quiz, ClassModel } from "@/models";
+import { CourseClass, Assignment, Submission, ClassPost, Material, Quiz, ClassModel, User } from "@/models";
 
 type RouteContext = {
   params: Promise<{ id: string }>;
@@ -116,24 +116,52 @@ export async function GET(req: Request, context: RouteContext) {
         .lean();
     }
 
-    // Verify membership: for student, session.id must be in studentIds
+    // Verify membership: for student, session.id must be in studentIds OR in student's rombel
     const rawStudentIds = Array.isArray(courseClass.studentIds)
       ? courseClass.studentIds.map((s: any) => (s && s._id ? String(s._id) : String(s)))
       : [];
 
-    if (isStudent && !rawStudentIds.includes(session.id)) {
+    const studentUser: any = isStudent ? await User.findById(session.id).select("classId").lean() : null;
+    const studentRombelId = studentUser?.classId ? String(studentUser.classId) : null;
+    const classRombelIdStr = courseClass.classRombelId
+      ? String(courseClass.classRombelId._id || courseClass.classRombelId)
+      : null;
+    const assignedRombelIdStrs = Array.isArray(courseClass.assignedRombelIds)
+      ? courseClass.assignedRombelIds.map((r: any) => String(r._id || r))
+      : [];
+
+    const isMemberByRombel =
+      Boolean(studentRombelId) &&
+      (studentRombelId === classRombelIdStr || assignedRombelIdStrs.includes(studentRombelId));
+
+    if (isStudent && !rawStudentIds.includes(session.id) && !isMemberByRombel) {
       return NextResponse.json(
         { success: false, message: "Akses ditolak: Anda belum terdaftar di kelas ini" },
         { status: 403 }
       );
     }
 
+    // Auto-heal enrollment if member by rombel
+    if (isStudent && !rawStudentIds.includes(session.id) && isMemberByRombel) {
+      await CourseClass.findByIdAndUpdate(courseClass._id, {
+        $addToSet: { studentIds: session.id },
+      });
+    }
+
     // Assignments in this class
-    const assignments = await Assignment.find({
-      courseClassId: targetCourseId,
+    const rombelId = courseClass.classRombelId?._id || courseClass.classRombelId;
+    const teacherId = courseClass.teacherId?._id || courseClass.teacherId;
+
+    const assignmentQuery: any = {
+      $or: [
+        { courseClassId: targetCourseId },
+        ...(rombelId && teacherId ? [{ classId: rombelId, teacherId }] : []),
+      ],
       isArchived: { $ne: true },
       isPublished: true,
-    })
+    };
+
+    const assignments = await Assignment.find(assignmentQuery)
       .select("_id title type description dueDate maxScore quizId createdAt")
       .sort({ dueDate: 1, createdAt: -1 })
       .lean();
@@ -276,6 +304,12 @@ export async function GET(req: Request, context: RouteContext) {
         siblingClasses: formattedSiblingClasses,
         isReadOnly: isStaff,
         currentUserRole: session.role,
+      },
+    }, {
+      headers: {
+        "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+        Pragma: "no-cache",
+        Expires: "0",
       },
     });
   } catch (err: unknown) {

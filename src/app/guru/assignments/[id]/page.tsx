@@ -12,6 +12,8 @@ import {
   Pencil,
   ChevronRight,
   ExternalLink,
+  Trash2,
+  AlertCircle,
 } from "lucide-react";
 import { Spinner } from "@/components/ui";
 
@@ -71,11 +73,38 @@ export default function AssignmentDetailPage({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Delete modal state
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
   // Real comments state
   const [comments, setComments] = useState<CommentItem[]>([]);
   const [newComment, setNewComment] = useState("");
   const [showCommentInput, setShowCommentInput] = useState(false);
   const [submittingComment, setSubmittingComment] = useState(false);
+
+  async function handleDeleteAssignment() {
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/guru/assignments/${id}`, {
+        method: "DELETE",
+      });
+      const json = await res.json();
+      if (json.success) {
+        setDeleteModalOpen(false);
+        const backUrl = assignment?.courseClassId?._id
+          ? `/guru/classes/${assignment.courseClassId._id}`
+          : "/guru/assignments";
+        router.push(backUrl);
+      } else {
+        alert(json.message || "Gagal menghapus tugas");
+      }
+    } catch {
+      alert("Terjadi kesalahan sistem saat menghapus tugas");
+    } finally {
+      setDeleting(false);
+    }
+  }
 
   useEffect(() => {
     async function loadDetail() {
@@ -248,14 +277,24 @@ export default function AssignmentDetailPage({
               )}
 
               {!["admin", "kurikulum", "kepsek"].includes(assignment.currentUserRole || "") && (
-                <Link href={`/guru/assignments/${id}/submissions`}>
+                <>
+                  <Link href={`/guru/assignments/${id}/submissions`}>
+                    <button
+                      type="button"
+                      className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-800 shadow-xs hover:bg-slate-50 transition"
+                    >
+                      Lihat Submisi
+                    </button>
+                  </Link>
                   <button
                     type="button"
-                    className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-800 shadow-xs hover:bg-slate-50 transition"
+                    onClick={() => setDeleteModalOpen(true)}
+                    className="rounded-xl border border-red-200 bg-red-50 px-3.5 py-2 text-xs font-semibold text-red-700 shadow-xs hover:bg-red-100 transition inline-flex items-center gap-1.5"
                   >
-                    Lihat Submisi
+                    <Trash2 className="size-3.5" />
+                    <span>Hapus Tugas</span>
                   </button>
-                </Link>
+                </>
               )}
             </div>
           </div>
@@ -389,6 +428,53 @@ export default function AssignmentDetailPage({
           >
             <Pencil className="size-5" />
           </Link>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {deleteModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in">
+          <div className="relative w-full max-w-sm rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="flex size-10 items-center justify-center rounded-2xl bg-red-100 text-red-600">
+                <AlertCircle className="size-5" />
+              </div>
+              <div>
+                <h3 className="font-bold text-slate-900 text-sm">Hapus Tugas</h3>
+                <p className="text-xs text-slate-500 line-clamp-1">
+                  {assignment.title}
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              <p className="text-sm font-semibold text-slate-900">
+                Yakin ingin menghapus tugas?
+              </p>
+              <p className="text-xs text-slate-500 leading-relaxed">
+                Tugas yang dihapus tidak dapat dipulihkan.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                disabled={deleting}
+                onClick={() => setDeleteModalOpen(false)}
+                className="rounded-xl border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                disabled={deleting}
+                onClick={handleDeleteAssignment}
+                className="rounded-xl bg-red-600 px-4 py-2 text-xs font-semibold text-white hover:bg-red-700 disabled:opacity-50"
+              >
+                {deleting ? "Menghapus..." : "Hapus"}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

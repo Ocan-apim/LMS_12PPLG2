@@ -140,6 +140,7 @@ interface SharedClassDetailProps {
   role?: "siswa" | "admin" | "kurikulum" | "kepsek" | "guru";
   backHref?: string;
   backLabel?: string;
+  onCourseChange?: (courseId: string) => void;
 }
 
 export function SharedClassDetail({
@@ -148,6 +149,7 @@ export function SharedClassDetail({
   role,
   backHref,
   backLabel,
+  onCourseChange,
 }: SharedClassDetailProps) {
   const router = useRouter();
   const [activeCourseId, setActiveCourseId] = useState<string | null>(null);
@@ -195,6 +197,9 @@ export function SharedClassDetail({
   const handleSelectSibling = (courseId: string) => {
     setActiveCourseId(courseId);
     fetchClassDetail(courseId);
+    if (onCourseChange) {
+      onCourseChange(courseId);
+    }
   };
 
   const handleSendComment = async (e: React.FormEvent) => {
@@ -346,7 +351,7 @@ export function SharedClassDetail({
       {isReadOnly && (
         <div className="rounded-2xl border border-blue-200 bg-blue-50/90 p-4 text-center shadow-xs">
           <p className="text-xs font-bold text-blue-900 uppercase tracking-wide">
-            Mode Pratinjau Staf ({userRole.toUpperCase()}) &bull; Baca-Saja
+            Mode Pratinjau Staf (Baca-Saja)
           </p>
           <p className="mt-0.5 text-xs text-blue-700">
             Anda memantau aktivitas kelas mapel ini secara menyeluruh (Tugas, Ulangan Harian, Komentar, dan Daftar Siswa). Seluruh aksi mutasi, pengunggahan jawaban, dan komentar dinonaktifkan.
@@ -542,10 +547,7 @@ export function SharedClassDetail({
                     assignment.submissionStatus === "graded";
 
                   // Entire container is clickable:
-                  // Staff opens /guru/assignments/[id] (read-only preview), student opens /siswa/assignments/[id]
-                  const targetUrl = isReadOnly
-                    ? `/guru/assignments/${assignment._id}`
-                    : `/siswa/assignments/${assignment._id}`;
+                  const targetUrl = `/siswa/assignments/${assignment._id}`;
 
                   return (
                     <div

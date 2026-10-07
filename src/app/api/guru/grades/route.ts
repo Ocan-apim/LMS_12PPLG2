@@ -52,20 +52,38 @@ export async function GET(req: Request) {
           .select("_id title maxScore type")
           .lean();
 
+        const assignmentIds = assignments.map((a) => a._id);
+        const submissions = await Submission.find({
+          assignmentId: { $in: assignmentIds },
+        }).lean();
+
+        const studentIdSet = new Set<string>();
+        (selectedClass.studentIds || []).forEach((s: any) => studentIdSet.add(String(s)));
+
+        const rombelId = selectedClass.classRombelId?._id || selectedClass.classRombelId;
+        if (rombelId) {
+          const rombelDoc: any = await ClassModel.findById(rombelId).lean();
+          if (rombelDoc && Array.isArray(rombelDoc.studentIds)) {
+            rombelDoc.studentIds.forEach((s: any) => studentIdSet.add(String(s)));
+          }
+          const usersInRombel = await User.find({ classId: rombelId, role: "siswa" })
+            .select("_id")
+            .lean();
+          usersInRombel.forEach((u) => studentIdSet.add(String(u._id)));
+        }
+
+        submissions.forEach((sub) => {
+          if (sub.studentId) studentIdSet.add(String(sub.studentId));
+        });
+
         // Students in this class
         students = await User.find({
-          _id: { $in: selectedClass.studentIds || [] },
+          _id: { $in: Array.from(studentIdSet) },
           role: "siswa",
         })
           .sort({ name: 1 })
           .select("_id name nisn email")
           .lean();
-
-        // Submissions for this class's assignments
-        const assignmentIds = assignments.map((a) => a._id);
-        const submissions = await Submission.find({
-          assignmentId: { $in: assignmentIds },
-        }).lean();
 
         const subMap = new Map<string, number | null>();
         submissions.forEach((sub) => {
@@ -161,6 +179,12 @@ export async function GET(req: Request) {
           gradeDistribution,
         },
         recentSubmissions,
+      },
+    }, {
+      headers: {
+        "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+        Pragma: "no-cache",
+        Expires: "0",
       },
     });
   } catch (err: unknown) {

@@ -371,6 +371,8 @@ async function runSeed() {
   ];
 
   const subjectInsertResult = await db.collection("subjects").insertMany(subjectsData);
+  const subjectMtkId = subjectInsertResult.insertedIds[0];
+  const subjectBindId = subjectInsertResult.insertedIds[1];
   const subjectBdId = subjectInsertResult.insertedIds[subjectsData.length - 1];
 
   // 6. Seed Classes (Rombel)
@@ -603,7 +605,7 @@ async function runSeed() {
     classRombelId: classXPplg1Id,
     subjectId: subjectBdId,
     academicYear: "2024/2025 - Genap",
-    bannerColor: "blue",
+    bannerColor: "purple",
     studentIds: [studentIds[0], studentIds[3], studentIds[4]],
     sharedFiles: [
       {
@@ -626,8 +628,62 @@ async function runSeed() {
     updatedAt: new Date(),
   };
 
-  const courseClassResult = await db.collection("courseclasses").insertOne(courseClassDoc);
-  const courseClassId = courseClassResult.insertedId;
+  const courseClassMtkDoc = {
+    name: "MATEMATIKA",
+    code: "MTK10PPLG1",
+    password: "mtk10pplg",
+    teacherId: teacherSitiLId,
+    classRombelId: classXPplg1Id,
+    subjectId: subjectMtkId,
+    academicYear: "2024/2025 - Genap",
+    bannerColor: "blue",
+    studentIds: [studentIds[0], studentIds[3], studentIds[4]],
+    sharedFiles: [
+      {
+        name: "Modul-Aljabar-Linear.pdf",
+        url: "/uploads/modul-aljabar.pdf",
+        type: "pdf",
+        size: "2.1 MB",
+        uploadedAt: new Date(),
+      },
+    ],
+    isActive: true,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+
+  const courseClassBindDoc = {
+    name: "BAHASA INDONESIA",
+    code: "BIND10PPLG1",
+    password: "bind10pplg",
+    teacherId: teacherSitiLId,
+    classRombelId: classXPplg1Id,
+    subjectId: subjectBindId,
+    academicYear: "2024/2025 - Genap",
+    bannerColor: "green",
+    studentIds: [studentIds[0], studentIds[3], studentIds[4]],
+    sharedFiles: [
+      {
+        name: "Panduan-Menulis-LHO.pdf",
+        url: "/uploads/panduan-lho.pdf",
+        type: "pdf",
+        size: "1.8 MB",
+        uploadedAt: new Date(),
+      },
+    ],
+    isActive: true,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+
+  const courseClassResult = await db.collection("courseclasses").insertMany([
+    courseClassDoc,
+    courseClassMtkDoc,
+    courseClassBindDoc,
+  ]);
+  const courseClassId = courseClassResult.insertedIds[0];
+  const courseClassMtkId = courseClassResult.insertedIds[1];
+  const courseClassBindId = courseClassResult.insertedIds[2];
 
   // 9. Seed Quiz
   console.log("Seeding Quiz...");
@@ -694,8 +750,38 @@ async function runSeed() {
     updatedAt: new Date(),
   };
 
-  const quizResult = await db.collection("quizzes").insertOne(quizDoc);
-  const quizId = quizResult.insertedId;
+  const quizMtkDoc = {
+    title: "Ulangan Harian 1: Matriks & Sistem Persamaan Linear",
+    teacherId: teacherSitiLId,
+    courseClassId: courseClassMtkId,
+    durationSeconds: 2400,
+    questions: [
+      {
+        id: "qm1",
+        type: "pilihan_ganda",
+        question: "Determinan dari matriks berordo 2x2 [[2, 3], [1, 4]] adalah...",
+        options: ["5", "8", "11", "14"],
+        correctAnswer: 0,
+        points: 50,
+      },
+      {
+        id: "qm2",
+        type: "pilihan_ganda",
+        question: "Jika matriks A memiliki invers, maka nilai determinan A adalah...",
+        options: ["Sama dengan 0", "Tidak sama dengan 0", "Harus positif", "Harus bernilai 1"],
+        correctAnswer: 1,
+        points: 50,
+      },
+    ],
+    totalPoints: 100,
+    isPublished: true,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+
+  const quizResult = await db.collection("quizzes").insertMany([quizDoc, quizMtkDoc]);
+  const quizId = quizResult.insertedIds[0];
+  const quizMtkId = quizResult.insertedIds[1];
 
   // 10. Seed Assignments (Tasks)
   console.log("Seeding Assignments...");
@@ -756,7 +842,90 @@ async function runSeed() {
     updatedAt: new Date(),
   };
 
-  const assignmentResult = await db.collection("assignments").insertMany([assignment1, assignment2]);
+  const assignmentMtk1 = {
+    title: "Latihan Soal Matriks & Operasi Hitung",
+    description: "Selesaikan operasi penjumlahan dan perkalian matriks sesuai lembar soal terlampir.",
+    instructions: "Kerjakan di buku tugas atau ketik rapi, sertakan langkah perhitungan secara lengkap.",
+    bannerUrl: "",
+    type: "tugas",
+    subjectId: subjectMtkId,
+    classId: classXPplg1Id,
+    courseClassId: courseClassMtkId,
+    teacherId: teacherSitiLId,
+    attachments: [
+      {
+        name: "Lembar-Latihan-Matriks.pdf",
+        url: "/uploads/latihan-matriks.pdf",
+        type: "pdf",
+        size: "1.1 MB",
+        uploadedAt: new Date(),
+      },
+    ],
+    comments: [],
+    dueDate: new Date(Date.now() + 4 * 24 * 60 * 60 * 1000),
+    maxScore: 100,
+    isPublished: true,
+    isArchived: false,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+
+  const assignmentMtk2 = {
+    title: "Ulangan Harian 1: Matriks & SPL",
+    description: "Ulangan Harian KD 3.1 Matriks.",
+    instructions: "Waktu pengerjaan 40 menit.",
+    bannerUrl: "",
+    type: "kuis",
+    subjectId: subjectMtkId,
+    classId: classXPplg1Id,
+    courseClassId: courseClassMtkId,
+    teacherId: teacherSitiLId,
+    quizId: quizMtkId,
+    attachments: [],
+    comments: [],
+    dueDate: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000),
+    maxScore: 100,
+    isPublished: true,
+    isArchived: false,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+
+  const assignmentBind1 = {
+    title: "Analisis Struktur Teks LHO",
+    description: "Identifikasi pernyataan umum, deskripsi bagian, dan deskripsi manfaat dari teks yang disediakan.",
+    instructions: "Bacalah teks LHO dan buat analisis strukturnya dalam format tabel.",
+    bannerUrl: "",
+    type: "tugas",
+    subjectId: subjectBindId,
+    classId: classXPplg1Id,
+    courseClassId: courseClassBindId,
+    teacherId: teacherSitiLId,
+    attachments: [
+      {
+        name: "Teks-Observasi-Lingkungan.pdf",
+        url: "/uploads/teks-observasi.pdf",
+        type: "pdf",
+        size: "950 KB",
+        uploadedAt: new Date(),
+      },
+    ],
+    comments: [],
+    dueDate: new Date(Date.now() + 6 * 24 * 60 * 60 * 1000),
+    maxScore: 100,
+    isPublished: true,
+    isArchived: false,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+
+  const assignmentResult = await db.collection("assignments").insertMany([
+    assignment1,
+    assignment2,
+    assignmentMtk1,
+    assignmentMtk2,
+    assignmentBind1,
+  ]);
   const assignment1Id = assignmentResult.insertedIds[0];
 
   // 11. Seed Submissions

@@ -36,6 +36,10 @@ export function LoginForm({ role }: LoginFormProps) {
 
       if (isSiswa) {
         payload.nis = identifier.trim();
+      } else if (role === "guru") {
+        payload.identifier = identifier.trim();
+        payload.nip = identifier.trim();
+        payload.email = identifier.trim();
       } else {
         payload.email = identifier.trim();
       }
@@ -70,16 +74,16 @@ export function LoginForm({ role }: LoginFormProps) {
       <label className="relative block">
         <UserRound className="pointer-events-none absolute left-4 top-1/2 size-4 -translate-y-1/2 text-slate-500" />
         <input
-          type={isSiswa ? "text" : "email"}
+          type={isSiswa || role === "guru" ? "text" : "email"}
           required
-          autoComplete={isSiswa ? "username" : "email"}
+          autoComplete={isSiswa ? "username" : role === "guru" ? "username" : "email"}
           value={identifier}
           onChange={(event) => setIdentifier(event.target.value)}
           placeholder={
             isSiswa
               ? "Nomor Induk Siswa (NIS)"
               : role === "guru"
-              ? "Email Guru atau NIP"
+              ? "NIP atau Email Guru"
               : "Username atau Email"
           }
           className="h-14 w-full rounded-[5px] border border-[var(--border)] bg-[#f4f6ff] pl-11 pr-4 text-sm outline-none transition placeholder:text-slate-500 focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary-soft)]"

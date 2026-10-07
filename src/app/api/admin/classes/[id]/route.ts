@@ -1,14 +1,14 @@
 import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import { requireRole } from "@/lib/session";
-import { ClassModel, User, CourseClass } from "@/models";
+import { ClassModel, User, CourseClass, Assignment, Quiz } from "@/models";
 
 type RouteContext = {
   params: Promise<{ id: string }>;
 };
 
 export async function GET(_req: Request, context: RouteContext) {
-  const { error } = await requireRole("admin");
+  const { error } = await requireRole(["admin", "kurikulum", "kepsek", "guru"]);
   if (error) return error;
 
   try {
@@ -26,14 +26,42 @@ export async function GET(_req: Request, context: RouteContext) {
 
     const courseClasses = await CourseClass.find({ classRombelId: id, isActive: true })
       .populate("teacherId", "name nip degree email")
-      .populate("subjectId", "name code")
+      .populate("subjectId", "name code category")
       .lean();
+
+    const enrichedCourseClasses = await Promise.all(
+      courseClasses.map(async (c: any) => {
+        const [assignmentCount, quizCount] = await Promise.all([
+          Assignment.countDocuments({
+            courseClassId: c._id,
+            isArchived: { $ne: true },
+            isPublished: true,
+          }),
+          Quiz.countDocuments({
+            courseClassId: c._id,
+            isPublished: true,
+          }),
+        ]);
+
+        const teacherDegree = c.teacherId?.degree ? `, ${c.teacherId.degree}` : "";
+        const teacherName = c.teacherId?.name ? `${c.teacherId.name}${teacherDegree}` : "Guru Pengampu";
+
+        return {
+          ...c,
+          assignmentCount,
+          quizCount,
+          teacherName,
+          category: c.subjectId?.category || "Kejuruan",
+          studentCount: Array.isArray(c.studentIds) ? c.studentIds.length : (cls.studentIds?.length || 0),
+        };
+      })
+    );
 
     return NextResponse.json({
       success: true,
       data: {
         ...cls.toObject(),
-        courseClasses,
+        courseClasses: enrichedCourseClasses,
       },
     });
   } catch (err: unknown) {

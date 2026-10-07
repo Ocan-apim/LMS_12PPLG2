@@ -20,6 +20,7 @@ export async function createSessionToken(user: SessionUser) {
     role: user.role,
     nis: user.nis,
     nisn: user.nisn,
+    nip: user.nip,
   })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
@@ -48,6 +49,7 @@ export async function verifySessionToken(
       role: payload.role as Role,
       nis: typeof payload.nis === "string" ? payload.nis : undefined,
       nisn: typeof payload.nisn === "string" ? payload.nisn : undefined,
+      nip: typeof payload.nip === "string" ? payload.nip : undefined,
     };
   } catch {
     return null;

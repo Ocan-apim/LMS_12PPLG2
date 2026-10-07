@@ -8,6 +8,8 @@ import {
   MoreVertical,
   ArrowRight,
   TrendingUp,
+  Trash2,
+  AlertCircle,
 } from "lucide-react";
 import { Spinner } from "@/components/ui";
 
@@ -75,6 +77,29 @@ export default function GuruClassesPage() {
   const [sortDropdownOpen, setSortDropdownOpen] = useState(false);
   const [cardMenuOpenId, setCardMenuOpenId] = useState<string | null>(null);
   const [copiedCodeId, setCopiedCodeId] = useState<string | null>(null);
+  const [deleteTargetClass, setDeleteTargetClass] = useState<CourseClassItem | null>(null);
+  const [deletingClass, setDeletingClass] = useState(false);
+
+  async function handleDeleteClassConfirm() {
+    if (!deleteTargetClass) return;
+    setDeletingClass(true);
+    try {
+      const res = await fetch(`/api/guru/classes/${deleteTargetClass._id}`, {
+        method: "DELETE",
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        alert(data.message || "Gagal menghapus kelas");
+        return;
+      }
+      setClasses((prev) => prev.filter((c) => c._id !== deleteTargetClass._id));
+      setDeleteTargetClass(null);
+    } catch {
+      alert("Terjadi kesalahan jaringan saat menghapus kelas");
+    } finally {
+      setDeletingClass(false);
+    }
+  }
 
   // Sorting
   const sortedClasses = [...classes].sort((a, b) => {
@@ -266,6 +291,18 @@ export default function GuruClassesPage() {
                       >
                         {copiedCodeId === item._id ? "Kode Tersalin!" : "Salin Kode Kelas"}
                       </button>
+                      <div className="border-t border-slate-100 my-1"></div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCardMenuOpenId(null);
+                          setDeleteTargetClass(item);
+                        }}
+                        className="w-full text-left px-3 py-1.5 rounded-lg hover:bg-red-50 font-medium text-red-600 flex items-center gap-1.5"
+                      >
+                        <Trash2 className="size-3.5" />
+                        Hapus Kelas
+                      </button>
                     </div>
                   )}
                 </div>
@@ -405,6 +442,48 @@ export default function GuruClassesPage() {
           <span className="hover:text-slate-600 cursor-pointer">Contact Support</span>
         </div>
       </div>
+
+      {/* Delete Class Confirmation Modal */}
+      {deleteTargetClass && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in">
+          <div className="relative w-full max-w-sm rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="flex size-10 items-center justify-center rounded-2xl bg-red-100 text-red-600">
+                <AlertCircle className="size-5" />
+              </div>
+              <div>
+                <h3 className="font-bold text-slate-900 text-sm">Yakin ingin menghapus kelas?</h3>
+                <p className="text-xs text-slate-500 line-clamp-1">
+                  {deleteTargetClass.name}
+                </p>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-500 leading-relaxed">
+              Kelas dan data terkait mungkin tidak dapat dipulihkan.
+            </p>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                disabled={deletingClass}
+                onClick={() => setDeleteTargetClass(null)}
+                className="rounded-xl border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                disabled={deletingClass}
+                onClick={handleDeleteClassConfirm}
+                className="rounded-xl bg-red-600 px-4 py-2 text-xs font-semibold text-white hover:bg-red-700 disabled:opacity-50"
+              >
+                {deletingClass ? "Menghapus..." : "Hapus Kelas"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

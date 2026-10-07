@@ -16,8 +16,9 @@ export default function BuatKelasMapelPage() {
 
   const [rombels, setRombels] = useState<RombelOption[]>([]);
   const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
   const [password, setPassword] = useState("");
-  const [classRombelId, setClassRombelId] = useState("");
+  const [selectedRombelIds, setSelectedRombelIds] = useState<string[]>([]);
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -45,12 +46,18 @@ export default function BuatKelasMapelPage() {
     loadRombels();
   }, []);
 
+  function toggleRombel(id: string) {
+    setSelectedRombelIds((prev) =>
+      prev.includes(id) ? prev.filter((r) => r !== id) : [...prev, id]
+    );
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
 
     if (!name.trim()) {
-      setError("Judul mapel / kelas wajib diisi");
+      setError("Nama kelas / mapel wajib diisi");
       return;
     }
     if (!password.trim()) {
@@ -65,8 +72,10 @@ export default function BuatKelasMapelPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: name.trim(),
+          description: description.trim() || undefined,
           password: password.trim(),
-          classRombelId: classRombelId || undefined,
+          classRombelId: selectedRombelIds[0] || undefined,
+          assignedRombelIds: selectedRombelIds,
         }),
       });
 
@@ -125,18 +134,31 @@ export default function BuatKelasMapelPage() {
             </p>
           </div>
 
-          <form onSubmit={handleSubmit} className="mx-auto mt-8 max-w-md space-y-6">
+          <form onSubmit={handleSubmit} className="mx-auto mt-8 max-w-md space-y-5">
             <div>
               <label className="block text-sm font-semibold text-white mb-2 text-center">
-                Judul Mapel(classroom)
+                Nama Kelas / Mapel
               </label>
               <input
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder=""
+                placeholder="Contoh: Matematika, Basis Data"
                 required
                 className="w-full rounded-xl bg-white px-4 py-3 text-sm text-slate-800 placeholder-slate-400 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-blue-100 mb-1.5 text-center">
+                Deskripsi Kelas (Opsional)
+              </label>
+              <input
+                type="text"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="Deskripsi singkat mengenai mata pelajaran ini..."
+                className="w-full rounded-xl bg-white/15 px-4 py-2.5 text-xs text-white placeholder-blue-200 border border-white/20 focus:outline-none focus:bg-white/25"
               />
             </div>
 
@@ -154,26 +176,45 @@ export default function BuatKelasMapelPage() {
               />
             </div>
 
-            {/* Optional Rombel selector if school has rombel */}
+            {/* Assign ke Kelas / Rombel selector */}
             {rombels.length > 0 && (
-              <div>
-                <label className="block text-xs font-semibold text-blue-100 mb-1.5 text-center">
-                  Hubungkan dengan Kelas Rombel (Opsional)
-                </label>
-                <select
-                  value={classRombelId}
-                  onChange={(e) => setClassRombelId(e.target.value)}
-                  className="w-full rounded-xl bg-white/15 px-4 py-2.5 text-xs text-white border border-white/20 focus:outline-none"
-                >
-                  <option value="" className="text-slate-800">
-                    -- Pilih Rombel --
-                  </option>
-                  {rombels.map((r) => (
-                    <option key={r._id} value={r._id} className="text-slate-800">
-                      {r.name} (Tingkat {r.grade})
-                    </option>
-                  ))}
-                </select>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-bold text-white uppercase tracking-wider">
+                    Assign ke Kelas / Rombel
+                  </label>
+                  <span className="text-[11px] text-blue-200">
+                    {selectedRombelIds.length} dipilih
+                  </span>
+                </div>
+                <p className="text-[11px] text-blue-100/80">
+                  Siswa di rombel yang dipilih akan otomatis terdaftar dan menerima notifikasi kelas baru tanpa perlu memasukkan kode manual.
+                </p>
+
+                <div className="max-h-48 overflow-y-auto space-y-1.5 rounded-2xl bg-white/10 p-3 border border-white/20">
+                  {rombels.map((r) => {
+                    const isChecked = selectedRombelIds.includes(r._id);
+                    return (
+                      <label
+                        key={r._id}
+                        className={`flex items-center gap-3 p-2 rounded-xl cursor-pointer text-xs transition ${
+                          isChecked ? "bg-white/20 font-bold text-white" : "text-blue-100 hover:bg-white/10"
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={() => toggleRombel(r._id)}
+                          className="size-4 rounded text-blue-600 focus:ring-blue-500 bg-white"
+                        />
+                        <span className="flex-1">{r.name}</span>
+                        <span className="text-[10px] text-blue-200 font-normal">
+                          Tingkat {r.grade}
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
               </div>
             )}
 
@@ -184,7 +225,7 @@ export default function BuatKelasMapelPage() {
                 className="flex items-center gap-2 rounded-xl bg-white px-8 py-3 text-sm font-bold text-blue-600 shadow-md hover:bg-blue-50 transition disabled:opacity-50"
               >
                 <Plus className="size-4 text-blue-600" />
-                <span>{submitting ? "Memproses..." : "Kelas Baru"}</span>
+                <span>{submitting ? "Memproses..." : "Buat Kelas"}</span>
               </button>
             </div>
           </form>

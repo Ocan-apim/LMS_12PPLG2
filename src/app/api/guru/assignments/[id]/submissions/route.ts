@@ -34,17 +34,50 @@ export async function GET(_req: Request, context: RouteContext) {
       );
     }
 
+    // Fetch existing submissions for this assignment first
+    const submissions = await Submission.find({ assignmentId: id })
+      .populate("studentId", "name email nisn")
+      .lean();
+
     // Determine all students in this class
-    let studentIds: string[] = [];
+    const studentIdSet = new Set<string>();
 
     if (assignment.courseClassId && Array.isArray(assignment.courseClassId.studentIds)) {
-      studentIds = assignment.courseClassId.studentIds.map((s: unknown) => String(s));
-    } else if (assignment.classId && Array.isArray(assignment.classId.studentIds)) {
-      studentIds = assignment.classId.studentIds.map((s: unknown) => String(s));
+      assignment.courseClassId.studentIds.forEach((s: unknown) => {
+        if (s) studentIdSet.add(String((s as any)._id || s));
+      });
     }
 
+    if (assignment.classId && Array.isArray(assignment.classId.studentIds)) {
+      assignment.classId.studentIds.forEach((s: unknown) => {
+        if (s) studentIdSet.add(String((s as any)._id || s));
+      });
+    }
+
+    // Include students from rombel
+    const rombelId = assignment.courseClassId?.classRombelId || assignment.classId;
+    if (rombelId) {
+      const rombelDoc: any = await ClassModel.findById(rombelId).lean();
+      if (rombelDoc && Array.isArray(rombelDoc.studentIds)) {
+        rombelDoc.studentIds.forEach((s: unknown) => {
+          if (s) studentIdSet.add(String((s as any)._id || s));
+        });
+      }
+      const usersInRombel = await User.find({ classId: rombelId, role: "siswa" })
+        .select("_id")
+        .lean();
+      usersInRombel.forEach((u) => studentIdSet.add(String(u._id)));
+    }
+
+    // Include any student who has submitted
+    submissions.forEach((sub) => {
+      const sid = String(sub.studentId?._id || sub.studentId || "");
+      if (sid) studentIdSet.add(sid);
+    });
+
     // Fetch all student details
-    const students = await User.find({
+    const studentIds = Array.from(studentIdSet);
+    const students: any[] = await User.find({
       _id: { $in: studentIds },
       role: "siswa",
     })
@@ -52,17 +85,15 @@ export async function GET(_req: Request, context: RouteContext) {
       .sort({ name: 1 })
       .lean();
 
-    // Fetch existing submissions for this assignment
-    const submissions = await Submission.find({ assignmentId: id })
-      .populate("studentId", "name email nisn")
-      .lean();
-
     const submissionMap = new Map(
       submissions.map((sub) => [String(sub.studentId?._id || sub.studentId), sub])
     );
 
+    const matchedStudentIds = new Set<string>();
+
     // Merge students with their submissions
-    const items = students.map((st) => {
+    const items: any[] = students.map((st) => {
+      matchedStudentIds.add(String(st._id));
       const sub = submissionMap.get(String(st._id));
       if (sub) {
         return {
@@ -99,6 +130,33 @@ export async function GET(_req: Request, context: RouteContext) {
       }
     });
 
+    // Also include any submissions whose student wasn't in students
+    submissions.forEach((sub) => {
+      const sid = String(sub.studentId?._id || sub.studentId || "");
+      if (sid && !matchedStudentIds.has(sid) && sub.studentId) {
+        items.push({
+          submissionId: sub._id,
+          student: {
+            _id: (sub.studentId as any)._id || sub.studentId,
+            name: (sub.studentId as any).name || "Siswa",
+            email: (sub.studentId as any).email || "-",
+            nisn: (sub.studentId as any).nisn || "-",
+          },
+          hasSubmitted: true,
+          status: sub.status,
+          score: sub.score,
+          draftScore: sub.draftScore,
+          feedback: sub.feedback,
+          privateComments: sub.privateComments || [],
+          attachments: sub.attachments || (sub.fileUrl ? [{ name: "Lampiran Siswa", url: sub.fileUrl, type: "file", size: "1.0 MB" }] : []),
+          content: sub.content,
+          quizAnswers: sub.quizAnswers || [],
+          submittedAt: sub.submittedAt,
+          gradedAt: sub.gradedAt,
+        });
+      }
+    });
+
     const turnedInCount = items.filter((i) => i.status === "turned_in" || i.status === "late").length;
     const gradedCount = items.filter((i) => i.status === "graded").length;
     const assignedCount = items.filter((i) => i.status === "assigned").length;
@@ -117,12 +175,18 @@ export async function GET(_req: Request, context: RouteContext) {
           quiz: assignment.quizId || null,
         },
         stats: {
-          totalStudents: students.length,
+          totalStudents: items.length,
           turnedInCount,
           gradedCount,
           assignedCount,
         },
         items,
+      },
+    }, {
+      headers: {
+        "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+        Pragma: "no-cache",
+        Expires: "0",
       },
     });
   } catch (err: unknown) {

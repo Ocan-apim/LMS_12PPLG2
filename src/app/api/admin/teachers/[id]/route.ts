@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import bcrypt from "bcryptjs";
 import { connectDB } from "@/lib/mongodb";
 import { requireRole } from "@/lib/session";
 import { User, ClassModel, Subject } from "@/models";
@@ -63,7 +64,7 @@ export async function PUT(req: Request, context: RouteContext) {
 
     if (Array.isArray(subjects) && subjects.length > 2) {
       return NextResponse.json(
-        { success: false, message: "Maksimal penugasan 2 mata pelajaran untuk 1 guru" },
+        { success: false, message: "Guru hanya dapat mengajar maksimal 2 mata pelajaran." },
         { status: 400 }
       );
     }
@@ -129,6 +130,10 @@ export async function PUT(req: Request, context: RouteContext) {
       updateQuery.$set.homeroomClassId = newClassId;
     } else {
       updateQuery.$unset = { homeroomClassId: 1 };
+    }
+
+    if (body.password && typeof body.password === "string" && body.password.trim()) {
+      updateQuery.$set.password = await bcrypt.hash(body.password.trim(), 10);
     }
 
     // Sync subjects teacherIds

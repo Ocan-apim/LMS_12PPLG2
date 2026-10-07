@@ -306,9 +306,9 @@ export function KurikulumReports() {
             <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
               Total Siswa Terdata
             </span>
-            <p className="mt-1 text-2xl font-extrabold text-slate-900">
+            <div className="mt-1 text-2xl font-extrabold text-slate-900">
               {loading ? <Skeleton className="h-8 w-16" /> : stats.totalStudents}
-            </p>
+            </div>
             <p className="text-[11px] text-slate-500">
               {stats.totalEntries} entri mata pelajaran
             </p>
@@ -324,7 +324,7 @@ export function KurikulumReports() {
             <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
               Rata-Rata Kumulatif
             </span>
-            <p className="mt-1 text-2xl font-extrabold text-slate-900">
+            <div className="mt-1 text-2xl font-extrabold text-slate-900">
               {loading ? (
                 <Skeleton className="h-8 w-20" />
               ) : stats.overallAvg !== null ? (
@@ -332,7 +332,7 @@ export function KurikulumReports() {
               ) : (
                 <span className="text-sm font-semibold text-slate-400 italic">Belum ada nilai</span>
               )}
-            </p>
+            </div>
             <p className="text-[11px] text-slate-500">Skala penilaian 0-100</p>
           </div>
           <div className="grid size-11 place-items-center rounded-xl bg-amber-50 text-amber-600">
@@ -346,7 +346,7 @@ export function KurikulumReports() {
             <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
               Rata-Rata Tugas
             </span>
-            <p className="mt-1 text-2xl font-extrabold text-blue-700">
+            <div className="mt-1 text-2xl font-extrabold text-blue-700">
               {loading ? (
                 <Skeleton className="h-8 w-16" />
               ) : stats.assignAvg !== null ? (
@@ -354,7 +354,7 @@ export function KurikulumReports() {
               ) : (
                 <span className="text-sm font-semibold text-slate-400 italic">-</span>
               )}
-            </p>
+            </div>
             <p className="text-[11px] text-slate-500">Seluruh tugas terselesaikan</p>
           </div>
           <div className="grid size-11 place-items-center rounded-xl bg-blue-50 text-blue-600">
@@ -368,7 +368,7 @@ export function KurikulumReports() {
             <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
               Rata-Rata Kuis
             </span>
-            <p className="mt-1 text-2xl font-extrabold text-purple-700">
+            <div className="mt-1 text-2xl font-extrabold text-purple-700">
               {loading ? (
                 <Skeleton className="h-8 w-16" />
               ) : stats.quizAvg !== null ? (
@@ -376,7 +376,7 @@ export function KurikulumReports() {
               ) : (
                 <span className="text-sm font-semibold text-slate-400 italic">-</span>
               )}
-            </p>
+            </div>
             <p className="text-[11px] text-slate-500">Seluruh kuis terselesaikan</p>
           </div>
           <div className="grid size-11 place-items-center rounded-xl bg-purple-50 text-purple-600">
