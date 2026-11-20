@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import { requireRole } from "@/lib/session";
 import { Assignment, Submission, ClassPost } from "@/models";
+import { validateFields } from "@/lib/profanity-filter";
 
 type RouteContext = {
   params: Promise<{ id: string }>;
@@ -59,6 +60,7 @@ export async function GET(_req: Request, context: RouteContext) {
         turnedInCount,
         gradedCount,
         currentUserRole: session.role,
+        currentUserId: session.id,
       },
     });
   } catch (err: unknown) {
@@ -102,6 +104,22 @@ export async function PUT(req: Request, context: RouteContext) {
       quizId,
       isPublished,
     } = body;
+
+    const fieldValidation = validateFields({
+      title,
+      instructions,
+      description,
+    });
+    if (!fieldValidation.isValid) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: fieldValidation.message,
+          field: fieldValidation.field,
+        },
+        { status: 400 }
+      );
+    }
 
     const updated = await Assignment.findByIdAndUpdate(
       id,

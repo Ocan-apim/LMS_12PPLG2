@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import { requireRole } from "@/lib/session";
 import { CourseClass, Material } from "@/models";
+import { validateFields } from "@/lib/profanity-filter";
 
 type RouteContext = {
   params: Promise<{ id: string }>;
@@ -80,6 +81,22 @@ export async function POST(req: Request, context: RouteContext) {
     if (!title || !title.trim()) {
       return NextResponse.json(
         { success: false, message: "Judul materi wajib diisi" },
+        { status: 400 }
+      );
+    }
+
+    const fieldValidation = validateFields({
+      title,
+      description,
+      content,
+    });
+    if (!fieldValidation.isValid) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: fieldValidation.message,
+          field: fieldValidation.field,
+        },
         { status: 400 }
       );
     }

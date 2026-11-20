@@ -3,6 +3,7 @@ import mongoose from "mongoose";
 import { connectDB } from "@/lib/mongodb";
 import { requireRole } from "@/lib/session";
 import { SupportTicket, SupportMessage, Notification } from "@/models";
+import { validateContent } from "@/lib/profanity-filter";
 
 type RouteContext = {
   params: Promise<{ id: string }>;
@@ -38,6 +39,14 @@ export async function POST(req: NextRequest, context: RouteContext) {
     if (!message || typeof message !== "string" || !message.trim()) {
       return NextResponse.json(
         { success: false, message: "Pesan balasan tidak boleh kosong" },
+        { status: 400 }
+      );
+    }
+
+    const msgValidation = validateContent(message);
+    if (!msgValidation.isValid) {
+      return NextResponse.json(
+        { success: false, message: msgValidation.message },
         { status: 400 }
       );
     }

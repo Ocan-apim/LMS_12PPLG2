@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import { requireRole } from "@/lib/session";
 import { Submission, Assignment, User } from "@/models";
-import { validateComment } from "@/lib/profanity-filter";
+import { validateComment, validateContent } from "@/lib/profanity-filter";
 
 type RouteContext = {
   params: Promise<{ id: string }>;
@@ -74,6 +74,15 @@ export async function POST(req: Request, context: RouteContext) {
       sub.draftScore = Number(draftScore);
     }
     if (feedback !== undefined) {
+      if (feedback.trim()) {
+        const feedbackValidation = validateContent(feedback);
+        if (!feedbackValidation.isValid) {
+          return NextResponse.json(
+            { success: false, message: feedbackValidation.message },
+            { status: 400 }
+          );
+        }
+      }
       sub.feedback = feedback.trim();
     }
     if (status) {

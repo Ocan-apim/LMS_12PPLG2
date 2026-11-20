@@ -1,12 +1,18 @@
 /**
- * Learnix LMS - Centralized Indonesian Profanity and Vulgarity Filter
+ * Learnix LMS - Centralized Indonesian Profanity, Vulgarity, and Insult Filter
  *
- * Provides robust detection of Indonesian profanity, insults, vulgar expressions,
- * leetspeak evasions, character elongations, and spacing/punctuation bypass attempts.
+ * Provides strict detection of Indonesian profanity, insults, sexual/vulgar expressions,
+ * regional slangs, leetspeak evasions, character elongations, and spacing/punctuation bypasses.
+ * Designed with boundary-aware matching to eliminate false positives on innocent Indonesian text.
  */
 
-export const PROFANITY_ERROR_MESSAGE =
+export const DEFAULT_PROFANITY_ERROR_MESSAGE =
+  "Konten mengandung kata atau ungkapan yang tidak diperbolehkan. Silakan periksa kembali tulisan Anda.";
+
+export const COMMENT_PROFANITY_ERROR_MESSAGE =
   "Komentar tidak dapat dikirim karena mengandung kata atau ungkapan yang tidak pantas. Silakan gunakan bahasa yang lebih sopan.";
+
+export const PROFANITY_ERROR_MESSAGE = COMMENT_PROFANITY_ERROR_MESSAGE;
 
 export const EMPTY_COMMENT_ERROR_MESSAGE =
   "Pesan komentar tidak boleh kosong";
@@ -32,64 +38,77 @@ export interface ProfanityCategory {
 export const PROFANITY_DICTIONARY: ProfanityCategory[] = [
   {
     id: "insults",
-    name: "Common Insults and Profanity",
-    description: "Kata-kata hinaan dan umpatan kasar umum bahasa Indonesia",
+    name: "Insults and Personal Attacks",
+    description: "Kata-kata hinaan, makian, dan umpatan kasar umum bahasa Indonesia",
     terms: [
       { canonical: "anjing", variations: ["ajg", "anjg", "anjng"] },
       { canonical: "bangsat", variations: ["bngst", "bgts", "bgst", "bngt"] },
       { canonical: "goblok", variations: ["gblk", "gblg", "goblog", "gwbwlk"] },
-      { canonical: "tolol", variations: ["tlol"] },
-      { canonical: "bego", variations: ["beg0"] },
+      { canonical: "tolol", variations: ["tlol", "tll"] },
+      { canonical: "bego", variations: ["beg0", "bg0"] },
+      { canonical: "bodoh", variations: ["b0d0h", "b0doh", "bdoh"] },
+      { canonical: "dungu", variations: ["dngu"] },
+      { canonical: "idiot", variations: ["1d10t", "idyot"] },
       { canonical: "bajingan", variations: ["bjngn"] },
-      { canonical: "keparat", variations: ["kpryt"] },
       { canonical: "brengsek", variations: ["brngsk"] },
+      { canonical: "keparat", variations: ["kpryt", "kprt"] },
+      { canonical: "kampret", variations: ["kmprt"] },
       { canonical: "sialan", variations: ["s1alan"] },
     ],
     contextual: [
       {
-        canonical: "bodoh",
-        pattern: /(?<![a-z0-9])(?:dasar|kamu|kau|lu|lo|loe|elu|si|anak|bocah|otak)[\W_]+bodoh(?![a-z0-9])/i,
+        canonical: "monyet",
+        pattern: /(?<![a-z0-9])(?:dasar|kamu|kau|lu|lo|loe|elu|si|anak|bocah|muka|otak)[\W_]+monyet(?![a-z0-9])/i,
+      },
+      {
+        canonical: "monyet",
+        pattern: /(?<![a-z0-9])monyet[\W_]+(?:lu|lo|loe|kau|kamu|banget|sia)(?![a-z0-9])/i,
       },
       {
         canonical: "babi",
-        pattern: /(?<![a-z0-9])(?:dasar|kamu|kau|lu|lo|loe|elu)[\W_]+babi(?![a-z0-9])/i,
+        pattern: /(?<![a-z0-9])(?:dasar|kamu|kau|lu|lo|loe|elu|si|anak|bocah|muka|otak)[\W_]+babi(?![a-z0-9])/i,
+      },
+      {
+        canonical: "babi",
+        pattern: /(?<![a-z0-9])babi[\W_]+(?:lu|lo|loe|kau|kamu|banget|sia)(?![a-z0-9])/i,
       },
     ],
   },
   {
     id: "vulgar_and_sexual",
-    name: "Vulgar and Sexual Slang",
+    name: "Vulgar and Sexual Language",
     description: "Kata-kata tidak senonoh, slang seksual, dan anatomi vulgar",
     terms: [
+      { canonical: "kontol", variations: ["kntl", "kntol", "k0nt0l"] },
+      { canonical: "memek", variations: ["mmk", "m3m3k", "mem3k"] },
       { canonical: "jembut", variations: ["jmbt", "jembvt"] },
-      { canonical: "memek", variations: ["mmk", "m3m3k"] },
-      { canonical: "kontol", variations: ["kntl", "kntol"] },
-      { canonical: "ngentot", variations: ["ngntt", "entot", "ngewe", "ngentod", "ngtot"] },
-      { canonical: "pepek", variations: ["p3p3k"] },
-      { canonical: "kimak", variations: ["pukimak", "puki[\\W_]*mak"] },
       { canonical: "peler", variations: ["plr"] },
-      { canonical: "toket", variations: ["t0k3t"] },
+      { canonical: "pepek", variations: ["p3p3k", "ppk"] },
+      { canonical: "ngentot", variations: ["ngntt", "entot", "ngewe", "ngentod", "ngtot"] },
       { canonical: "ngaceng", variations: ["ng4c3ng"] },
+      { canonical: "colmek", variations: ["c0lm3k"] },
+      { canonical: "coli", variations: ["c0l1"] },
+      { canonical: "tetek", variations: ["t3t3k", "ttek"] },
+      { canonical: "toket", variations: ["t0k3t", "tok3t"] },
+      { canonical: "kimak", variations: ["pukimak", "pkmk", "puki[\\W_]*mak"] },
+      { canonical: "seks", variations: ["sex", "s3ks", "s3x"] },
     ],
     contextual: [],
   },
   {
     id: "regional_and_slang",
-    name: "Regional Swear Words and Slang",
+    name: "Regional Indonesian Profanity and Slang",
     description: "Umpatan kedaerahan dan istilah slang tidak pantas",
     terms: [
       { canonical: "jancok", variations: ["jancuk", "dancok", "dancuk", "jnck", "jncuk"] },
       { canonical: "asu", variations: ["4su"] },
       { canonical: "itil", variations: ["1t1l"] },
-      { canonical: "pantek", variations: ["pantak"] },
-      { canonical: "lonte", variations: ["l0nt3"] },
+      { canonical: "pantek", variations: ["pantak", "pntk"] },
+      { canonical: "lonte", variations: ["l0nt3", "lont3"] },
       { canonical: "perek", variations: ["p3r3k"] },
-      { canonical: "jablay", variations: ["jabl4y"] },
-      { canonical: "tetek", variations: ["t3t3k"] },
-      { canonical: "colmek", variations: ["c0lm3k"] },
-      { canonical: "coli", variations: ["c0l1"] },
+      { canonical: "jablay", variations: ["jabl4y", "jbly"] },
+      { canonical: "pecun", variations: ["p3cun", "pcun"] },
       { canonical: "bispak", variations: ["b1sp4k"] },
-      { canonical: "pecun", variations: ["p3cun"] },
     ],
     contextual: [],
   },
@@ -191,6 +210,8 @@ function charToPattern(ch: string): string {
       return "[u\\u00F9-\\u00FCv]";
     case "w":
       return "w";
+    case "x":
+      return "x";
     case "y":
       return "y";
     default:
@@ -201,7 +222,7 @@ function charToPattern(ch: string): string {
 function buildWordRegexPattern(word: string): string {
   const parts = word.split("").map((ch) => charToPattern(ch) + "+");
   // Allows optional non-alphanumeric punctuation, spaces, or underscores between letters
-  // Enforces word boundaries with negative lookbehind and lookahead to avoid false positives (e.g., keranjang, kontrol)
+  // Enforces strict word boundaries with negative lookbehind and lookahead to avoid false positives (e.g., keranjang, kontrol, seksama)
   return "(?<![a-z0-9])" + parts.join("[\\W_]*") + "(?![a-z0-9])";
 }
 
@@ -262,7 +283,7 @@ export function containsProfanity(text: string): boolean {
     }
   }
 
-  // 3. Test collapsed spaced characters (e.g., "a n j i n g" -> "anjing")
+  // 3. Test collapsed spaced characters (e.g., "a n j i n g" -> "anjing", "b o d o h" -> "bodoh")
   const collapsed = normalized.replace(/\b([a-z0-9])[\s._\-]+(?=[a-z0-9]\b)/g, "$1");
   if (collapsed !== normalized) {
     for (const { regex } of COMPILED_PATTERNS) {
@@ -275,16 +296,67 @@ export function containsProfanity(text: string): boolean {
   return false;
 }
 
+/**
+ * Returns the canonical prohibited term if found, or null if clean.
+ * For internal auditing/logging. Never expose offensive terms to end users.
+ */
+export function findProfanity(text: string): string | null {
+  if (!text || typeof text !== "string") return null;
+  const trimmed = text.trim();
+  if (!trimmed) return null;
+
+  for (const { canonical, regex } of COMPILED_PATTERNS) {
+    if (regex.test(trimmed)) return canonical;
+  }
+
+  const normalized = normalizeText(trimmed);
+  for (const { canonical, regex } of COMPILED_PATTERNS) {
+    if (regex.test(normalized)) return canonical;
+  }
+
+  const collapsed = normalized.replace(/\b([a-z0-9])[\s._\-]+(?=[a-z0-9]\b)/g, "$1");
+  if (collapsed !== normalized) {
+    for (const { canonical, regex } of COMPILED_PATTERNS) {
+      if (regex.test(collapsed)) return canonical;
+    }
+  }
+
+  return null;
+}
+
 export interface ValidationResult {
   isValid: boolean;
   message?: string;
+  field?: string;
 }
 
 /**
- * Validates a comment string:
- * - Rejects empty comments or whitespace-only comments
- * - Rejects comments containing prohibited profanity / vulgarity
- * - Returns polite, localized Indonesian error messages without exposing offensive words
+ * General content validation (for assignments, quizzes, materials, grading feedback, tickets, etc.)
+ */
+export function validateContent(
+  text: unknown,
+  customErrorMessage?: string,
+  fieldName?: string
+): ValidationResult {
+  if (typeof text !== "string" || !text.trim()) {
+    return { isValid: true };
+  }
+
+  if (containsProfanity(text)) {
+    return {
+      isValid: false,
+      field: fieldName,
+      message:
+        customErrorMessage ||
+        "Konten mengandung kata atau ungkapan yang tidak diperbolehkan. Silakan periksa kembali tulisan Anda.",
+    };
+  }
+
+  return { isValid: true };
+}
+
+/**
+ * Comment validation (preserves polite comment-specific error message)
  */
 export function validateComment(text: unknown): ValidationResult {
   if (typeof text !== "string" || !text.trim()) {
@@ -297,9 +369,42 @@ export function validateComment(text: unknown): ValidationResult {
   if (containsProfanity(text)) {
     return {
       isValid: false,
-      message: PROFANITY_ERROR_MESSAGE,
+      message: COMMENT_PROFANITY_ERROR_MESSAGE,
     };
   }
 
+  return { isValid: true };
+}
+
+/**
+ * Validates multiple fields at once (e.g., in a form or request body).
+ * Returns the first failing field, or { isValid: true }.
+ */
+export function validateFields(
+  fields: Record<string, unknown>,
+  customErrorMessage?: string
+): ValidationResult {
+  for (const [key, value] of Object.entries(fields)) {
+    if (typeof value === "string") {
+      const res = validateContent(value, customErrorMessage, key);
+      if (!res.isValid) return res;
+    } else if (Array.isArray(value)) {
+      for (let i = 0; i < value.length; i++) {
+        const item = value[i];
+        if (typeof item === "string") {
+          const res = validateContent(item, customErrorMessage, `${key}[${i}]`);
+          if (!res.isValid) return res;
+        } else if (item && typeof item === "object") {
+          const res = validateFields(item as Record<string, unknown>, customErrorMessage);
+          if (!res.isValid) {
+            return {
+              ...res,
+              field: `${key}[${i}].${res.field || ""}`,
+            };
+          }
+        }
+      }
+    }
+  }
   return { isValid: true };
 }

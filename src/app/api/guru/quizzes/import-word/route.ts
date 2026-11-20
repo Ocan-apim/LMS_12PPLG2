@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireRole } from "@/lib/session";
 import { parseCbtDocxBuffer, parseCbtText } from "@/lib/cbt-parser";
+import { validateFields } from "@/lib/profanity-filter";
 
 const BADGE_COLORS = [
   "bg-red-500",
@@ -57,6 +58,23 @@ export async function POST(req: Request) {
           success: false,
           message:
             "Tidak ditemukan soal yang valid dalam file. Pastikan format sesuai template CBT (Q1>:, A>:, PT>:, PF>:, K>:).",
+        },
+        { status: 400 }
+      );
+    }
+
+    const fieldValidation = validateFields({
+      questions: parsedResult.questions.map((q) => ({
+        prompt: q.prompt,
+        options: q.options,
+      })),
+    });
+    if (!fieldValidation.isValid) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: fieldValidation.message,
+          field: fieldValidation.field,
         },
         { status: 400 }
       );

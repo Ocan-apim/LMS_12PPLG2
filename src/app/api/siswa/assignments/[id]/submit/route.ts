@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import { requireRole } from "@/lib/session";
 import { Assignment, CourseClass, Submission, User } from "@/models";
+import { validateContent } from "@/lib/profanity-filter";
 
 type RouteContext = {
   params: Promise<{ id: string }>;
@@ -86,6 +87,16 @@ export async function POST(req: Request, context: RouteContext) {
         { success: false, message: "Harap lampirkan file atau isi catatan tugas sebelum mengumpulkan" },
         { status: 400 }
       );
+    }
+
+    if (hasContent) {
+      const contentValidation = validateContent(content);
+      if (!contentValidation.isValid) {
+        return NextResponse.json(
+          { success: false, message: contentValidation.message },
+          { status: 400 }
+        );
+      }
     }
 
     // Sanitize attachments format

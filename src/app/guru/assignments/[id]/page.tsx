@@ -14,26 +14,18 @@ import {
   ExternalLink,
   Trash2,
   AlertCircle,
+  Loader2,
+  X,
 } from "lucide-react";
 import { Spinner } from "@/components/ui";
 import { validateComment } from "@/lib/profanity-filter";
+import { ThreadedComments, type CommentItem } from "@/components/comments/ThreadedComments";
 
 interface AssignmentAttachment {
   name: string;
   url: string;
   type: string;
   size?: string;
-}
-
-interface CommentItem {
-  _id?: string;
-  userId?: string;
-  userName?: string;
-  senderName?: string;
-  userRole?: string;
-  message: string;
-  isReply?: boolean;
-  createdAt: string;
 }
 
 interface AssignmentDetail {
@@ -59,6 +51,7 @@ interface AssignmentDetail {
   attachments?: AssignmentAttachment[];
   isPublished?: boolean;
   currentUserRole?: string;
+  currentUserId?: string;
   createdAt: string;
 }
 
@@ -358,91 +351,17 @@ export default function AssignmentDetailPage({
           </div>
         </div>
 
-        {/* Right Column (4 cols): Kolom Komentar matching Screenshot 3 Left */}
+        {/* Right Column (4 cols): Kolom Komentar */}
         <div className="lg:col-span-4">
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs space-y-4">
-            <h3 className="text-sm font-bold text-slate-900">Kolom Komentar</h3>
-
-            {/* "Tambahkan Komentar" button (hidden in read-only mode) */}
-            {!["admin", "kurikulum", "kepsek"].includes(assignment.currentUserRole || "") && (
-              <button
-                type="button"
-                onClick={() => setShowCommentInput((prev) => !prev)}
-                className="flex items-center gap-2 text-xs font-bold text-blue-600 hover:text-blue-700 transition"
-              >
-                <MessageSquare className="size-4" />
-                <span>Tambahkan Komentar</span>
-              </button>
-            )}
-
-            {/* Comment Form if expanded */}
-            {showCommentInput && !["admin", "kurikulum", "kepsek"].includes(assignment.currentUserRole || "") && (
-              <form onSubmit={handleAddComment} className="pt-1">
-                <div className="flex items-center gap-2">
-                  <input
-                    type="text"
-                    placeholder="Tulis komentar..."
-                    value={newComment}
-                    onChange={(e) => {
-                      setNewComment(e.target.value);
-                      if (commentError) setCommentError(null);
-                    }}
-                    disabled={submittingComment}
-                    className={`flex-1 rounded-xl border px-3 py-1.5 text-xs text-slate-800 placeholder-slate-400 focus:outline-none transition ${
-                      commentError
-                        ? "border-red-400 bg-red-50/40 text-red-900 focus:border-red-500"
-                        : "border-slate-200 bg-slate-50 focus:border-blue-500 focus:bg-white"
-                    }`}
-                  />
-                  <button
-                    type="submit"
-                    disabled={!newComment.trim() || submittingComment}
-                    className="rounded-xl bg-blue-600 p-2 text-white hover:bg-blue-700 disabled:opacity-50 transition shrink-0"
-                  >
-                    <Send className="size-3.5" />
-                  </button>
-                </div>
-                {commentError && (
-                  <p className="mt-1.5 flex items-start gap-1 text-[11px] font-medium text-red-600 animate-in fade-in">
-                    <AlertCircle className="size-3.5 shrink-0 mt-0.5 text-red-500" />
-                    <span>{commentError}</span>
-                  </p>
-                )}
-              </form>
-            )}
-
-            {/* Comments List */}
-            <div className="space-y-3 pt-2">
-              {comments.length === 0 ? (
-                <p className="text-xs text-slate-400 italic">Belum ada komentar.</p>
-              ) : (
-                comments.map((c, i) => {
-                  const author = c.userName || c.senderName || "Pengguna";
-                  return (
-                    <div
-                      key={c._id || i}
-                      className={`flex items-start gap-2.5 text-xs ${
-                        c.isReply ? "pl-5" : ""
-                      }`}
-                    >
-                      {c.isReply && (
-                        <CornerDownRight className="size-3.5 text-slate-400 shrink-0 mt-1" />
-                      )}
-                      {/* Black circular avatar */}
-                      <div className="size-6 shrink-0 rounded-full bg-slate-900 text-white flex items-center justify-center text-[10px] font-bold">
-                        {author.charAt(0).toUpperCase()}
-                      </div>
-                      <div className="min-w-0 flex-1 leading-snug">
-                        <span className="font-bold text-slate-900">{author}</span>
-                        <span className="text-slate-400 mx-1">:</span>
-                        <span className="text-slate-600">{c.message}</span>
-                      </div>
-                    </div>
-                  );
-                })
-              )}
-            </div>
-          </div>
+          <ThreadedComments
+            comments={comments}
+            currentUserId={assignment.currentUserId}
+            currentUserRole={assignment.currentUserRole || "guru"}
+            apiEndpoint={`/api/guru/assignments/${id}/comments`}
+            onCommentsUpdated={(updated) => setComments(updated)}
+            canComment={!["admin", "kurikulum", "kepsek"].includes(assignment.currentUserRole || "")}
+            title="Kolom Komentar"
+          />
         </div>
       </div>
 

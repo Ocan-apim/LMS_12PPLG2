@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import { requireRole } from "@/lib/session";
 import { Quiz, Assignment, CourseClass, ClassPost } from "@/models";
+import { validateFields } from "@/lib/profanity-filter";
 
 export async function GET(req: Request) {
   const { session, error } = await requireRole(["guru", "admin"]);
@@ -94,6 +95,26 @@ export async function POST(req: Request) {
     if (sanitizedQuestions.length === 0) {
       return NextResponse.json(
         { success: false, message: "Kuis wajib memiliki minimal 1 pertanyaan" },
+        { status: 400 }
+      );
+    }
+
+    const fieldValidation = validateFields({
+      title,
+      description: body.description,
+      questions: sanitizedQuestions.map((q: any) => ({
+        question: q.question,
+        options: q.options,
+        correctAnswer: typeof q.correctAnswer === "string" ? q.correctAnswer : undefined,
+      })),
+    });
+    if (!fieldValidation.isValid) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: fieldValidation.message,
+          field: fieldValidation.field,
+        },
         { status: 400 }
       );
     }

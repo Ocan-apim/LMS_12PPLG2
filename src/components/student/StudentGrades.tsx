@@ -18,7 +18,7 @@ import {
   HelpCircle,
 } from "lucide-react";
 import { BackButton } from "@/components/student/BackButton";
-import { FooterBar, SmoothProgress } from "@/components/student/StudentDashboardComponents";
+import { SmoothProgress } from "@/components/student/StudentDashboardComponents";
 
 interface SubjectBreakdownItem {
   courseClassId: string;
@@ -356,8 +356,6 @@ export function StudentGrades() {
           </section>
         </div>
       )}
-
-      <FooterBar />
     </div>
   );
 }

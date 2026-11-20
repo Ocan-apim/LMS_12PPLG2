@@ -17,7 +17,6 @@ import {
   BookOpen,
   AlertCircle,
 } from "lucide-react";
-import { FooterBar } from "@/components/student/StudentDashboardComponents";
 
 interface CalendarEvent {
   id: number;
@@ -385,8 +384,6 @@ export function StudentCalendar() {
           </div>
         </div>
       )}
-
-      <FooterBar />
     </div>
   );
 }

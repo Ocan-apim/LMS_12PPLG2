@@ -10,6 +10,19 @@ export interface IQuizQuestion {
   points: number;
 }
 
+export interface IQuizComment {
+  _id?: mongoose.Types.ObjectId;
+  userId: mongoose.Types.ObjectId;
+  userName: string;
+  userRole?: string;
+  message: string;
+  parentId?: mongoose.Types.ObjectId | null;
+  isDeleted?: boolean;
+  deletedAt?: Date | null;
+  deletedBy?: mongoose.Types.ObjectId | null;
+  createdAt: Date;
+}
+
 export interface IQuiz {
   title: string;
   description?: string;
@@ -20,6 +33,7 @@ export interface IQuiz {
   totalPoints: number;
   dueDate?: Date;
   isPublished: boolean;
+  comments: IQuizComment[];
   createdAt: Date;
   updatedAt: Date;
 }
@@ -37,6 +51,21 @@ const QuizQuestionSchema = new Schema<IQuizQuestion>(
   { _id: false }
 );
 
+const QuizCommentSchema = new Schema<IQuizComment>(
+  {
+    userId: { type: Schema.Types.ObjectId, ref: "User", required: true },
+    userName: { type: String, required: true },
+    userRole: { type: String, default: "siswa" },
+    message: { type: String, required: true },
+    parentId: { type: Schema.Types.ObjectId, ref: "Quiz.comments", default: null },
+    isDeleted: { type: Boolean, default: false },
+    deletedAt: { type: Date, default: null },
+    deletedBy: { type: Schema.Types.ObjectId, ref: "User", default: null },
+    createdAt: { type: Date, default: Date.now },
+  },
+  { _id: true }
+);
+
 const QuizSchema = new Schema<IQuiz>(
   {
     title: { type: String, required: true, trim: true },
@@ -48,6 +77,7 @@ const QuizSchema = new Schema<IQuiz>(
     totalPoints: { type: Number, default: 100 },
     dueDate: { type: Date },
     isPublished: { type: Boolean, default: true },
+    comments: [QuizCommentSchema],
   },
   { timestamps: true }
 );

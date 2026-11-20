@@ -433,16 +433,6 @@ export default function GuruClassesPage() {
         </div>
       </div>
 
-      {/* Footer matching Figma Page 2 */}
-      <div className="flex flex-col sm:flex-row items-center justify-between border-t border-slate-200 pt-6 text-[11px] text-slate-400 gap-2">
-        <p>© 2026 Learnix LMS. All rights reserved.</p>
-        <div className="flex items-center gap-4">
-          <span className="hover:text-slate-600 cursor-pointer">Privacy Policy</span>
-          <span className="hover:text-slate-600 cursor-pointer">Terms of Service</span>
-          <span className="hover:text-slate-600 cursor-pointer">Contact Support</span>
-        </div>
-      </div>
-
       {/* Delete Class Confirmation Modal */}
       {deleteTargetClass && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in">

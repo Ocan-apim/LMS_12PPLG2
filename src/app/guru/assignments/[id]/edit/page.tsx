@@ -20,6 +20,7 @@ import {
   ChevronRight,
 } from "lucide-react";
 import { Spinner } from "@/components/ui";
+import { validateFields } from "@/lib/profanity-filter";
 
 interface AttachedFile {
   name: string;
@@ -133,6 +134,18 @@ export default function EditTugasPage({
 
     if (!title.trim()) {
       setError("Judul tugas wajib diisi");
+      return;
+    }
+
+    const clientValidation = validateFields({
+      "Judul Tugas": title,
+      "Instruksi": instructions,
+    });
+    if (!clientValidation.isValid) {
+      setError(
+        clientValidation.message ||
+          "Konten tugas mengandung kata atau ungkapan yang tidak diperbolehkan. Silakan periksa kembali tulisan Anda."
+      );
       return;
     }
 

@@ -70,7 +70,7 @@ export async function POST(req: Request, context: RouteContext) {
     await connectDB();
     const body = await req.json();
 
-    const { message } = body;
+    const { message, parentId } = body;
     const validation = validateComment(message);
     if (!validation.isValid) {
       return NextResponse.json(
@@ -112,11 +112,24 @@ export async function POST(req: Request, context: RouteContext) {
       }
     }
 
+    let resolvedParentId = null;
+    if (parentId) {
+      const parentComment = (assignment.comments || []).find(
+        (c: { _id?: unknown }) => String(c._id) === String(parentId)
+      );
+      if (parentComment) {
+        // Single-level threading: If replying to a reply, attach to root parent
+        resolvedParentId = parentComment.parentId ? parentComment.parentId : parentComment._id;
+      }
+    }
+
     const newComment = {
       userId: session.id,
       userName: session.name,
       userRole: session.role,
       message: message.trim(),
+      parentId: resolvedParentId,
+      isDeleted: false,
       createdAt: new Date(),
     };
 
@@ -213,3 +226,114 @@ export async function PUT(req: Request, context: RouteContext) {
 }
 
 export const PATCH = PUT;
+
+export async function DELETE(req: Request, context: RouteContext) {
+  const { session, error } = await requireRole(["guru", "siswa", "admin"]);
+  if (error || !session) return error;
+
+  try {
+    const { id } = await context.params;
+    await connectDB();
+
+    const url = new URL(req.url);
+    let commentId = url.searchParams.get("commentId");
+    if (!commentId) {
+      try {
+        const body = await req.json();
+        commentId = body?.commentId;
+      } catch {}
+    }
+
+    if (!commentId) {
+      return NextResponse.json(
+        { success: false, message: "ID komentar wajib diisi" },
+        { status: 400 }
+      );
+    }
+
+    const assignment = await Assignment.findById(id);
+    if (!assignment) {
+      return NextResponse.json(
+        { success: false, message: "Tugas tidak ditemukan" },
+        { status: 404 }
+      );
+    }
+
+    const commentIndex = (assignment.comments || []).findIndex(
+      (c: { _id?: unknown }) => String(c._id) === String(commentId)
+    );
+
+    if (commentIndex === -1) {
+      return NextResponse.json(
+        { success: false, message: "Komentar tidak ditemukan" },
+        { status: 404 }
+      );
+    }
+
+    const comment = assignment.comments[commentIndex];
+
+    // Authorization checks:
+    // Siswa: only their own comments/replies
+    // Guru: any comment if they teach this course/assignment
+    // Admin: any comment across system
+    // Kurikulum & Kepsek: blocked with 403 by requireRole
+    const isOwner = String(comment.userId) === session.id;
+    let isAuthorized = false;
+
+    if (session.role === "admin") {
+      isAuthorized = true;
+    } else if (session.role === "guru") {
+      if (String(assignment.teacherId) === session.id) {
+        isAuthorized = true;
+      } else if (assignment.courseClassId) {
+        const courseClass = await CourseClass.findById(assignment.courseClassId);
+        if (courseClass && String(courseClass.teacherId) === session.id) {
+          isAuthorized = true;
+        }
+      }
+    } else if (session.role === "siswa") {
+      isAuthorized = isOwner;
+    }
+
+    if (!isAuthorized) {
+      return NextResponse.json(
+        { success: false, message: "Akses ditolak: Anda tidak memiliki izin menghapus komentar ini" },
+        { status: 403 }
+      );
+    }
+
+    // Parent comment deletion behavior:
+    // If reply (has parentId): remove reply directly
+    // If top-level parent (no parentId):
+    //   If active replies exist -> preserve thread using placeholder "Komentar ini telah dihapus"
+    //   If no active replies exist -> remove comment completely
+    if (comment.parentId) {
+      assignment.comments.splice(commentIndex, 1);
+    } else {
+      const hasReplies = assignment.comments.some(
+        (c: { parentId?: unknown; isDeleted?: boolean }) =>
+          String(c.parentId) === String(commentId) && !c.isDeleted
+      );
+
+      if (hasReplies) {
+        assignment.comments[commentIndex].isDeleted = true;
+        assignment.comments[commentIndex].message = "Komentar ini telah dihapus";
+        assignment.comments[commentIndex].deletedAt = new Date();
+        assignment.comments[commentIndex].deletedBy = session.id;
+      } else {
+        assignment.comments.splice(commentIndex, 1);
+      }
+    }
+
+    await assignment.save();
+
+    return NextResponse.json({
+      success: true,
+      message: "Komentar berhasil dihapus",
+      data: { commentId },
+    });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Gagal menghapus komentar";
+    return NextResponse.json({ success: false, message }, { status: 500 });
+  }
+}

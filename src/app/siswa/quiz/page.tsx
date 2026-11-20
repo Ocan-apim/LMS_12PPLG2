@@ -14,7 +14,6 @@ import {
   RefreshCw,
   FolderOpen,
 } from "lucide-react";
-import { FooterBar } from "@/components/student/StudentDashboardComponents";
 
 interface QuizAssignment {
   _id: string;
@@ -174,8 +173,6 @@ export default function SiswaQuizListPage() {
           )}
         </div>
       )}
-
-      <FooterBar />
     </div>
   );
 }

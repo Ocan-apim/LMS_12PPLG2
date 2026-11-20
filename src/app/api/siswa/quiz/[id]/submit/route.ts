@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import { requireRole } from "@/lib/session";
 import { Quiz, Assignment, CourseClass, Submission } from "@/models";
+import { validateContent } from "@/lib/profanity-filter";
 import mongoose from "mongoose";
 
 type RouteContext = {
@@ -72,6 +73,18 @@ export async function POST(req: Request, context: RouteContext) {
     // 4. Parse request body & strip any client-tampered grading fields
     const body = await req.json();
     const rawAnswers = Array.isArray(body.answers) ? body.answers : [];
+
+    for (const item of rawAnswers) {
+      if (item && typeof item.answer === "string" && item.answer.trim()) {
+        const ansValidation = validateContent(item.answer);
+        if (!ansValidation.isValid) {
+          return NextResponse.json(
+            { success: false, message: ansValidation.message },
+            { status: 400 }
+          );
+        }
+      }
+    }
 
     // Map student answers by questionId
     const studentAnswerMap = new Map<string, any>();

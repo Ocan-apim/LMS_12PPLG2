@@ -21,7 +21,7 @@ import {
   Info,
   Eye,
 } from "lucide-react";
-import { FooterBar } from "@/components/student/StudentDashboardComponents";
+import { ThreadedComments, type CommentItem } from "@/components/comments/ThreadedComments";
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -60,6 +60,8 @@ interface QuizData {
   };
   isStaffView?: boolean;
   currentUserRole?: string;
+  currentUserId?: string;
+  comments?: CommentItem[];
   isStarted: boolean;
   startedAt?: string | null;
   remainingSeconds: number;
@@ -78,6 +80,7 @@ export default function SiswaQuizTakePage({ params }: PageProps) {
 
   // Take Mode States
   const [viewMode, setViewMode] = useState<"intro" | "taking" | "result">("intro");
+  const [quizComments, setQuizComments] = useState<CommentItem[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, number | string>>({});
   const [timeLeft, setTimeLeft] = useState<number>(0);
@@ -109,6 +112,7 @@ export default function SiswaQuizTakePage({ params }: PageProps) {
       if (data.success && data.data) {
         const qData: QuizData = data.data;
         setQuiz(qData);
+        setQuizComments(qData.comments || []);
 
         if (qData.result) {
           setResult(qData.result);
@@ -505,6 +509,18 @@ export default function SiswaQuizTakePage({ params }: PageProps) {
               )}
             </div>
           </div>
+
+          {/* Threaded Comments Section for Quiz */}
+          <div className="pt-2">
+            <ThreadedComments
+              comments={quizComments}
+              currentUserId={quiz.currentUserId}
+              currentUserRole={quiz.currentUserRole || "siswa"}
+              apiEndpoint={`/api/quizzes/${id}/comments`}
+              onCommentsUpdated={(updated) => setQuizComments(updated)}
+              title="Komentar Kuis"
+            />
+          </div>
         </div>
       )}
 
@@ -802,10 +818,20 @@ export default function SiswaQuizTakePage({ params }: PageProps) {
               </Link>
             </div>
           </div>
+
+          {/* Threaded Comments Section for Quiz */}
+          <div className="pt-2">
+            <ThreadedComments
+              comments={quizComments}
+              currentUserId={quiz.currentUserId}
+              currentUserRole={quiz.currentUserRole || "siswa"}
+              apiEndpoint={`/api/quizzes/${id}/comments`}
+              onCommentsUpdated={(updated) => setQuizComments(updated)}
+              title="Komentar Kuis"
+            />
+          </div>
         </div>
       )}
-
-      <FooterBar />
     </div>
   );
 }

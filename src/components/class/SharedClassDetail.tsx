@@ -22,8 +22,10 @@ import {
   Send,
   Users,
   Eye,
+  CornerDownRight,
+  Trash2,
+  X,
 } from "lucide-react";
-import { FooterBar } from "@/components/student/StudentDashboardComponents";
 import { validateComment } from "@/lib/profanity-filter";
 
 interface StudentInfo {
@@ -80,10 +82,13 @@ interface PostItem {
     degree?: string;
   };
   comments?: Array<{
+    _id?: string;
     userId: string;
     userName: string;
     userRole?: string;
     message: string;
+    parentId?: string | null;
+    isDeleted?: boolean;
     createdAt: string;
   }>;
   createdAt: string;
@@ -132,6 +137,7 @@ interface ClassDetailData {
   siblingClasses?: SiblingClass[];
   isReadOnly?: boolean;
   currentUserRole?: string;
+  currentUserId?: string;
   noCourseClass?: boolean;
 }
 
@@ -158,11 +164,6 @@ export function SharedClassDetail({
   const [loading, setLoading] = useState(true);
   const [errorStatus, setErrorStatus] = useState<number | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-
-  // Comments state (for students only)
-  const [commentText, setCommentText] = useState("");
-  const [submittingComment, setSubmittingComment] = useState(false);
-  const [commentError, setCommentError] = useState<string | null>(null);
 
   const fetchClassDetail = async (targetCourseId?: string) => {
     try {
@@ -201,47 +202,6 @@ export function SharedClassDetail({
     fetchClassDetail(courseId);
     if (onCourseChange) {
       onCourseChange(courseId);
-    }
-  };
-
-  const handleSendComment = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!commentText.trim() || submittingComment || isReadOnly) return;
-    setCommentError(null);
-
-    // Frontend validation for immediate feedback
-    const clientValidation = validateComment(commentText);
-    if (!clientValidation.isValid) {
-      setCommentError(
-        clientValidation.message ||
-          "Komentar tidak dapat dikirim karena mengandung kata atau ungkapan yang tidak pantas. Silakan ubah komentar Anda."
-      );
-      return;
-    }
-
-    setSubmittingComment(true);
-    try {
-      const res = await fetch(`/api/guru/classes/${course?._id || classId}/posts`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "comment",
-          message: commentText.trim(),
-        }),
-      });
-      const json = await res.json();
-      if (res.ok && json.success) {
-        setCommentText("");
-        setCommentError(null);
-        await fetchClassDetail(activeCourseId || undefined);
-      } else {
-        setCommentError(json.message || "Gagal mengirim komentar");
-      }
-    } catch (err) {
-      console.error("Error posting comment:", err);
-      setCommentError("Terjadi kesalahan koneksi saat mengirim komentar");
-    } finally {
-      setSubmittingComment(false);
     }
   };
 
@@ -345,6 +305,28 @@ export function SharedClassDetail({
     )
     .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
+  // Single-level threaded grouping: top-level comments and replies
+  const topLevelComments = allComments.filter((c) => !c.parentId);
+  const repliesByParentId = new Map<string, typeof allComments>();
+  for (const c of allComments) {
+    if (c.parentId) {
+      const pid = String(c.parentId);
+      if (!repliesByParentId.has(pid)) {
+        repliesByParentId.set(pid, []);
+      }
+      repliesByParentId.get(pid)!.push(c);
+    }
+  }
+
+  const currentUserId = course.currentUserId;
+  const canDeleteComment = (c: { userId: string; isDeleted?: boolean }) => {
+    if (c.isDeleted) return false;
+    if (userRole === "admin") return true;
+    if (userRole === "guru") return true;
+    if (userRole === "siswa" && currentUserId && String(c.userId) === String(currentUserId)) return true;
+    return false;
+  };
+
   const siblings = course.siblingClasses || [];
   const students = course.students || [];
 
@@ -434,11 +416,9 @@ export function SharedClassDetail({
         </p>
       </div>
 
-      {/* 2-Column Layout matching requirement #2 & #10:
-          LEFT: CONTENT / TUGAS & KUIS
-          RIGHT: KOMENTAR */}
-      <div className="grid gap-8 lg:grid-cols-[1fr_360px]">
-        {/* Left Column: CONTENT / TUGAS & KUIS */}
+      {/* Aktivitas Kelas */}
+      <div className="space-y-6">
+        {/* CONTENT / TUGAS & KUIS */}
         <section className="space-y-6">
           <div className="flex items-center justify-between border-b border-slate-200 pb-3">
             <h2 className="font-[family-name:var(--font-display)] text-xl font-extrabold text-slate-900 flex items-center gap-2">
@@ -674,109 +654,6 @@ export function SharedClassDetail({
           )}
         </section>
 
-        {/* Right Column: KOMENTAR PANEL per rule #10 */}
-        <section className="space-y-4">
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs flex flex-col h-full min-h-[500px]">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div>
-                <h3 className="font-[family-name:var(--font-display)] text-base font-extrabold text-slate-900 flex items-center gap-2">
-                  <MessageSquare className="size-4 text-blue-600" />
-                  Komentar
-                </h3>
-                <p className="text-[11px] text-slate-400">Diskusi dan obrolan kelas</p>
-              </div>
-              <span className="rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-bold text-blue-700">
-                {allComments.length}
-              </span>
-            </div>
-
-            {/* Comment List */}
-            <div className="my-4 flex-1 space-y-3 overflow-y-auto max-h-[520px] pr-1">
-              {allComments.length === 0 ? (
-                <div className="py-12 text-center text-xs text-slate-400">
-                  <MessageSquare className="mx-auto size-8 text-slate-300 mb-2" />
-                  Belum ada komentar di kelas ini.
-                </div>
-              ) : (
-                allComments.map((c, idx) => (
-                  <div
-                    key={idx}
-                    className="rounded-xl border border-slate-100 bg-slate-50/80 p-3 text-xs space-y-1.5 transition hover:bg-slate-50"
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-1.5">
-                        <span className="font-bold text-slate-900 truncate max-w-[140px]">
-                          {c.userName || "Pengguna"}
-                        </span>
-                        <span
-                          className={`rounded px-1.5 py-0.2 text-[9px] font-extrabold uppercase ${
-                            c.userRole === "guru"
-                              ? "bg-purple-100 text-purple-700"
-                              : "bg-blue-100 text-blue-700"
-                          }`}
-                        >
-                          {c.userRole === "guru" ? "Guru" : "Siswa"}
-                        </span>
-                      </div>
-                      <span className="text-[10px] text-slate-400 shrink-0">
-                        {new Date(c.createdAt).toLocaleTimeString("id-ID", {
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}
-                      </span>
-                    </div>
-                    <p className="text-slate-700 text-xs leading-relaxed whitespace-pre-wrap">
-                      {c.message}
-                    </p>
-                  </div>
-                ))
-              )}
-            </div>
-
-            {/* Comment Form: Only for students, strictly hidden and disabled for staff read-only */}
-            {!isReadOnly ? (
-              <form onSubmit={handleSendComment} className="border-t border-slate-100 pt-3">
-                <div className="flex items-center gap-2">
-                  <input
-                    type="text"
-                    placeholder="Tulis komentar kelas..."
-                    value={commentText}
-                    onChange={(e) => {
-                      setCommentText(e.target.value);
-                      if (commentError) setCommentError(null);
-                    }}
-                    className={`flex-1 rounded-xl border px-3.5 py-2 text-xs focus:outline-none transition ${
-                      commentError
-                        ? "border-red-400 bg-red-50/40 text-red-900 focus:border-red-500"
-                        : "border-slate-200 focus:border-blue-500"
-                    }`}
-                    disabled={submittingComment}
-                  />
-                  <button
-                    type="submit"
-                    disabled={submittingComment || !commentText.trim()}
-                    className="rounded-xl bg-blue-600 p-2.5 text-white hover:bg-blue-700 disabled:opacity-50 transition shadow-xs shrink-0"
-                    title="Kirim Komentar"
-                  >
-                    <Send className="size-4" />
-                  </button>
-                </div>
-                {commentError && (
-                  <p className="mt-1.5 flex items-start gap-1 text-[11px] font-medium text-red-600 animate-in fade-in">
-                    <AlertCircle className="size-3.5 shrink-0 mt-0.5 text-red-500" />
-                    <span>{commentError}</span>
-                  </p>
-                )}
-              </form>
-            ) : (
-              <div className="border-t border-slate-100 pt-3 text-center">
-                <p className="text-[11px] text-slate-400 italic">
-                  Pengiriman komentar dinonaktifkan untuk akun peninjau staf (baca-saja).
-                </p>
-              </div>
-            )}
-          </div>
-        </section>
       </div>
 
       {/* DAFTAR SISWA Section (per user request section 2 & 3.E) */}
@@ -880,8 +757,6 @@ export function SharedClassDetail({
           </div>
         </section>
       )}
-
-      <FooterBar />
     </div>
   );
 }

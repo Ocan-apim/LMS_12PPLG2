@@ -119,6 +119,7 @@ export async function GET(_req: Request, context: RouteContext) {
         comments,
         isStaffView: isStaff,
         currentUserRole: session.role,
+        currentUserId: session.id,
       },
     });
   } catch (err: unknown) {

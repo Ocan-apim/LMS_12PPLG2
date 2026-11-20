@@ -5,7 +5,6 @@ import Link from "next/link";
 import {
   AverageScoreCard,
   DashboardSubjectCard,
-  FooterBar,
   JoinClassBanner,
   SharedFileCard,
   TaskList,
@@ -186,8 +185,6 @@ export default function SiswaDashboardPage() {
           </div>
         )}
       </section>
-
-      <FooterBar />
     </div>
   );
 }

@@ -128,6 +128,8 @@ export async function GET(_req: Request, context: RouteContext) {
         },
         isStaffView: isStaff,
         currentUserRole: session.role,
+        currentUserId: session.id,
+        comments: quiz.comments || [],
         isStarted,
         startedAt: studentSubmission?.startedAt || null,
         remainingSeconds,

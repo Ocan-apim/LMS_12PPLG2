@@ -16,7 +16,6 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { BackButton } from "@/components/student/BackButton";
-import { FooterBar } from "@/components/student/StudentDashboardComponents";
 
 interface LastAccessedFile {
   name: string;
@@ -261,8 +260,6 @@ export function StudentFiles() {
           </div>
         </div>
       )}
-
-      <FooterBar />
     </div>
   );
 }

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import { requireRole } from "@/lib/session";
 import { SupportTicket, SupportMessage, User, Notification } from "@/models";
+import { validateFields } from "@/lib/profanity-filter";
 
 const ALLOWED_CATEGORIES = [
   "Lupa Password",
@@ -93,6 +94,18 @@ export async function POST(req: NextRequest) {
     if (!message || typeof message !== "string" || !message.trim()) {
       return NextResponse.json(
         { success: false, message: "Pesan pertanyaan wajib diisi" },
+        { status: 400 }
+      );
+    }
+
+    const fieldValidation = validateFields({ subject, message });
+    if (!fieldValidation.isValid) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: fieldValidation.message,
+          field: fieldValidation.field,
+        },
         { status: 400 }
       );
     }

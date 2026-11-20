@@ -17,7 +17,6 @@ import {
   RefreshCw,
   FolderOpen,
 } from "lucide-react";
-import { FooterBar } from "@/components/student/StudentDashboardComponents";
 
 export type AssignmentStatus = "pending" | "late" | "completed";
 
@@ -345,8 +344,6 @@ export function StudentAssignments() {
           tone="green"
         />
       </div>
-
-      <FooterBar />
     </div>
   );
 }

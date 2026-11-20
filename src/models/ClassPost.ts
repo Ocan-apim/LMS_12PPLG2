@@ -1,10 +1,15 @@
 import mongoose, { Schema, models, model } from "mongoose";
 
 export interface IClassComment {
+  _id?: string;
   userId: mongoose.Types.ObjectId;
   userName: string;
   userRole: string;
   message: string;
+  parentId?: mongoose.Types.ObjectId;
+  isDeleted?: boolean;
+  deletedAt?: Date;
+  deletedBy?: mongoose.Types.ObjectId;
   createdAt: Date;
 }
 
@@ -26,6 +31,10 @@ const ClassCommentSchema = new Schema<IClassComment>(
     userName: { type: String, required: true },
     userRole: { type: String, default: "siswa" },
     message: { type: String, required: true },
+    parentId: { type: Schema.Types.ObjectId, default: null },
+    isDeleted: { type: Boolean, default: false },
+    deletedAt: { type: Date },
+    deletedBy: { type: Schema.Types.ObjectId, ref: "User" },
     createdAt: { type: Date, default: Date.now },
   },
   { _id: true }

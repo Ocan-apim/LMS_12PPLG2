@@ -25,8 +25,8 @@ import {
   ExternalLink,
   ShieldAlert,
 } from "lucide-react";
-import { FooterBar } from "@/components/student/StudentDashboardComponents";
 import { validateComment } from "@/lib/profanity-filter";
+import { ThreadedComments, type CommentItem } from "@/components/comments/ThreadedComments";
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -38,15 +38,6 @@ interface Attachment {
   type?: string;
   size?: string;
   uploadedAt?: string;
-}
-
-interface CommentItem {
-  _id?: string;
-  userId: string;
-  userName: string;
-  userRole: string;
-  message: string;
-  createdAt: string;
 }
 
 interface AssignmentDetail {
@@ -92,6 +83,7 @@ interface AssignmentDetail {
   comments: CommentItem[];
   isStaffView?: boolean;
   currentUserRole?: string;
+  currentUserId?: string;
 }
 
 export default function SiswaAssignmentDetailPage({ params }: PageProps) {
@@ -506,90 +498,15 @@ export default function SiswaAssignmentDetailPage({ params }: PageProps) {
           </div>
 
           {/* Discussion & Comments Area */}
-          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-            <h2 className="flex items-center gap-2 font-[family-name:var(--font-display)] text-base font-extrabold text-slate-900">
-              <MessageSquare className="size-4 text-[#674ce7]" />
-              Diskusi & Komentar Tugas ({comments.length})
-            </h2>
-
-            {/* Comment List */}
-            <div className="mt-4 space-y-4 max-h-[360px] overflow-y-auto pr-1">
-              {comments.length === 0 ? (
-                <p className="py-6 text-center text-xs italic text-slate-400">
-                  Belum ada komentar pada tugas ini. Ajukan pertanyaan jika ada yang belum jelas!
-                </p>
-              ) : (
-                comments.map((c, idx) => (
-                  <div key={c._id || idx} className="rounded-xl bg-slate-50 p-3.5 border border-slate-100">
-                    <div className="flex items-center justify-between text-xs">
-                      <div className="flex items-center gap-2">
-                        <span className="font-bold text-slate-800">{c.userName}</span>
-                        <span
-                          className={`rounded px-1.5 py-0.5 text-[9px] font-extrabold uppercase ${
-                            c.userRole === "guru"
-                              ? "bg-purple-100 text-purple-700"
-                              : "bg-blue-100 text-blue-700"
-                          }`}
-                        >
-                          {c.userRole}
-                        </span>
-                      </div>
-                      <span className="text-[10px] text-slate-400">
-                        {new Date(c.createdAt).toLocaleTimeString("id-ID", {
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}
-                      </span>
-                    </div>
-                    <p className="mt-2 text-xs text-slate-700 leading-relaxed">{c.message}</p>
-                  </div>
-                ))
-              )}
-            </div>
-
-            {/* Post Comment Input */}
-            {!assignment.isStaffView ? (
-              <div className="mt-4 border-t border-slate-100 pt-4">
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={newComment}
-                    onChange={(e) => {
-                      setNewComment(e.target.value);
-                      if (commentError) setCommentError(null);
-                    }}
-                    onKeyDown={(e) => e.key === "Enter" && !commentLoading && handlePostComment()}
-                    placeholder="Tulis pertanyaan atau komentar di sini..."
-                    className={`flex-1 rounded-xl border px-4 py-2.5 text-xs text-slate-800 placeholder-slate-400 focus:outline-hidden transition ${
-                      commentError
-                        ? "border-red-400 bg-red-50/40 text-red-900 focus:border-red-500"
-                        : "border-slate-200 focus:border-[#674ce7]"
-                    }`}
-                  />
-                  <button
-                    onClick={handlePostComment}
-                    disabled={commentLoading || !newComment.trim()}
-                    className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-[#674ce7] px-4 py-2.5 text-xs font-bold text-white transition hover:bg-[#563cd6] disabled:opacity-50 shrink-0"
-                  >
-                    {commentLoading ? <Loader2 className="size-3.5 animate-spin" /> : <Send className="size-3.5" />}
-                    Kirim
-                  </button>
-                </div>
-                {commentError && (
-                  <p className="mt-1.5 flex items-start gap-1 text-[11px] font-medium text-red-600 animate-in fade-in">
-                    <AlertCircle className="size-3.5 shrink-0 mt-0.5 text-red-500" />
-                    <span>{commentError}</span>
-                  </p>
-                )}
-              </div>
-            ) : (
-              <div className="mt-4 border-t border-slate-100 pt-3 text-center">
-                <p className="text-[11px] text-slate-400 italic">
-                  Penulisan komentar dinonaktifkan untuk akun peninjau staf (baca-saja).
-                </p>
-              </div>
-            )}
-          </div>
+          <ThreadedComments
+            comments={comments}
+            currentUserId={assignment.currentUserId}
+            currentUserRole={assignment.currentUserRole || "siswa"}
+            apiEndpoint={`/api/guru/assignments/${id}/comments`}
+            onCommentsUpdated={(updated) => setComments(updated)}
+            canComment={!assignment.isStaffView}
+            title="Diskusi & Komentar Tugas"
+          />
         </div>
 
         {/* Right Column: Submission Card */}
@@ -892,8 +809,6 @@ export default function SiswaAssignmentDetailPage({ params }: PageProps) {
           </div>
         </div>
       </div>
-
-      <FooterBar />
     </div>
   );
 }

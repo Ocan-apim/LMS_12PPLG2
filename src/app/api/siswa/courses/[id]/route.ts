@@ -90,6 +90,7 @@ export async function GET(req: Request, context: RouteContext) {
               siblingClasses: [],
               isReadOnly: isStaff,
               currentUserRole: session.role,
+              currentUserId: session.id,
               noCourseClass: true,
             },
           });
@@ -304,6 +305,7 @@ export async function GET(req: Request, context: RouteContext) {
         siblingClasses: formattedSiblingClasses,
         isReadOnly: isStaff,
         currentUserRole: session.role,
+        currentUserId: session.id,
       },
     }, {
       headers: {

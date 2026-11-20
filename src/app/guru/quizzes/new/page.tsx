@@ -24,6 +24,7 @@ import {
   Loader2,
   HelpCircle,
 } from "lucide-react";
+import { validateFields } from "@/lib/profanity-filter";
 
 interface QuizOption {
   key: string; // "A", "B", "C", "D"
@@ -311,6 +312,22 @@ function QuizBuilderForm() {
           points: Number(q.points) || 10,
         };
       });
+
+      const clientValidation = validateFields({
+        judul: title,
+        soal: formattedQuestions.map((q, i) => ({
+          nomor: i + 1,
+          pertanyaan: q.question,
+          pilihan: q.options,
+        })),
+      });
+      if (!clientValidation.isValid) {
+        setError(
+          clientValidation.message ||
+            "Konten kuis mengandung kata atau ungkapan yang tidak diperbolehkan. Silakan periksa kembali tulisan Anda."
+        );
+        return;
+      }
 
       const res = await fetch("/api/guru/quizzes", {
         method: "POST",

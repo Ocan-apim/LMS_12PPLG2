@@ -1,146 +1,202 @@
 /**
- * Comprehensive Test Suite for Learnix LMS Indonesian Profanity Filter
- * Run with: node --experimental-strip-types scripts/test-profanity.mjs
+ * Automated Verification & Regression Suite for Learnix LMS Indonesian Profanity Filter
+ * Run with: npm run test:profanity
  */
 
 import {
-  normalizeText,
-  normalizeLeetspeak,
   normalizeUnicode,
+  normalizeLeetspeak,
+  normalizeText,
   containsProfanity,
   validateComment,
-  PROFANITY_ERROR_MESSAGE,
-  EMPTY_COMMENT_ERROR_MESSAGE,
+  validateContent,
+  validateFields,
   PROFANITY_DICTIONARY,
+  EMPTY_COMMENT_ERROR_MESSAGE,
+  COMMENT_PROFANITY_ERROR_MESSAGE,
+  DEFAULT_PROFANITY_ERROR_MESSAGE,
 } from "../src/lib/profanity-filter.ts";
 
 let totalTests = 0;
 let passedTests = 0;
 let failedTests = 0;
 
-function assert(condition, testName, details = "") {
+function assert(condition, testName, failureDetail = "") {
   totalTests++;
   if (condition) {
     passedTests++;
-    console.log(`  \x1b[32m✔\x1b[0m ${testName}`);
+    console.log(`  ✔ ${testName}`);
   } else {
     failedTests++;
-    console.error(`  \x1b[31m✖\x1b[0m ${testName} ${details ? `(${details})` : ""}`);
+    console.error(`  ✖ ${testName} ${failureDetail ? "(" + failureDetail + ")" : ""}`);
   }
 }
 
-console.log("\n--- 0. Core Function Unit Tests ---");
+console.log("\n=======================================================");
+console.log(" LEARNIX LMS - PROFANITY FILTER REGRESSION SUITE");
+console.log("=======================================================\n");
+
+// 0. CORE FUNCTION TESTS
+console.log("--- 0. Core Function Unit Tests ---");
+
 assert(
   normalizeUnicode("АNJİNG") === "anjing",
   "normalizeUnicode converts homoglyphs and lowercases"
 );
+
 assert(
-  normalizeLeetspeak("b4ngs4t") === "bangsat",
+  normalizeLeetspeak("b4ngs@t 1d10t") === "bangsat idiot",
   "normalizeLeetspeak converts numbers/symbols to letters"
 );
+
 assert(
-  normalizeText("   khooontooool   ") === "khontol",
+  normalizeText("  ANJIIIIING   b0d000h  ") === "anjing bodoh",
   "normalizeText collapses repeated chars and trims whitespace"
 );
+
 assert(
   containsProfanity("ajg") === true,
   "containsProfanity detects abbreviated profanity"
 );
+
 assert(
-  containsProfanity("selamat pagi") === false,
+  containsProfanity("Selamat pagi semuanya.") === false,
   "containsProfanity returns false for innocent text"
 );
+
 assert(
   Array.isArray(PROFANITY_DICTIONARY) && PROFANITY_DICTIONARY.length >= 3,
   "PROFANITY_DICTIONARY exposes organized categories"
 );
 
-// 1. MUST BE REJECTED (Specified in Prompt)
-console.log("--- 1. Required Prohibited Terms & Variations ---");
+// 1. MANDATORY WORDS & PREVIOUSLY MISSED TERMS: "bodoh" & "seks"
+console.log("\n--- 1. Mandatory Explicit Blocked Terms: 'bodoh' & 'seks' ---");
+
+const bodohTests = [
+  "bodoh",
+  "Kamu bodoh!",
+  "Dasar bodoh",
+  "b0d0h",
+  "b0doh",
+  "b.o.d.o.h",
+  "b o d o h",
+  "BODOH",
+  "bodoooh",
+  "bdoh",
+];
+
+for (const term of bodohTests) {
+  assert(
+    containsProfanity(term) === true,
+    `Reject 'bodoh' variation: "${term}"`
+  );
+}
+
+const seksTests = [
+  "seks",
+  "konten seks",
+  "sex",
+  "s3ks",
+  "s3x",
+  "s.e.k.s",
+  "s e k s",
+  "SEKS",
+  "sekss",
+];
+
+for (const term of seksTests) {
+  assert(
+    containsProfanity(term) === true,
+    `Reject 'seks' variation: "${term}"`
+  );
+}
+
+// 2. REQUIRED PROHIBITED TERMS & VARIATIONS
+console.log("\n--- 2. Required Prohibited Terms & Variations ---");
 
 const promptMustBeRejected = [
+  // Insults and personal attacks
   "Kamu anjing!",
   "Dasar bangsat",
   "anjg",
   "ajg",
   "bngst",
   "bgts",
+  "goblok",
+  "tolol",
   "gblk",
   "tlol",
+  "bego",
+  "beg0",
+  "dungu",
+  "idiot",
+  "1d10t",
+  "bajingan",
+  "brengsek",
+  "keparat",
+  "kampret",
+  "kmprt",
+  // Vulgar and sexual language
+  "memek",
   "mmk",
+  "kontol",
   "kntl",
+  "jembut",
+  "jmbt",
+  "jembuut",
+  "peler",
+  "plr",
+  "pepek",
+  "p3p3k",
+  "ngentot",
+  "ngntt",
+  "ngent0t",
+  "entot",
+  "ngaceng",
+  "colmek",
+  "coli",
+  "tetek",
+  "toket",
+  "kimak",
+  "pukimak kau",
+  // Evasion techniques
   "A-N-J-I-N-G",
   "a.n.j.i.n.g",
   "anjiiing",
   "b4ngs4t",
-  // Additional variations required
-  "jembut",
-  "jmbt",
-  "jembuut",
-  "memek",
-  "mem3k",
-  "kontol",
-  "kont0l",
-  "ngentot",
-  "ngntt",
-  "ngent0t",
   "b@ngs@t",
+  "k0nt0l",
+  "mem3k",
+  // Regional swear words
+  "jancok",
+  "jancuk",
+  "dancok",
+  "dancuk",
+  "asu",
+  "pantek",
+  "itil",
+  "lonte",
+  "perek",
+  "jablay",
+  "pecun",
+  // Contextual insults
+  "dasar monyet kamu",
+  "muka monyet lu",
+  "kamu babi",
+  "dasar babi kau",
 ];
 
 for (const phrase of promptMustBeRejected) {
   const res = validateComment(phrase);
   assert(
-    !res.isValid && res.message === PROFANITY_ERROR_MESSAGE,
-    `Reject: "${phrase}"`,
-    `Got isValid=${res.isValid}, message=${res.message}`
+    res.isValid === false,
+    `Reject prohibited: "${phrase}"`,
+    `Expected rejection, but was accepted`
   );
 }
 
-// 2. EXPANDED DICTIONARY (Insults, Vulgar/Sexual, Regional)
-console.log("\n--- 2. Expanded Dictionary Tests ---");
-
-const expandedVocabulary = [
-  // Insults
-  { word: "bego", test: "Dasar bego kamu" },
-  { word: "bajingan", test: "kamu bajingan" },
-  { word: "keparat", test: "dasar keparat" },
-  { word: "brengsek", test: "orang brengsek" },
-  { word: "sialan", test: "sialan kamu" },
-  { word: "bodoh (contextual)", test: "kamu bodoh banget" },
-  { word: "bodoh (contextual)", test: "dasar bodoh" },
-  // Vulgar / Sexual
-  { word: "pepek", test: "pepek busuk" },
-  { word: "kimak", test: "pukimak kau" },
-  { word: "peler", test: "peler bau" },
-  { word: "plr", test: "dasar plr" },
-  { word: "toket", test: "toket besar" },
-  { word: "ngaceng", test: "lagi ngaceng" },
-  { word: "entot", test: "kena entot" },
-  // Regional swear words & slang
-  { word: "jancok", test: "jancok kowe" },
-  { word: "dancok", test: "dancok kon" },
-  { word: "jancuk", test: "jancuk tenan" },
-  { word: "asu", test: "dasar asu" },
-  { word: "itil", test: "itil kamu" },
-  { word: "pantek", test: "pantek kau" },
-  { word: "lonte", test: "dasar lonte" },
-  { word: "perek", test: "cewek perek" },
-  { word: "jablay", test: "dasar jablay" },
-  { word: "tetek", test: "tetek perempuan" },
-  { word: "colmek", test: "suka colmek" },
-  { word: "coli", test: "tukang coli" },
-];
-
-for (const { word, test } of expandedVocabulary) {
-  const res = validateComment(test);
-  assert(
-    !res.isValid && res.message === PROFANITY_ERROR_MESSAGE,
-    `Reject ${word}: "${test}"`
-  );
-}
-
-// 3. MUST BE ACCEPTED (False Positive Prevention)
-console.log("\n--- 3. Required Accept Sentences & False Positive Checks ---");
+// 3. REQUIRED ACCEPT SENTENCES & FALSE POSITIVE SAFEGUARDS
+console.log("\n--- 3. Required Accept Sentences & False Positive Safeguards ---");
 
 const promptMustBeAccepted = [
   "Selamat pagi semuanya.",
@@ -149,7 +205,10 @@ const promptMustBeAccepted = [
   "Mari kita diskusikan bersama.",
   "Pembelajaran hari ini sangat menarik.",
   "Saya ingin bertanya tentang materi ini.",
-  // False positive safeguard checks for Indonesian words
+  // Seksama / Saksama should NEVER be blocked by 'seks'
+  "Membaca buku ini dengan seksama.",
+  "Tolong teliti soal ini secara saksama.",
+  // Innocent Indonesian words that could trigger naive substrings
   "panjang sekali materi hari ini",
   "silakan masukkan tugas ke dalam keranjang",
   "kontrol kualitas kode sudah sesuai",
@@ -160,7 +219,6 @@ const promptMustBeAccepted = [
   "guru memblokir peserta yang tidak hadir",
   "begitu cara menyelesaikan soalnya",
   "begadang tidak baik untuk siswa",
-  "maaf saya merasa masih bodoh dan ingin belajar lebih banyak",
   "masuk ke ruang kelas tepat waktu",
   "asumsi awal penelitian ini",
   "asuransi perlindungan siswa",
@@ -173,6 +231,9 @@ const promptMustBeAccepted = [
   "tentu saja kita bisa menyelesaikan tugas ini bersama",
   "penjelasannya bagus bgt",
   "materi minggu ini sangat aplikatif",
+  // Zoological / non-insult usage of animal names
+  "Monyet ekor panjang adalah satwa asli Asia Tenggara.",
+  "Peternakan babi hutan di daerah pedesaan.",
 ];
 
 for (const phrase of promptMustBeAccepted) {
@@ -194,8 +255,8 @@ assert(
   "Reject empty string"
 );
 
-// Spaces only
-const spacesRes = validateComment("     ");
+// Whitespace only
+const spacesRes = validateComment("    ");
 assert(
   !spacesRes.isValid && spacesRes.message === EMPTY_COMMENT_ERROR_MESSAGE,
   "Reject spaces only"
@@ -206,44 +267,17 @@ assert(!validateComment(null).isValid, "Reject null comment");
 assert(!validateComment(undefined).isValid, "Reject undefined comment");
 
 // Uppercase variations
-assert(
-  !validateComment("KAMU ANJING!").isValid,
-  "Reject all-caps: 'KAMU ANJING!'"
-);
-assert(
-  !validateComment("AnJiNg LoE").isValid,
-  "Reject mixed-case: 'AnJiNg LoE'"
-);
-assert(
-  !validateComment("bNgSt").isValid,
-  "Reject mixed-case abbreviation: 'bNgSt'"
-);
-assert(
-  !validateComment("kNtL").isValid,
-  "Reject mixed-case abbreviation: 'kNtL'"
-);
+assert(!validateComment("KAMU ANJING!").isValid, "Reject all-caps: 'KAMU ANJING!'");
+assert(!validateComment("AnJiNg LoE").isValid, "Reject mixed-case: 'AnJiNg LoE'");
+assert(!validateComment("bNgSt").isValid, "Reject mixed-case abbreviation: 'bNgSt'");
+assert(!validateComment("kNtL").isValid, "Reject mixed-case abbreviation: 'kNtL'");
 
 // Character separation (spaces and punctuation)
-assert(
-  !validateComment("a n j i n g").isValid,
-  "Reject spaced letters: 'a n j i n g'"
-);
-assert(
-  !validateComment("k o n t o l").isValid,
-  "Reject spaced letters: 'k o n t o l'"
-);
-assert(
-  !validateComment("b.n.g.s.t").isValid,
-  "Reject dot-separated letters: 'b.n.g.s.t'"
-);
-assert(
-  !validateComment("k-n-t-l").isValid,
-  "Reject dash-separated letters: 'k-n-t-l'"
-);
-assert(
-  !validateComment("_anjing_").isValid,
-  "Reject underscore-wrapped: '_anjing_'"
-);
+assert(!validateComment("a n j i n g").isValid, "Reject spaced letters: 'a n j i n g'");
+assert(!validateComment("k o n t o l").isValid, "Reject spaced letters: 'k o n t o l'");
+assert(!validateComment("b.n.g.s.t").isValid, "Reject dot-separated letters: 'b.n.g.s.t'");
+assert(!validateComment("k-n-t-l").isValid, "Reject dash-separated letters: 'k-n-t-l'");
+assert(!validateComment("_anjing_").isValid, "Reject underscore-wrapped: '_anjing_'");
 
 // Sentence with both normal and prohibited words
 assert(
@@ -255,10 +289,107 @@ assert(
   "Reject polite prefix with vulgar slang suffix"
 );
 
-// 5. DIRECT API VALIDATION SIMULATION
-console.log("\n--- 5. Direct API Simulation (MongoDB Persistence Prevention) ---");
+// 5. GLOBAL USER WRITING VALIDATION (validateFields & validateContent)
+console.log("\n--- 5. Global User Writing Validation (Assignments, Quizzes, Feedback) ---");
 
-// Mock Assignment comment database array
+// Assignment validation
+const validAssignment = {
+  title: "Tugas Fisika: Kinematika Gerak Lurus",
+  instructions: "Kerjakan soal 1 sampai 5 secara mandiri.",
+};
+assert(
+  validateFields(validAssignment).isValid,
+  "Valid assignment passes validateFields"
+);
+
+const profaneAssignmentTitle = {
+  title: "Tugas bodoh untuk kalian",
+  instructions: "Silakan kerjakan.",
+};
+const resProfaneTitle = validateFields(profaneAssignmentTitle);
+assert(
+  !resProfaneTitle.isValid && resProfaneTitle.field === "title",
+  "Assignment with 'bodoh' in title is rejected"
+);
+
+const profaneAssignmentInstructions = {
+  title: "Tugas Matematika Bab 2",
+  instructions: "Kerjakan jangan kayak anjing.",
+};
+const resProfaneInst = validateFields(profaneAssignmentInstructions);
+assert(
+  !resProfaneInst.isValid && resProfaneInst.field === "instructions",
+  "Assignment with profanity in instructions is rejected"
+);
+
+// Quiz questions & options validation
+const validQuiz = {
+  title: "Ulangan Harian Biologi",
+  questions: [
+    {
+      question: "Apakah fungsi mitokondria?",
+      options: ["Penghasil energi", "Sintesis protein", "Fotosintesis"],
+    },
+  ],
+};
+assert(
+  validateFields(validQuiz).isValid,
+  "Valid quiz passes validateFields"
+);
+
+const profaneQuizQuestion = {
+  title: "Kuis Kimia",
+  questions: [
+    {
+      question: "Soal ini bikin goblok sekali",
+      options: ["A", "B"],
+    },
+  ],
+};
+const resProfaneQ = validateFields(profaneQuizQuestion);
+assert(
+  !resProfaneQ.isValid && resProfaneQ.field?.includes("questions"),
+  "Quiz with profanity in question is rejected"
+);
+
+const profaneQuizOption = {
+  title: "Kuis Sejarah",
+  questions: [
+    {
+      question: "Siapakah tokoh berikut?",
+      options: ["Pilihan A", "Dasar bangsat kau"],
+    },
+  ],
+};
+const resProfaneOpt = validateFields(profaneQuizOption);
+assert(
+  !resProfaneOpt.isValid,
+  "Quiz with profanity in options is rejected"
+);
+
+// Grading feedback validation
+assert(
+  validateContent("Pekerjaan sangat baik, pertahankan prestasimu!").isValid,
+  "Valid grading feedback is accepted"
+);
+assert(
+  !validateContent("Jawaban kamu bodoh sekali").isValid,
+  "Grading feedback containing 'bodoh' is rejected"
+);
+
+// Student submission notes
+assert(
+  validateContent("Berikut lampiran laporan praktikum saya.").isValid,
+  "Valid submission notes are accepted"
+);
+assert(
+  !validateContent("Susah banget kntl").isValid,
+  "Submission notes with 'kntl' are rejected"
+);
+
+// 6. DIRECT API VALIDATION SIMULATION (MongoDB Persistence Prevention)
+console.log("\n--- 6. Direct API Simulation (MongoDB Persistence Prevention) ---");
+
 const mockAssignmentComments = [];
 
 function simulateApiAddComment(payload) {

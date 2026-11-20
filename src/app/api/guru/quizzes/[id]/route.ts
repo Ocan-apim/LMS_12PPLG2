@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import { requireRole } from "@/lib/session";
 import { Quiz } from "@/models";
+import { validateFields } from "@/lib/profanity-filter";
 
 type RouteContext = {
   params: Promise<{ id: string }>;
@@ -36,7 +37,29 @@ export async function PUT(req: Request, context: RouteContext) {
     await connectDB();
     const body = await req.json();
 
-    const { title, durationSeconds, questions, totalPoints } = body;
+    const { title, description, durationSeconds, questions, totalPoints } = body;
+
+    const fieldValidation = validateFields({
+      title,
+      description,
+      questions: Array.isArray(questions)
+        ? questions.map((q: any) => ({
+            question: q?.question,
+            options: q?.options,
+            correctAnswer: typeof q?.correctAnswer === "string" ? q.correctAnswer : undefined,
+          }))
+        : undefined,
+    });
+    if (!fieldValidation.isValid) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: fieldValidation.message,
+          field: fieldValidation.field,
+        },
+        { status: 400 }
+      );
+    }
 
     const updated = await Quiz.findOneAndUpdate(
       { _id: id, teacherId: session.id },
