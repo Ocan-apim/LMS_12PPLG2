@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, Suspense } from "react";
+import { useEffect, useState, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   Clock,
@@ -16,6 +16,13 @@ import {
   Underline,
   Sigma,
   ChevronDown,
+  Download,
+  Upload,
+  FileText,
+  CheckCircle2,
+  X,
+  Loader2,
+  HelpCircle,
 } from "lucide-react";
 
 interface QuizOption {
@@ -98,6 +105,57 @@ function QuizBuilderForm() {
 
   const [publishing, setPublishing] = useState(false);
   const [error, setError] = useState("");
+  const [isImporting, setIsImporting] = useState(false);
+  const [importSuccessMessage, setImportSuccessMessage] = useState<string | null>(null);
+  const [showFormatGuide, setShowFormatGuide] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsImporting(true);
+    setError("");
+    setImportSuccessMessage(null);
+
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const res = await fetch("/api/guru/quizzes/import-word", {
+        method: "POST",
+        body: formData,
+      });
+
+      const json = await res.json();
+      if (!res.ok || !json.success) {
+        setError(json.message || "Gagal mengimpor file Word");
+        return;
+      }
+
+      if (Array.isArray(json.data?.questions) && json.data.questions.length > 0) {
+        setQuestions(json.data.questions);
+        setActiveQuestionIndex(0);
+
+        if (!quizTitle.trim()) {
+          const rawName = file.name.replace(/\.[^/.]+$/, "");
+          setQuizTitle(`Kuis CBT: ${rawName}`);
+        }
+
+        setImportSuccessMessage(
+          `Berhasil mengimpor ${json.data.totalQuestions} soal (${json.data.totalPoints} total poin).`
+        );
+      }
+    } catch (err: unknown) {
+      console.error("Gagal import:", err);
+      setError("Terjadi kesalahan saat memproses file");
+    } finally {
+      setIsImporting(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+    }
+  }
 
   useEffect(() => {
     async function loadClasses() {
@@ -281,6 +339,86 @@ function QuizBuilderForm() {
 
   return (
     <div className="space-y-6 pb-20 max-w-7xl mx-auto">
+      {/* Format Soal CBT Card */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 bg-gradient-to-r from-blue-50/80 via-slate-50 to-indigo-50/60 border border-blue-200/70 rounded-2xl shadow-xs">
+        <div className="flex items-start gap-3">
+          <div className="p-2.5 bg-blue-600 text-white rounded-xl shadow-xs shrink-0 mt-0.5 sm:mt-0">
+            <FileText className="size-5" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h3 className="text-xs font-bold text-slate-800">
+                Format Soal CBT (Microsoft Word)
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowFormatGuide(true)}
+                className="inline-flex items-center gap-1 text-[11px] font-medium text-blue-600 hover:text-blue-800 underline transition"
+              >
+                <HelpCircle className="size-3" />
+                <span>Petunjuk Format</span>
+              </button>
+            </div>
+            <p className="text-[11px] text-slate-600 mt-0.5 leading-relaxed">
+              Unduh template Word, ubah soal &amp; kunci jawaban, lalu upload kembali untuk membuat kuis secara otomatis tanpa input satu per satu.
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+          <a
+            href="/api/guru/quizzes/template"
+            download="Template_Soal_CBT.docx"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-700 shadow-xs hover:bg-slate-50 transition"
+          >
+            <Download className="size-3.5 text-blue-600" />
+            <span>Download Format (.docx)</span>
+          </a>
+
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isImporting}
+            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-xs font-semibold text-white shadow-xs transition disabled:opacity-60 cursor-pointer"
+          >
+            {isImporting ? (
+              <>
+                <Loader2 className="size-3.5 animate-spin" />
+                <span>Mengimpor...</span>
+              </>
+            ) : (
+              <>
+                <Upload className="size-3.5" />
+                <span>Upload Word (.docx)</span>
+              </>
+            )}
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".docx,.doc,.txt"
+            className="hidden"
+            onChange={handleFileUpload}
+          />
+        </div>
+      </div>
+
+      {importSuccessMessage && (
+        <div className="flex items-center justify-between gap-2 p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs rounded-xl shadow-xs animate-in fade-in">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="size-4 text-emerald-600 shrink-0" />
+            <span>{importSuccessMessage}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setImportSuccessMessage(null)}
+            className="text-emerald-600 hover:text-emerald-800 p-1"
+          >
+            <X className="size-3.5" />
+          </button>
+        </div>
+      )}
+
       {/* Top Header Row matching Screenshots 4 & 5 */}
       <div className="space-y-3">
         {/* Judul Kuis Input matching Screenshot 4 & 5 */}
@@ -492,7 +630,7 @@ function QuizBuilderForm() {
           </div>
 
           {/* Questions List */}
-          <div className="space-y-2.5">
+          <div className="space-y-2.5 max-h-[680px] overflow-y-auto pr-1">
             {questions.map((q, idx) => {
               const isActive = idx === activeQuestionIndex;
               return (
@@ -665,6 +803,83 @@ function QuizBuilderForm() {
               And as shown in Screenshot 5 Right! */}
         </div>
       </div>
+
+      {/* Format Guide Modal */}
+      {showFormatGuide && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs animate-in fade-in">
+          <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2">
+                <FileText className="size-5 text-blue-600" />
+                <h3 className="text-sm font-bold text-slate-800">
+                  Panduan Format Dokumen Word CBT
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowFormatGuide(false)}
+                className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+              >
+                <X className="size-4" />
+              </button>
+            </div>
+
+            <div className="text-xs text-slate-600 space-y-3 leading-relaxed">
+              <p>
+                Setiap butir soal ditulis berurutan dengan format tag sebagai berikut:
+              </p>
+
+              <div className="rounded-xl bg-slate-900 text-slate-100 p-3.5 font-mono text-[11px] space-y-1">
+                <div className="text-emerald-400">Q1&gt;: Teks pertanyaan soal di sini...</div>
+                <div className="text-sky-300">A&gt;: Opsi jawaban pertama (diterjemahkan sebagai A)</div>
+                <div className="text-sky-300">A&gt;: Opsi jawaban kedua (diterjemahkan sebagai B)</div>
+                <div className="text-sky-300">A&gt;: Opsi jawaban ketiga (diterjemahkan sebagai C)</div>
+                <div className="text-sky-300">A&gt;: Opsi jawaban keempat (diterjemahkan sebagai D)</div>
+                <div className="text-sky-300">A&gt;: Opsi jawaban kelima (diterjemahkan sebagai E)</div>
+                <div className="text-amber-300">PT&gt;: 2</div>
+                <div className="text-slate-400">PF&gt;: 0</div>
+                <div className="text-pink-400 font-bold">K&gt;: B</div>
+              </div>
+
+              <div className="space-y-1.5 pt-1 text-[11px]">
+                <div>
+                  <strong className="text-slate-800">Q / Q1:</strong> Pertanyaan soal.
+                </div>
+                <div>
+                  <strong className="text-slate-800">A:</strong> Opsi jawaban (semua baris opsi menggunakan prefix <code className="bg-slate-100 px-1 rounded">A&gt;:</code>, urutan baris ke-1 sampai ke-5 secara otomatis menjadi pilihan A, B, C, D, E).
+                </div>
+                <div>
+                  <strong className="text-slate-800">PT:</strong> Point if True (skor jika siswa menjawab benar, default: 2).
+                </div>
+                <div>
+                  <strong className="text-slate-800">PF:</strong> Point if False (skor jika salah, default: 0).
+                </div>
+                <div>
+                  <strong className="text-slate-800">K:</strong> Kunci Jawaban. Mengacu ke huruf opsi (misal <code className="bg-slate-100 px-1 rounded">K&gt;: B</code> berarti baris <code className="bg-slate-100 px-1 rounded">A&gt;:</code> kedua adalah kunci yang benar).
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+              <a
+                href="/api/guru/quizzes/template"
+                download="Template_Soal_CBT.docx"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition"
+              >
+                <Download className="size-3.5 text-blue-600" />
+                <span>Unduh Contoh (.docx)</span>
+              </a>
+              <button
+                type="button"
+                onClick={() => setShowFormatGuide(false)}
+                className="px-4 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-xs font-semibold text-white transition"
+              >
+                Mengerti
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

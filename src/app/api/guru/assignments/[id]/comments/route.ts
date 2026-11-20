@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import { requireRole } from "@/lib/session";
 import { Assignment, CourseClass } from "@/models";
+import { validateComment } from "@/lib/profanity-filter";
 
 type RouteContext = {
   params: Promise<{ id: string }>;
@@ -70,9 +71,10 @@ export async function POST(req: Request, context: RouteContext) {
     const body = await req.json();
 
     const { message } = body;
-    if (!message || !message.trim()) {
+    const validation = validateComment(message);
+    if (!validation.isValid) {
       return NextResponse.json(
-        { success: false, message: "Pesan komentar tidak boleh kosong" },
+        { success: false, message: validation.message },
         { status: 400 }
       );
     }
@@ -139,3 +141,75 @@ export async function POST(req: Request, context: RouteContext) {
     return NextResponse.json({ success: false, message }, { status: 500 });
   }
 }
+
+export async function PUT(req: Request, context: RouteContext) {
+  const { session, error } = await requireRole(["guru", "siswa", "admin"]);
+  if (error || !session) return error;
+
+  try {
+    const { id } = await context.params;
+    await connectDB();
+    const body = await req.json();
+
+    const { commentId, message } = body;
+    if (!commentId) {
+      return NextResponse.json(
+        { success: false, message: "ID komentar wajib diisi" },
+        { status: 400 }
+      );
+    }
+
+    const validation = validateComment(message);
+    if (!validation.isValid) {
+      return NextResponse.json(
+        { success: false, message: validation.message },
+        { status: 400 }
+      );
+    }
+
+    const assignment = await Assignment.findById(id);
+    if (!assignment) {
+      return NextResponse.json(
+        { success: false, message: "Tugas tidak ditemukan" },
+        { status: 404 }
+      );
+    }
+
+    const commentIndex = (assignment.comments || []).findIndex(
+      (c: { _id?: unknown }) => String(c._id) === String(commentId)
+    );
+
+    if (commentIndex === -1) {
+      return NextResponse.json(
+        { success: false, message: "Komentar tidak ditemukan" },
+        { status: 404 }
+      );
+    }
+
+    const existingComment = assignment.comments[commentIndex];
+    const isOwner = String(existingComment.userId) === session.id;
+    const isTeacher = session.role === "guru" && String(assignment.teacherId) === session.id;
+    const isAdmin = session.role === "admin";
+
+    if (!isOwner && !isTeacher && !isAdmin) {
+      return NextResponse.json(
+        { success: false, message: "Akses ditolak: Anda tidak memiliki izin mengedit komentar ini" },
+        { status: 403 }
+      );
+    }
+
+    assignment.comments[commentIndex].message = message.trim();
+    await assignment.save();
+
+    return NextResponse.json({
+      success: true,
+      message: "Komentar berhasil diperbarui",
+      data: assignment.comments[commentIndex],
+    });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Gagal memperbarui komentar";
+    return NextResponse.json({ success: false, message }, { status: 500 });
+  }
+}
+
+export const PATCH = PUT;

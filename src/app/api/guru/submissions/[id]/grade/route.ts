@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import { requireRole } from "@/lib/session";
 import { Submission, Assignment, User } from "@/models";
+import { validateComment } from "@/lib/profanity-filter";
 
 type RouteContext = {
   params: Promise<{ id: string }>;
@@ -83,6 +84,13 @@ export async function POST(req: Request, context: RouteContext) {
     }
 
     if (privateComment && privateComment.trim()) {
+      const commentValidation = validateComment(privateComment);
+      if (!commentValidation.isValid) {
+        return NextResponse.json(
+          { success: false, message: commentValidation.message },
+          { status: 400 }
+        );
+      }
       sub.privateComments.push({
         senderId: session.id,
         senderName: session.name,

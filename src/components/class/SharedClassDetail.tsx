@@ -24,6 +24,7 @@ import {
   Eye,
 } from "lucide-react";
 import { FooterBar } from "@/components/student/StudentDashboardComponents";
+import { validateComment } from "@/lib/profanity-filter";
 
 interface StudentInfo {
   _id: string;
@@ -161,6 +162,7 @@ export function SharedClassDetail({
   // Comments state (for students only)
   const [commentText, setCommentText] = useState("");
   const [submittingComment, setSubmittingComment] = useState(false);
+  const [commentError, setCommentError] = useState<string | null>(null);
 
   const fetchClassDetail = async (targetCourseId?: string) => {
     try {
@@ -205,6 +207,18 @@ export function SharedClassDetail({
   const handleSendComment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!commentText.trim() || submittingComment || isReadOnly) return;
+    setCommentError(null);
+
+    // Frontend validation for immediate feedback
+    const clientValidation = validateComment(commentText);
+    if (!clientValidation.isValid) {
+      setCommentError(
+        clientValidation.message ||
+          "Komentar tidak dapat dikirim karena mengandung kata atau ungkapan yang tidak pantas. Silakan ubah komentar Anda."
+      );
+      return;
+    }
+
     setSubmittingComment(true);
     try {
       const res = await fetch(`/api/guru/classes/${course?._id || classId}/posts`, {
@@ -216,14 +230,16 @@ export function SharedClassDetail({
         }),
       });
       const json = await res.json();
-      if (json.success) {
+      if (res.ok && json.success) {
         setCommentText("");
+        setCommentError(null);
         await fetchClassDetail(activeCourseId || undefined);
       } else {
-        alert(json.message || "Gagal mengirim komentar");
+        setCommentError(json.message || "Gagal mengirim komentar");
       }
     } catch (err) {
       console.error("Error posting comment:", err);
+      setCommentError("Terjadi kesalahan koneksi saat mengirim komentar");
     } finally {
       setSubmittingComment(false);
     }
@@ -725,19 +741,32 @@ export function SharedClassDetail({
                     type="text"
                     placeholder="Tulis komentar kelas..."
                     value={commentText}
-                    onChange={(e) => setCommentText(e.target.value)}
-                    className="flex-1 rounded-xl border border-slate-200 px-3.5 py-2 text-xs focus:border-blue-500 focus:outline-none"
+                    onChange={(e) => {
+                      setCommentText(e.target.value);
+                      if (commentError) setCommentError(null);
+                    }}
+                    className={`flex-1 rounded-xl border px-3.5 py-2 text-xs focus:outline-none transition ${
+                      commentError
+                        ? "border-red-400 bg-red-50/40 text-red-900 focus:border-red-500"
+                        : "border-slate-200 focus:border-blue-500"
+                    }`}
                     disabled={submittingComment}
                   />
                   <button
                     type="submit"
                     disabled={submittingComment || !commentText.trim()}
-                    className="rounded-xl bg-blue-600 p-2.5 text-white hover:bg-blue-700 disabled:opacity-50 transition shadow-xs"
+                    className="rounded-xl bg-blue-600 p-2.5 text-white hover:bg-blue-700 disabled:opacity-50 transition shadow-xs shrink-0"
                     title="Kirim Komentar"
                   >
                     <Send className="size-4" />
                   </button>
                 </div>
+                {commentError && (
+                  <p className="mt-1.5 flex items-start gap-1 text-[11px] font-medium text-red-600 animate-in fade-in">
+                    <AlertCircle className="size-3.5 shrink-0 mt-0.5 text-red-500" />
+                    <span>{commentError}</span>
+                  </p>
+                )}
               </form>
             ) : (
               <div className="border-t border-slate-100 pt-3 text-center">

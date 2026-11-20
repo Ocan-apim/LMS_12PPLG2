@@ -16,6 +16,7 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { Spinner } from "@/components/ui";
+import { validateComment } from "@/lib/profanity-filter";
 
 interface AssignmentAttachment {
   name: string;
@@ -82,6 +83,7 @@ export default function AssignmentDetailPage({
   const [newComment, setNewComment] = useState("");
   const [showCommentInput, setShowCommentInput] = useState(false);
   const [submittingComment, setSubmittingComment] = useState(false);
+  const [commentError, setCommentError] = useState<string | null>(null);
 
   async function handleDeleteAssignment() {
     setDeleting(true);
@@ -133,6 +135,16 @@ export default function AssignmentDetailPage({
   async function handleAddComment(e: React.FormEvent) {
     e.preventDefault();
     if (!newComment.trim() || submittingComment) return;
+    setCommentError(null);
+
+    const clientValidation = validateComment(newComment);
+    if (!clientValidation.isValid) {
+      setCommentError(
+        clientValidation.message ||
+          "Komentar tidak dapat dikirim karena mengandung kata atau ungkapan yang tidak pantas. Silakan ubah komentar Anda."
+      );
+      return;
+    }
 
     setSubmittingComment(true);
     try {
@@ -142,16 +154,17 @@ export default function AssignmentDetailPage({
         body: JSON.stringify({ message: newComment.trim() }),
       });
       const json = await res.json();
-      if (json.success && json.data) {
+      if (res.ok && json.success && json.data) {
         setComments((prev) => [...prev, json.data]);
         setNewComment("");
+        setCommentError(null);
         setShowCommentInput(false);
       } else {
-        alert(json.message || "Gagal menambahkan komentar");
+        setCommentError(json.message || "Gagal menambahkan komentar");
       }
     } catch (err) {
       console.error("Gagal menambahkan komentar:", err);
-      alert("Gagal menambahkan komentar");
+      setCommentError("Terjadi kesalahan koneksi saat mengirim komentar");
     } finally {
       setSubmittingComment(false);
     }
@@ -364,22 +377,37 @@ export default function AssignmentDetailPage({
 
             {/* Comment Form if expanded */}
             {showCommentInput && !["admin", "kurikulum", "kepsek"].includes(assignment.currentUserRole || "") && (
-              <form onSubmit={handleAddComment} className="flex items-center gap-2 pt-1">
-                <input
-                  type="text"
-                  placeholder="Tulis komentar..."
-                  value={newComment}
-                  onChange={(e) => setNewComment(e.target.value)}
-                  disabled={submittingComment}
-                  className="flex-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-800 placeholder-slate-400 focus:border-blue-500 focus:bg-white focus:outline-none"
-                />
-                <button
-                  type="submit"
-                  disabled={!newComment.trim() || submittingComment}
-                  className="rounded-xl bg-blue-600 p-2 text-white hover:bg-blue-700 disabled:opacity-50 transition"
-                >
-                  <Send className="size-3.5" />
-                </button>
+              <form onSubmit={handleAddComment} className="pt-1">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    placeholder="Tulis komentar..."
+                    value={newComment}
+                    onChange={(e) => {
+                      setNewComment(e.target.value);
+                      if (commentError) setCommentError(null);
+                    }}
+                    disabled={submittingComment}
+                    className={`flex-1 rounded-xl border px-3 py-1.5 text-xs text-slate-800 placeholder-slate-400 focus:outline-none transition ${
+                      commentError
+                        ? "border-red-400 bg-red-50/40 text-red-900 focus:border-red-500"
+                        : "border-slate-200 bg-slate-50 focus:border-blue-500 focus:bg-white"
+                    }`}
+                  />
+                  <button
+                    type="submit"
+                    disabled={!newComment.trim() || submittingComment}
+                    className="rounded-xl bg-blue-600 p-2 text-white hover:bg-blue-700 disabled:opacity-50 transition shrink-0"
+                  >
+                    <Send className="size-3.5" />
+                  </button>
+                </div>
+                {commentError && (
+                  <p className="mt-1.5 flex items-start gap-1 text-[11px] font-medium text-red-600 animate-in fade-in">
+                    <AlertCircle className="size-3.5 shrink-0 mt-0.5 text-red-500" />
+                    <span>{commentError}</span>
+                  </p>
+                )}
               </form>
             )}
 

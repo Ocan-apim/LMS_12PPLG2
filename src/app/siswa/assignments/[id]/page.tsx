@@ -26,6 +26,7 @@ import {
   ShieldAlert,
 } from "lucide-react";
 import { FooterBar } from "@/components/student/StudentDashboardComponents";
+import { validateComment } from "@/lib/profanity-filter";
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -115,6 +116,7 @@ export default function SiswaAssignmentDetailPage({ params }: PageProps) {
   const [comments, setComments] = useState<CommentItem[]>([]);
   const [newComment, setNewComment] = useState("");
   const [commentLoading, setCommentLoading] = useState(false);
+  const [commentError, setCommentError] = useState<string | null>(null);
 
   // Fetch Assignment Detail
   const fetchAssignment = async () => {
@@ -244,6 +246,16 @@ export default function SiswaAssignmentDetailPage({ params }: PageProps) {
   // Handle Post Comment via /api/guru/assignments/[id]/comments
   const handlePostComment = async () => {
     if (!newComment.trim()) return;
+    setCommentError(null);
+
+    const clientValidation = validateComment(newComment);
+    if (!clientValidation.isValid) {
+      setCommentError(
+        clientValidation.message ||
+          "Komentar tidak dapat dikirim karena mengandung kata atau ungkapan yang tidak pantas. Silakan ubah komentar Anda."
+      );
+      return;
+    }
 
     setCommentLoading(true);
     try {
@@ -255,15 +267,19 @@ export default function SiswaAssignmentDetailPage({ params }: PageProps) {
 
       const data = await res.json();
       if (!res.ok || !data.success) {
-        throw new Error(data.message || "Gagal mengirim komentar.");
+        setCommentError(data.message || "Gagal mengirim komentar.");
+        return;
       }
 
       if (data.data) {
         setComments((prev) => [...prev, data.data]);
       }
       setNewComment("");
+      setCommentError(null);
     } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : "Gagal mengirim komentar.");
+      setCommentError(
+        err instanceof Error ? err.message : "Gagal mengirim komentar."
+      );
     } finally {
       setCommentLoading(false);
     }
@@ -533,23 +549,38 @@ export default function SiswaAssignmentDetailPage({ params }: PageProps) {
 
             {/* Post Comment Input */}
             {!assignment.isStaffView ? (
-              <div className="mt-4 flex gap-2 border-t border-slate-100 pt-4">
-                <input
-                  type="text"
-                  value={newComment}
-                  onChange={(e) => setNewComment(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && !commentLoading && handlePostComment()}
-                  placeholder="Tulis pertanyaan atau komentar di sini..."
-                  className="flex-1 rounded-xl border border-slate-200 px-4 py-2.5 text-xs text-slate-800 placeholder-slate-400 focus:border-[#674ce7] focus:outline-hidden"
-                />
-                <button
-                  onClick={handlePostComment}
-                  disabled={commentLoading || !newComment.trim()}
-                  className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-[#674ce7] px-4 py-2.5 text-xs font-bold text-white transition hover:bg-[#563cd6] disabled:opacity-50"
-                >
-                  {commentLoading ? <Loader2 className="size-3.5 animate-spin" /> : <Send className="size-3.5" />}
-                  Kirim
-                </button>
+              <div className="mt-4 border-t border-slate-100 pt-4">
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={newComment}
+                    onChange={(e) => {
+                      setNewComment(e.target.value);
+                      if (commentError) setCommentError(null);
+                    }}
+                    onKeyDown={(e) => e.key === "Enter" && !commentLoading && handlePostComment()}
+                    placeholder="Tulis pertanyaan atau komentar di sini..."
+                    className={`flex-1 rounded-xl border px-4 py-2.5 text-xs text-slate-800 placeholder-slate-400 focus:outline-hidden transition ${
+                      commentError
+                        ? "border-red-400 bg-red-50/40 text-red-900 focus:border-red-500"
+                        : "border-slate-200 focus:border-[#674ce7]"
+                    }`}
+                  />
+                  <button
+                    onClick={handlePostComment}
+                    disabled={commentLoading || !newComment.trim()}
+                    className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-[#674ce7] px-4 py-2.5 text-xs font-bold text-white transition hover:bg-[#563cd6] disabled:opacity-50 shrink-0"
+                  >
+                    {commentLoading ? <Loader2 className="size-3.5 animate-spin" /> : <Send className="size-3.5" />}
+                    Kirim
+                  </button>
+                </div>
+                {commentError && (
+                  <p className="mt-1.5 flex items-start gap-1 text-[11px] font-medium text-red-600 animate-in fade-in">
+                    <AlertCircle className="size-3.5 shrink-0 mt-0.5 text-red-500" />
+                    <span>{commentError}</span>
+                  </p>
+                )}
               </div>
             ) : (
               <div className="mt-4 border-t border-slate-100 pt-3 text-center">
