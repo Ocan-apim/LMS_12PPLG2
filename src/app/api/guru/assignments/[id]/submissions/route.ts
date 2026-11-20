@@ -167,6 +167,7 @@ export async function GET(_req: Request, context: RouteContext) {
         assignment: {
           _id: assignment._id,
           title: assignment.title,
+          type: assignment.type || "tugas",
           instructions: assignment.instructions,
           maxScore: assignment.maxScore,
           dueDate: assignment.dueDate,

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import { requireRole } from "@/lib/session";
 import { User, CourseClass, Submission } from "@/models";
+import bcrypt from "bcryptjs";
 
 export async function GET(req: NextRequest) {
   // Authorization: Role must be siswa
@@ -96,35 +97,106 @@ export async function PATCH(req: NextRequest) {
 
   try {
     await connectDB();
-
     const body = await req.json().catch(() => ({}));
 
-    // CRITICAL SECURITY: Strict allowlist of mutable fields.
-    // Disallow role escalation, modifying another user, changing NIS/NISN/email/password/grades/classes.
-    const allowedFields = ["phone", "gender", "birthPlace", "birthDate", "photoUrl"];
-    const updateData: Record<string, any> = {};
+    // CRITICAL SECURITY: Strict allowlist on mutable fields
+    // Siswa may ONLY modify: email, password, and photoUrl.
+    const allowedKeys = new Set(["email", "password", "currentPassword", "photoUrl"]);
+    const providedKeys = Object.keys(body);
 
-    for (const key of allowedFields) {
-      if (body[key] !== undefined) {
-        if (key === "gender") {
-          if (body[key] === "Laki-laki" || body[key] === "Perempuan") {
-            updateData.gender = body[key];
-          }
-        } else if (key === "birthDate") {
-          const parsed = new Date(body[key]);
-          if (!isNaN(parsed.getTime())) {
-            updateData.birthDate = parsed;
-          }
-        } else if (typeof body[key] === "string") {
-          updateData[key] = body[key].trim();
-        }
+    for (const key of providedKeys) {
+      if (!allowedKeys.has(key)) {
+        return NextResponse.json(
+          {
+            success: false,
+            message: `Bidang '${key}' tidak dapat diubah oleh siswa. Data identitas resmi hanya dapat diubah oleh Administrator.`,
+          },
+          { status: 400 }
+        );
       }
     }
 
-    // Authoritative user mutation: ONLY update session.id
-    const updatedUser: any = await User.findByIdAndUpdate(
+    const currentUser = await User.findById(session.id);
+    if (!currentUser) {
+      return NextResponse.json(
+        { success: false, message: "Pengguna tidak ditemukan" },
+        { status: 404 }
+      );
+    }
+
+    const updates: Record<string, unknown> = {};
+
+    // 1. Email update validation
+    if (body.email !== undefined) {
+      const emailStr = String(body.email).trim().toLowerCase();
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(emailStr)) {
+        return NextResponse.json(
+          { success: false, message: "Format email tidak valid" },
+          { status: 400 }
+        );
+      }
+
+      const existing = await User.findOne({
+        email: emailStr,
+        _id: { $ne: session.id },
+      });
+      if (existing) {
+        return NextResponse.json(
+          { success: false, message: "Email ini sudah digunakan oleh akun lain" },
+          { status: 400 }
+        );
+      }
+
+      updates.email = emailStr;
+    }
+
+    // 2. Password update validation (requires currentPassword verification)
+    if (body.password !== undefined && body.password !== "") {
+      const newPassword = String(body.password);
+      const currentPassword = String(body.currentPassword || "");
+
+      if (!currentPassword) {
+        return NextResponse.json(
+          { success: false, message: "Password saat ini wajib diisi untuk mengubah password" },
+          { status: 400 }
+        );
+      }
+
+      const isCurrentValid = await bcrypt.compare(currentPassword, currentUser.password);
+      if (!isCurrentValid) {
+        return NextResponse.json(
+          { success: false, message: "Password saat ini tidak sesuai" },
+          { status: 400 }
+        );
+      }
+
+      if (newPassword.length < 6) {
+        return NextResponse.json(
+          { success: false, message: "Password baru minimal terdiri dari 6 karakter" },
+          { status: 400 }
+        );
+      }
+
+      const hashedPassword = await bcrypt.hash(newPassword, 10);
+      updates.password = hashedPassword;
+    }
+
+    // 3. Profile picture update
+    if (body.photoUrl !== undefined) {
+      updates.photoUrl = typeof body.photoUrl === "string" ? body.photoUrl.trim() : "";
+    }
+
+    if (Object.keys(updates).length === 0) {
+      return NextResponse.json(
+        { success: false, message: "Tidak ada data perubahan yang diberikan" },
+        { status: 400 }
+      );
+    }
+
+    const updatedUser = await User.findByIdAndUpdate(
       session.id,
-      { $set: updateData },
+      { $set: updates },
       { new: true, runValidators: true }
     )
       .select("-password")
@@ -132,16 +204,9 @@ export async function PATCH(req: NextRequest) {
       .populate("departmentId", "name code")
       .lean();
 
-    if (!updatedUser) {
-      return NextResponse.json(
-        { success: false, message: "Pengguna tidak ditemukan" },
-        { status: 404 }
-      );
-    }
-
     return NextResponse.json({
       success: true,
-      message: "Profil berhasil diperbarui",
+      message: "Pengaturan akun siswa berhasil diperbarui",
       data: { user: updatedUser },
     });
   } catch (err: unknown) {

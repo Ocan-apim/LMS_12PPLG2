@@ -15,9 +15,11 @@ export async function GET(req: Request) {
     const type = searchParams.get("type");
     const search = searchParams.get("search");
 
+    // Ensure stray forum discussion entries are not treated as assignments
     const query: Record<string, unknown> = {
       teacherId: session.id,
       isArchived: { $ne: true },
+      title: { $not: /forum[\s_-]*diskusi/i },
     };
 
     if (courseClassId && courseClassId !== "all") {
@@ -27,7 +29,7 @@ export async function GET(req: Request) {
       query.type = type;
     }
     if (search) {
-      query.title = { $regex: search, $options: "i" };
+      query.title = { $regex: search, $options: "i", $not: /forum[\s_-]*diskusi/i };
     }
 
     const assignments = await Assignment.find(query)

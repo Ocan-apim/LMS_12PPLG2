@@ -90,6 +90,7 @@ interface SubmissionData {
 interface AssignmentInfo {
   _id: string;
   title: string;
+  type?: string;
   instructions?: string;
   maxScore: number;
   dueDate?: string;
@@ -117,10 +118,8 @@ export default function GoogleClassroomSubmissionsPage({
   // Right Panel Grading State
   const [currentScore, setCurrentScore] = useState<string>("");
   const [currentFeedback, setCurrentFeedback] = useState<string>("");
-  const [privateCommentInput, setPrivateCommentInput] = useState<string>("");
   const [editingQuizAnswers, setEditingQuizAnswers] = useState<QuizAnswerItem[]>([]);
   const [savingGrade, setSavingGrade] = useState(false);
-  const [sendingComment, setSendingComment] = useState(false);
   const [saveNotification, setSaveNotification] = useState<string | null>(null);
 
   useEffect(() => {
@@ -161,7 +160,6 @@ export default function GoogleClassroomSubmissionsPage({
         setCurrentScore("");
       }
       setCurrentFeedback(selectedItem.feedback || "");
-      setPrivateCommentInput("");
       setEditingQuizAnswers(selectedItem.quizAnswers || []);
     }
   }, [selectedStudentId, selectedItem]);
@@ -299,48 +297,7 @@ export default function GoogleClassroomSubmissionsPage({
     }
   }
 
-  // Send Private Comment
-  async function handleSendPrivateComment(e: React.FormEvent) {
-    e.preventDefault();
-    if (!privateCommentInput.trim() || !selectedItem || !assignment) return;
 
-    setSendingComment(true);
-    const subId = selectedItem.submissionId || "new";
-
-    try {
-      const res = await fetch(`/api/guru/submissions/${subId}/grade`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          assignmentId: assignment._id,
-          studentId: selectedItem.student._id,
-          privateComment: privateCommentInput.trim(),
-        }),
-      });
-
-      const json = await res.json();
-      if (json.success) {
-        const newComments = json.data.privateComments || [];
-        setItems((prev) =>
-          prev.map((i) => {
-            if (i.student._id === selectedItem.student._id) {
-              return {
-                ...i,
-                submissionId: json.data._id,
-                privateComments: newComments,
-              };
-            }
-            return i;
-          })
-        );
-        setPrivateCommentInput("");
-      }
-    } catch {
-      alert("Gagal mengirim komentar pribadi");
-    } finally {
-      setSendingComment(false);
-    }
-  }
 
   if (loading) {
     return (
@@ -719,9 +676,10 @@ export default function GoogleClassroomSubmissionsPage({
                     </div>
                   )}
 
-                  {/* Quiz Review & Per-Question Essay Grading */}
-                  {((assignment.quiz?.questions && assignment.quiz.questions.length > 0) ||
-                    (selectedItem.quizAnswers && selectedItem.quizAnswers.length > 0)) && (
+                  {/* Quiz Review & Per-Question Essay Grading - Only displayed when assignment is a Quiz */}
+                  {assignment.type === "kuis" &&
+                    ((assignment.quiz?.questions && assignment.quiz.questions.length > 0) ||
+                      (selectedItem.quizAnswers && selectedItem.quizAnswers.length > 0)) && (
                     <div className="space-y-4 pt-4 border-t border-border">
                       <div className="flex items-center justify-between">
                         <div>
@@ -1054,69 +1012,6 @@ export default function GoogleClassroomSubmissionsPage({
                     <span>{saveNotification}</span>
                   </div>
                 )}
-              </div>
-
-              {/* Private Comments Section matching Google Classroom */}
-              <div className="flex-1 flex flex-col pt-3 border-t border-border space-y-3">
-                <div className="flex items-center gap-1.5">
-                  <Lock className="size-3 text-muted-foreground" />
-                  <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                    Komentar Pribadi
-                  </h3>
-                </div>
-                <p className="text-[10px] text-muted-foreground">
-                  Hanya Anda dan {selectedItem.student.name} yang dapat melihat komentar ini.
-                </p>
-
-                {/* Comments Stream */}
-                <div className="flex-1 overflow-y-auto space-y-2 max-h-48 pr-1">
-                  {selectedItem.privateComments && selectedItem.privateComments.length > 0 ? (
-                    selectedItem.privateComments.map((pc, idx) => (
-                      <div
-                        key={idx}
-                        className={`rounded-xl p-2.5 text-xs space-y-1 ${
-                          pc.senderRole === "guru"
-                            ? "bg-blue-50 text-blue-950 dark:bg-blue-950/40 dark:text-blue-200"
-                            : "bg-muted/60 text-foreground"
-                        }`}
-                      >
-                        <div className="flex items-center justify-between text-[10px] font-semibold">
-                          <span>{pc.senderName}</span>
-                          <span className="text-muted-foreground">
-                            {new Date(pc.createdAt).toLocaleTimeString("id-ID", {
-                              hour: "2-digit",
-                              minute: "2-digit",
-                            })}
-                          </span>
-                        </div>
-                        <p className="text-[11px] leading-relaxed">{pc.message}</p>
-                      </div>
-                    ))
-                  ) : (
-                    <p className="text-[11px] text-muted-foreground italic py-2 text-center">
-                      Belum ada pesan pribadi.
-                    </p>
-                  )}
-                </div>
-
-                {/* Send Private Comment Form */}
-                <form onSubmit={handleSendPrivateComment} className="flex items-center gap-2 pt-2">
-                  <input
-                    type="text"
-                    value={privateCommentInput}
-                    onChange={(e) => setPrivateCommentInput(e.target.value)}
-                    placeholder="Tambahkan komentar pribadi..."
-                    className="flex-1 rounded-lg border border-border bg-background px-3 py-1.5 text-xs focus:border-blue-500 focus:outline-none"
-                  />
-                  <Button
-                    type="submit"
-                    size="sm"
-                    disabled={sendingComment || !privateCommentInput.trim()}
-                    className="bg-blue-600 hover:bg-blue-700 text-white p-2"
-                  >
-                    <Send className="size-3.5" />
-                  </Button>
-                </form>
               </div>
             </div>
           ) : (

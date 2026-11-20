@@ -42,7 +42,43 @@ export function TopNav({ userName, roleLabel, role, onMenuClick }: TopNavProps) 
   const [results, setResults] = useState<SearchResults | null>(null);
   const [searching, setSearching] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
+  const [unreadCount, setUnreadCount] = useState<number>(0);
   const searchContainerRef = useRef<HTMLDivElement>(null);
+
+  // Sync notification unread count for student
+  useEffect(() => {
+    if (role === "siswa") {
+      fetch("/api/siswa/notifications")
+        .then((res) => res.json())
+        .then((json) => {
+          if (json.success && json.data) {
+            setUnreadCount(json.data.unreadCount || 0);
+          }
+        })
+        .catch(() => {});
+    }
+
+    function handleNotificationUpdate(e: Event) {
+      const customEvent = e as CustomEvent<{ unreadCount?: number }>;
+      if (typeof customEvent.detail?.unreadCount === "number") {
+        setUnreadCount(customEvent.detail.unreadCount);
+      } else if (role === "siswa") {
+        fetch("/api/siswa/notifications")
+          .then((res) => res.json())
+          .then((json) => {
+            if (json.success && json.data) {
+              setUnreadCount(json.data.unreadCount || 0);
+            }
+          })
+          .catch(() => {});
+      }
+    }
+
+    window.addEventListener("notifications-updated", handleNotificationUpdate);
+    return () => {
+      window.removeEventListener("notifications-updated", handleNotificationUpdate);
+    };
+  }, [role]);
 
   // Close search dropdown on click outside
   useEffect(() => {
@@ -258,11 +294,13 @@ export function TopNav({ userName, roleLabel, role, onMenuClick }: TopNavProps) 
         {role === "siswa" ? (
           <Link
             href="/siswa/notifications"
-            aria-label="Notifikasi Siswa"
+            aria-label={`Notifikasi Siswa${unreadCount > 0 ? ` (${unreadCount} belum dibaca)` : ""}`}
             className="relative rounded-full p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-800 transition"
           >
             <Bell className="size-4.5" />
-            <span className="absolute top-1.5 right-1.5 size-1.5 rounded-full bg-red-500" />
+            {unreadCount > 0 && (
+              <span className="absolute top-1.5 right-1.5 size-1.5 rounded-full bg-red-500 ring-2 ring-white" />
+            )}
           </Link>
         ) : (
           <button
@@ -271,7 +309,9 @@ export function TopNav({ userName, roleLabel, role, onMenuClick }: TopNavProps) 
             className="relative rounded-full p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-800 transition"
           >
             <Bell className="size-4.5" />
-            <span className="absolute top-1.5 right-1.5 size-1.5 rounded-full bg-red-500" />
+            {unreadCount > 0 && (
+              <span className="absolute top-1.5 right-1.5 size-1.5 rounded-full bg-red-500 ring-2 ring-white" />
+            )}
           </button>
         )}
 

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireRole } from "@/lib/session";
-import { writeFile, mkdir } from "node:fs/promises";
 import path from "node:path";
+import { uploadFile } from "@/lib/storage";
 
 function formatBytes(bytes: number, decimals = 1) {
   if (bytes === 0) return "0 Bytes";
@@ -38,7 +38,7 @@ export async function POST(req: Request) {
       );
     }
 
-    // Disallow executable and script extensions
+    // Disallow executable and dangerous script extensions
     const dangerousExts = [".exe", ".bat", ".cmd", ".sh", ".php", ".phtml", ".vbs", ".msi", ".jar"];
     const ext = path.extname(file.name).toLowerCase();
     if (dangerousExts.includes(ext)) {
@@ -49,36 +49,34 @@ export async function POST(req: Request) {
     }
 
     // Sanitize entity folder name
-    const validFolders = ["assignments", "classes", "submissions", "materials", "general"];
+    const validFolders = ["assignments", "classes", "submissions", "materials", "avatars", "general"];
     const targetFolder = validFolders.includes(entityType) ? entityType : "general";
 
-    // Clean original filename
-    const originalName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
-    const timestamp = Date.now();
-    const safeFilename = `${timestamp}_${originalName}`;
-
-    // Target directory
-    const uploadsDir = path.join(process.cwd(), "public", "uploads", targetFolder);
-    await mkdir(uploadsDir, { recursive: true });
-
-    const filePath = path.join(uploadsDir, safeFilename);
     const buffer = Buffer.from(await file.arrayBuffer());
-    await writeFile(filePath, buffer);
+    const mimeType = file.type || "application/octet-stream";
 
-    const relativeUrl = `/uploads/${targetFolder}/${safeFilename}`;
-    const formattedSize = formatBytes(file.size);
+    // Upload via persistent storage adapter (Cloudinary / Supabase or local fallback)
+    const uploadResult = await uploadFile({
+      buffer,
+      filename: file.name,
+      folder: targetFolder,
+      mimeType,
+    });
+
+    const formattedSize = formatBytes(uploadResult.size || file.size);
 
     return NextResponse.json(
       {
         success: true,
         message: "File berhasil diunggah",
         data: {
-          name: file.name,
-          url: relativeUrl,
-          type: file.type || "document",
+          name: uploadResult.name || file.name,
+          url: uploadResult.url,
+          type: uploadResult.type || mimeType,
           size: formattedSize,
           entityType: targetFolder,
           entityId,
+          provider: uploadResult.provider,
           uploadedAt: new Date().toISOString(),
         },
       },

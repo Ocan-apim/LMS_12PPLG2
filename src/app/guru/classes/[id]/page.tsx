@@ -645,7 +645,7 @@ export default function GuruClassDetailPage({
                 ? isQuiz
                   ? `/siswa/quiz/${post.refId}`
                   : `/guru/assignments/${post.refId}`
-                : `/guru/assignments/new?classId=${courseClass._id}`;
+                : null;
               const isExpanded = expandedPostId === post._id;
               const commentsCount = post.comments?.length || 0;
 
@@ -660,8 +660,16 @@ export default function GuruClassDetailPage({
                 >
                   <div className="flex items-start justify-between gap-4">
                     <div
-                      onClick={() => router.push(targetUrl)}
-                      className="flex items-start gap-4 cursor-pointer flex-1"
+                      onClick={() => {
+                        if (targetUrl) {
+                          router.push(targetUrl);
+                        } else {
+                          setExpandedPostId(isExpanded ? null : post._id);
+                        }
+                      }}
+                      className={`flex items-start gap-4 flex-1 ${
+                        targetUrl ? "cursor-pointer" : "cursor-pointer"
+                      }`}
                     >
                       <div
                         className={`flex size-10 shrink-0 items-center justify-center rounded-xl ${
@@ -722,16 +730,30 @@ export default function GuruClassDetailPage({
                       </div>
                     </div>
 
-                    <Link
-                      href={targetUrl}
-                      className={`shrink-0 text-xs font-semibold rounded-lg px-3 py-1.5 transition ${
-                        isQuiz
-                          ? "bg-white/20 text-white hover:bg-white/30 backdrop-blur-xs"
-                          : "text-blue-600 hover:underline"
-                      }`}
-                    >
-                      Buka
-                    </Link>
+                    {targetUrl ? (
+                      <Link
+                        href={targetUrl}
+                        className={`shrink-0 text-xs font-semibold rounded-lg px-3 py-1.5 transition ${
+                          isQuiz
+                            ? "bg-white/20 text-white hover:bg-white/30 backdrop-blur-xs"
+                            : "text-blue-600 hover:underline"
+                        }`}
+                      >
+                        Buka
+                      </Link>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setExpandedPostId(isExpanded ? null : post._id)}
+                        className={`shrink-0 text-xs font-semibold rounded-lg px-3 py-1.5 transition ${
+                          isQuiz
+                            ? "bg-white/20 text-white hover:bg-white/30 backdrop-blur-xs"
+                            : "text-slate-600 hover:bg-slate-100"
+                        }`}
+                      >
+                        {isExpanded ? "Tutup" : "Komentar"}
+                      </button>
+                    )}
                   </div>
 
                   {/* Toggle Comments Button */}

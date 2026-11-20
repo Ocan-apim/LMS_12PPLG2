@@ -23,34 +23,13 @@ export async function GET(req: Request) {
       );
     }
 
-    // Clean leading slash
-    const cleanRelativePath = filePathParam.startsWith("/")
-      ? filePathParam.slice(1)
-      : filePathParam;
+    const isExternalUrl = /^https?:\/\//i.test(filePathParam);
 
-    // Security check: Must reside within public/uploads
-    if (!cleanRelativePath.startsWith("uploads/")) {
-      return NextResponse.json(
-        { success: false, message: "Akses file tidak diizinkan" },
-        { status: 403 }
-      );
-    }
-
-    const absolutePath = path.join(process.cwd(), "public", cleanRelativePath);
-    const resolvedPath = path.resolve(absolutePath);
-    const allowedRoot = path.resolve(path.join(process.cwd(), "public", "uploads"));
-
-    if (!resolvedPath.startsWith(allowedRoot)) {
-      return NextResponse.json(
-        { success: false, message: "Path traversal tidak diizinkan" },
-        { status: 403 }
-      );
-    }
-
-    // 2. Class Membership Authorization for Students
+    // 2. Class Membership & Ownership Authorization for Students
     if (session.role === "siswa") {
       await connectDB();
-      const fileUrlPattern = new RegExp(cleanRelativePath.replace(/\\/g, "/"), "i");
+      const escapedParam = filePathParam.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const fileUrlPattern = new RegExp(escapedParam, "i");
 
       // Check if file is part of CourseClass sharedFiles
       const targetCourseClass = await CourseClass.findOne({
@@ -58,7 +37,9 @@ export async function GET(req: Request) {
       }).select("studentIds");
 
       if (targetCourseClass) {
-        const isMember = (targetCourseClass.studentIds || []).map((sid: any) => sid.toString()).includes(session.id);
+        const isMember = (targetCourseClass.studentIds || [])
+          .map((sid: any) => sid.toString())
+          .includes(session.id);
         if (!isMember) {
           return NextResponse.json(
             { success: false, message: "Akses ditolak: Anda tidak terdaftar di kelas file ini" },
@@ -73,9 +54,13 @@ export async function GET(req: Request) {
       }).select("courseClassId");
 
       if (targetMaterial && targetMaterial.courseClassId) {
-        const materialClass = await CourseClass.findById(targetMaterial.courseClassId).select("studentIds");
+        const materialClass = await CourseClass.findById(targetMaterial.courseClassId).select(
+          "studentIds"
+        );
         if (materialClass) {
-          const isMember = (materialClass.studentIds || []).map((sid: any) => sid.toString()).includes(session.id);
+          const isMember = (materialClass.studentIds || [])
+            .map((sid: any) => sid.toString())
+            .includes(session.id);
           if (!isMember) {
             return NextResponse.json(
               { success: false, message: "Akses ditolak: Anda tidak terdaftar di kelas materi ini" },
@@ -91,9 +76,13 @@ export async function GET(req: Request) {
       }).select("courseClassId");
 
       if (targetAssignment && targetAssignment.courseClassId) {
-        const assignClass = await CourseClass.findById(targetAssignment.courseClassId).select("studentIds");
+        const assignClass = await CourseClass.findById(targetAssignment.courseClassId).select(
+          "studentIds"
+        );
         if (assignClass) {
-          const isMember = (assignClass.studentIds || []).map((sid: any) => sid.toString()).includes(session.id);
+          const isMember = (assignClass.studentIds || [])
+            .map((sid: any) => sid.toString())
+            .includes(session.id);
           if (!isMember) {
             return NextResponse.json(
               { success: false, message: "Akses ditolak: Anda tidak terdaftar di kelas tugas ini" },
@@ -119,6 +108,35 @@ export async function GET(req: Request) {
           );
         }
       }
+    }
+
+    // 3. For External Cloud URLs (Cloudinary / Supabase), redirect directly
+    if (isExternalUrl) {
+      return NextResponse.redirect(filePathParam, { status: 302 });
+    }
+
+    // 4. For Local Files: Clean relative path and check directory boundary
+    const cleanRelativePath = filePathParam.startsWith("/")
+      ? filePathParam.slice(1)
+      : filePathParam;
+
+    // Security check: Must reside within public/uploads
+    if (!cleanRelativePath.startsWith("uploads/")) {
+      return NextResponse.json(
+        { success: false, message: "Akses file tidak diizinkan" },
+        { status: 403 }
+      );
+    }
+
+    const absolutePath = path.join(process.cwd(), "public", cleanRelativePath);
+    const resolvedPath = path.resolve(absolutePath);
+    const allowedRoot = path.resolve(path.join(process.cwd(), "public", "uploads"));
+
+    if (!resolvedPath.startsWith(allowedRoot)) {
+      return NextResponse.json(
+        { success: false, message: "Path traversal tidak diizinkan" },
+        { status: 403 }
+      );
     }
 
     if (!existsSync(resolvedPath)) {

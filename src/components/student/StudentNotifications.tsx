@@ -42,8 +42,12 @@ export function StudentNotifications() {
       const res = await fetch("/api/siswa/notifications");
       const json = await res.json();
       if (json.success && json.data) {
+        const count = json.data.unreadCount || 0;
         setNotifications(json.data.notifications || []);
-        setUnreadCount(json.data.unreadCount || 0);
+        setUnreadCount(count);
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new CustomEvent("notifications-updated", { detail: { unreadCount: count } }));
+        }
       }
     } catch (err) {
       console.error("Gagal memuat notifikasi:", err);
@@ -67,6 +71,9 @@ export function StudentNotifications() {
       if (json.success) {
         setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
         setUnreadCount(0);
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new CustomEvent("notifications-updated", { detail: { unreadCount: 0 } }));
+        }
       }
     } catch (err) {
       console.error("Gagal menandai semua notifikasi:", err);
@@ -89,7 +96,13 @@ export function StudentNotifications() {
         setNotifications((prev) =>
           prev.map((n) => (n._id === id ? { ...n, read: nextRead } : n))
         );
-        setUnreadCount((prev) => (nextRead ? Math.max(0, prev - 1) : prev + 1));
+        setUnreadCount((prev) => {
+          const updated = nextRead ? Math.max(0, prev - 1) : prev + 1;
+          if (typeof window !== "undefined") {
+            window.dispatchEvent(new CustomEvent("notifications-updated", { detail: { unreadCount: updated } }));
+          }
+          return updated;
+        });
       }
     } catch (err) {
       console.error("Gagal memperbarui status notifikasi:", err);
