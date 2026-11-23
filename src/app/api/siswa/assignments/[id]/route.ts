@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import mongoose from "mongoose";
 import { connectDB } from "@/lib/mongodb";
 import { requireRole } from "@/lib/session";
 import { Assignment, CourseClass, Submission } from "@/models";
@@ -67,8 +68,24 @@ export async function GET(_req: Request, context: RouteContext) {
       submissionStatus = "late"; // Overdue/missing
     }
 
-    // 5. Clean comments (sorted by timestamp asc)
-    const comments = (assignment.comments || []).sort(
+    // 5. Clean comments (ensure every comment has a persistent _id in MongoDB, sorted by timestamp asc)
+    let rawComments = Array.isArray(assignment.comments) ? assignment.comments : [];
+    let needsIdFix = false;
+    rawComments = rawComments.map((c: any) => {
+      if (!c._id) {
+        needsIdFix = true;
+        return { ...c, _id: new mongoose.Types.ObjectId() };
+      }
+      return c;
+    });
+    if (needsIdFix && mongoose.Types.ObjectId.isValid(id)) {
+      await Assignment.collection.updateOne(
+        { _id: new mongoose.Types.ObjectId(id) },
+        { $set: { comments: rawComments } }
+      );
+    }
+
+    const comments = rawComments.sort(
       (a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
     );
 

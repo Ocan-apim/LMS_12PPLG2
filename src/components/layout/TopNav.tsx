@@ -43,9 +43,11 @@ export function TopNav({ userName, roleLabel, role, onMenuClick }: TopNavProps) 
   const [searching, setSearching] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState<number>(0);
+  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+  const [studentRombel, setStudentRombel] = useState<string | null>(null);
   const searchContainerRef = useRef<HTMLDivElement>(null);
 
-  // Sync notification unread count for student
+  // Sync notification unread count and profile avatar for student
   useEffect(() => {
     if (role === "siswa") {
       fetch("/api/siswa/notifications")
@@ -53,6 +55,16 @@ export function TopNav({ userName, roleLabel, role, onMenuClick }: TopNavProps) 
         .then((json) => {
           if (json.success && json.data) {
             setUnreadCount(json.data.unreadCount || 0);
+          }
+        })
+        .catch(() => {});
+
+      fetch("/api/siswa/profile")
+        .then((res) => res.json())
+        .then((json) => {
+          if (json.success && json.data?.user) {
+            setPhotoUrl(json.data.user.photoUrl || null);
+            setStudentRombel(json.data.user.classId?.name || null);
           }
         })
         .catch(() => {});
@@ -334,11 +346,22 @@ export function TopNav({ userName, roleLabel, role, onMenuClick }: TopNavProps) 
                 {userName || "Pengguna"}
               </p>
               <p className="text-[10px] text-slate-500 font-medium">
-                {roleLabel || "Portal"}
+                {studentRombel ? `${roleLabel} • ${studentRombel}` : roleLabel || "Portal"}
               </p>
             </div>
             <div className="size-8 rounded-full bg-blue-100 border border-blue-200 overflow-hidden flex items-center justify-center text-xs font-bold text-blue-700">
-              {userName ? userName.charAt(0).toUpperCase() : "U"}
+              {photoUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={photoUrl}
+                  alt={userName || "Profil"}
+                  className="size-full object-cover"
+                />
+              ) : userName ? (
+                userName.charAt(0).toUpperCase()
+              ) : (
+                "U"
+              )}
             </div>
           </Link>
         )}

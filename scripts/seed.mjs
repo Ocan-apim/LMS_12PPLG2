@@ -806,6 +806,7 @@ async function runSeed() {
     ],
     comments: [
       {
+        _id: new mongoose.Types.ObjectId(),
         userId: teacherBudiPId,
         userName: "Budi Pratama, S.Pd.",
         userRole: "guru",

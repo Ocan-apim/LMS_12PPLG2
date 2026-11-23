@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
+import mongoose from "mongoose";
 import { connectDB } from "@/lib/mongodb";
 import { requireRole } from "@/lib/session";
-import { Assignment, CourseClass, Submission, User } from "@/models";
+import { Assignment, Quiz, CourseClass, Submission, User } from "@/models";
 
 export async function GET(req: Request) {
   const { session, error } = await requireRole(["siswa"]);
@@ -57,6 +58,7 @@ export async function GET(req: Request) {
       ],
       isArchived: { $ne: true },
       isPublished: true,
+      title: { $not: /forum[\s_-]*diskusi/i },
     })
       .populate("courseClassId", "name bannerColor")
       .populate("subjectId", "name code category")
@@ -64,17 +66,45 @@ export async function GET(req: Request) {
       .sort({ dueDate: 1 })
       .lean();
 
-    const assignmentIds = assignments.map((a) => a._id);
+    const linkedQuizIds = new Set(
+      assignments
+        .map((a: any) => (a.quizId ? String(a.quizId) : null))
+        .filter(Boolean) as string[]
+    );
 
-    // 3. Fetch submissions for this student
+    const standaloneQuizzes = await Quiz.find({
+      courseClassId: { $in: joinedClassIds },
+      isPublished: true,
+    })
+      .populate("courseClassId", "name bannerColor")
+      .populate("teacherId", "name")
+      .sort({ dueDate: 1, createdAt: -1 })
+      .lean();
+
+    const unlinkedQuizzes = standaloneQuizzes.filter(
+      (q: any) => !linkedQuizIds.has(String(q._id))
+    );
+
+    const assignmentIds = assignments.map((a) => a._id);
+    const allQuizIds = [
+      ...Array.from(linkedQuizIds).map((id) => new mongoose.Types.ObjectId(id)),
+      ...unlinkedQuizzes.map((q: any) => q._id),
+    ];
+
+    // 3. Fetch submissions for this student (matching either assignmentId or quizId)
     const studentSubmissions = await Submission.find({
-      assignmentId: { $in: assignmentIds },
       studentId: session.id,
+      $or: [
+        ...(assignmentIds.length > 0 ? [{ assignmentId: { $in: assignmentIds } }] : []),
+        ...(allQuizIds.length > 0 ? [{ quizId: { $in: allQuizIds } }] : []),
+      ],
     }).lean();
 
     const submissionMap = new Map();
-    studentSubmissions.forEach((sub) => {
-      submissionMap.set(sub.assignmentId.toString(), sub);
+    const quizSubmissionMap = new Map();
+    studentSubmissions.forEach((sub: any) => {
+      if (sub.assignmentId) submissionMap.set(sub.assignmentId.toString(), sub);
+      if (sub.quizId) quizSubmissionMap.set(sub.quizId.toString(), sub);
     });
 
     // 4. Map each assignment with status, due date formatting, and icon type
@@ -86,13 +116,15 @@ export async function GET(req: Request) {
     let gradedScoreSum = 0;
     let gradedCount = 0;
 
-    let allCount = assignments.length;
+    let allCount = assignments.length + unlinkedQuizzes.length;
     let activeCount = 0;
     let lateCount = 0;
     let completedCount = 0;
 
     const enrichedAssignments = assignments.map((a: any) => {
-      const sub = submissionMap.get(a._id.toString());
+      const sub =
+        submissionMap.get(a._id.toString()) ||
+        (a.quizId ? quizSubmissionMap.get(String(a.quizId)) : undefined);
       const dueDate = a.dueDate ? new Date(a.dueDate) : null;
 
       let status: "pending" | "late" | "completed" = "pending";
@@ -166,8 +198,11 @@ export async function GET(req: Request) {
         icon = "math";
       }
 
+      const isQuiz = a.type === "kuis" || Boolean(a.quizId);
+
       return {
         _id: a._id.toString(),
+        quizId: a.quizId ? String(a.quizId) : null,
         title: a.title,
         subject: a.subjectId?.name || a.courseClassId?.name || "Mata Pelajaran",
         className: a.courseClassId?.name || "",
@@ -179,12 +214,85 @@ export async function GET(req: Request) {
         statusDetail,
         score: scoreStr,
         maxScore: a.maxScore || 100,
-        type: a.type || "tugas",
-        href: `/siswa/assignments/${a._id}`,
+        type: isQuiz ? "kuis" : a.type || "tugas",
+        href: isQuiz ? `/siswa/quiz/${a.quizId || a._id}` : `/siswa/assignments/${a._id}`,
         icon,
         isSubmitted: Boolean(sub && ["turned_in", "late", "graded"].includes(sub.status)),
         submissionId: sub ? sub._id.toString() : null,
       };
+    });
+
+    unlinkedQuizzes.forEach((q: any) => {
+      const sub = quizSubmissionMap.get(String(q._id));
+      const dueDate = q.dueDate ? new Date(q.dueDate) : null;
+
+      let status: "pending" | "late" | "completed" = "pending";
+      let statusDetail = "Pending";
+      let scoreStr: string | undefined = undefined;
+
+      if (sub && ["turned_in", "late", "graded"].includes(sub.status)) {
+        status = "completed";
+        completedCount++;
+        if (sub.status === "graded" && typeof sub.score === "number") {
+          statusDetail = "Graded";
+          scoreStr = `${sub.score} / ${q.totalPoints || 100}`;
+          gradedScoreSum += sub.score;
+          gradedCount++;
+        } else {
+          statusDetail = "Submitted";
+        }
+      } else {
+        if (dueDate && dueDate < now) {
+          status = "late";
+          statusDetail = "Missing / Overdue";
+          lateCount++;
+          needsAttentionCount++;
+        } else {
+          status = "pending";
+          statusDetail = "Active";
+          activeCount++;
+          if (dueDate && dueDate <= oneWeekFromNow && dueDate >= now) {
+            dueThisWeekCount++;
+          }
+        }
+      }
+
+      const formattedDueDate = dueDate
+        ? dueDate.toLocaleDateString("id-ID", {
+            day: "numeric",
+            month: "long",
+            year: "numeric",
+          })
+        : "Tanpa batas waktu";
+
+      const formattedDueTime = dueDate
+        ? dueDate.toLocaleTimeString("en-US", {
+            hour: "numeric",
+            minute: "2-digit",
+            hour12: true,
+          })
+        : "";
+
+      enrichedAssignments.push({
+        _id: q._id.toString(),
+        quizId: q._id.toString(),
+        title: q.title,
+        subject: q.courseClassId?.name || "Mata Pelajaran",
+        className: q.courseClassId?.name || "",
+        teacherName: q.teacherId?.name || "Guru",
+        dueDate: formattedDueDate,
+        dueTime: formattedDueTime,
+        rawDueDate: q.dueDate,
+        status,
+        statusDetail,
+        score: scoreStr,
+        maxScore: q.totalPoints || 100,
+        type: "kuis",
+        href: `/siswa/quiz/${q._id}`,
+        icon: "file" as const,
+        isSubmitted: Boolean(sub && ["turned_in", "late", "graded"].includes(sub.status)),
+        submissionId: sub ? sub._id.toString() : null,
+      });
     });
 
     // Calculate Average Score

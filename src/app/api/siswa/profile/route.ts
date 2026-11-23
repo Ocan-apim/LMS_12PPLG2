@@ -27,24 +27,37 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    // Enrich with academic statistics for profile view
-    const totalClasses = await CourseClass.countDocuments({
+    // Enrich with academic statistics for profile view (strictly from active classes)
+    const activeClasses = await CourseClass.find({
       studentIds: session.id,
       isActive: true,
-    });
-
-    const completedAssignments = await Submission.countDocuments({
-      studentId: session.id,
-      status: { $in: ["turned_in", "late", "graded"] },
-    });
-
-    const gradedSubmissions = await Submission.find({
-      studentId: session.id,
-      status: "graded",
-      score: { $exists: true, $ne: null },
     })
-      .select("score")
+      .select("_id")
       .lean();
+
+    const activeClassIds = activeClasses.map((c: any) => c._id);
+    const totalClasses = activeClassIds.length;
+
+    const completedAssignments =
+      activeClassIds.length > 0
+        ? await Submission.countDocuments({
+            studentId: session.id,
+            courseClassId: { $in: activeClassIds },
+            status: { $in: ["turned_in", "late", "graded"] },
+          })
+        : 0;
+
+    const gradedSubmissions =
+      activeClassIds.length > 0
+        ? await Submission.find({
+            studentId: session.id,
+            courseClassId: { $in: activeClassIds },
+            status: "graded",
+            score: { $exists: true, $ne: null },
+          })
+            .select("score")
+            .lean()
+        : [];
 
     let averageGrade = 0;
     if (gradedSubmissions.length > 0) {

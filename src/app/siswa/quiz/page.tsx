@@ -17,6 +17,7 @@ import {
 
 interface QuizAssignment {
   _id: string;
+  quizId?: string | null;
   title: string;
   subject: string;
   className: string;
@@ -151,7 +152,7 @@ export default function SiswaQuizListPage() {
 
                   <div className="mt-6 border-t border-slate-100 pt-4">
                     <Link
-                      href={`/siswa/quiz/${quiz._id}`}
+                      href={quiz.href || `/siswa/quiz/${quiz.quizId || quiz._id}`}
                       className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#674ce7] py-2.5 text-xs font-bold text-white shadow-xs transition hover:bg-[#563cd6]"
                     >
                       {quiz.status === "completed" ? (

@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import { requireRole } from "@/lib/session";
 import { Assignment, CourseClass, ClassPost, Submission } from "@/models";
-import { validateFields } from "@/lib/profanity-filter";
 
 export async function GET(req: Request) {
   const { session, error } = await requireRole(["guru", "admin"]);
@@ -93,22 +92,6 @@ export async function POST(req: Request) {
     if (!title || !title.trim()) {
       return NextResponse.json(
         { success: false, message: "Judul tugas wajib diisi" },
-        { status: 400 }
-      );
-    }
-
-    const fieldValidation = validateFields({
-      title,
-      instructions,
-      description,
-    });
-    if (!fieldValidation.isValid) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: fieldValidation.message,
-          field: fieldValidation.field,
-        },
         { status: 400 }
       );
     }

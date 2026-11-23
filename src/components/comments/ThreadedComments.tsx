@@ -53,6 +53,7 @@ export function ThreadedComments({
   // Inline Reply state
   const [replyingTo, setReplyingTo] = useState<{
     id: string;
+    parentId: string;
     authorName: string;
   } | null>(null);
   const [replyText, setReplyText] = useState("");
@@ -60,9 +61,9 @@ export function ThreadedComments({
   const [replyError, setReplyError] = useState<string | null>(null);
 
   // Independent Expand/Collapse per thread
-  // By default, threads with replies are expanded
-  const [expandedThreads, setExpandedThreads] = useState<Set<string>>(
-    () => new Set(comments.map((c) => String(c._id || "")).filter(Boolean))
+  // By default, threads with replies are expanded (tracked via collapsedThreads so async-loaded comments default to expanded)
+  const [collapsedThreads, setCollapsedThreads] = useState<Set<string>>(
+    () => new Set()
   );
 
   // Delete modal state
@@ -110,7 +111,7 @@ export function ThreadedComments({
   };
 
   const toggleThreadExpand = (threadId: string) => {
-    setExpandedThreads((prev) => {
+    setCollapsedThreads((prev) => {
       const next = new Set(prev);
       if (next.has(threadId)) {
         next.delete(threadId);
@@ -183,17 +184,22 @@ export function ThreadedComments({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           message: replyText.trim(),
-          parentId: replyingTo.id,
+          parentId: replyingTo.parentId,
         }),
       });
       const json = await res.json();
       if (res.ok && json.success && json.data) {
+        const activeThreadId = replyingTo.id;
         onCommentsUpdated([...comments, json.data]);
         setReplyText("");
         setReplyingTo(null);
         setReplyError(null);
         // Ensure the active thread is expanded
-        setExpandedThreads((prev) => new Set(prev).add(replyingTo.id));
+        setCollapsedThreads((prev) => {
+          const next = new Set(prev);
+          next.delete(activeThreadId);
+          return next;
+        });
       } else {
         setReplyError(json.message || "Gagal mengirim balasan");
       }
@@ -315,8 +321,11 @@ export function ThreadedComments({
           topLevelComments.map((c, i) => {
             const author = c.userName || c.senderName || "Pengguna";
             const threadId = String(c._id || `top-${i}`);
-            const replies = (c._id ? repliesByParentId.get(String(c._id)) : null) || [];
-            const isThreadExpanded = expandedThreads.has(threadId);
+            const replies =
+              (c._id ? repliesByParentId.get(String(c._id)) : null) ||
+              repliesByParentId.get(threadId) ||
+              [];
+            const isThreadExpanded = !collapsedThreads.has(threadId);
 
             return (
               <div
@@ -363,7 +372,11 @@ export function ThreadedComments({
                       <button
                         type="button"
                         onClick={() => {
-                          setReplyingTo({ id: c._id || "", authorName: author });
+                          setReplyingTo({
+                            id: threadId,
+                            parentId: c._id ? String(c._id) : threadId,
+                            authorName: author,
+                          });
                           setReplyText("");
                           setReplyError(null);
                         }}
@@ -466,7 +479,8 @@ export function ThreadedComments({
                                   type="button"
                                   onClick={() => {
                                     setReplyingTo({
-                                      id: c._id || "",
+                                      id: threadId,
+                                      parentId: c._id ? String(c._id) : threadId,
                                       authorName: replyAuthor,
                                     });
                                     setReplyText("");
@@ -511,7 +525,7 @@ export function ThreadedComments({
                 )}
 
                 {/* Inline Reply Input directly underneath active thread */}
-                {replyingTo?.id === c._id && !isReadOnly && (
+                {replyingTo?.id === threadId && !isReadOnly && (
                   <div className="mt-2 ml-8 pl-3 border-l-2 border-blue-500 space-y-2 pt-1 animate-in fade-in">
                     <div className="flex items-center justify-between">
                       <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full inline-flex items-center gap-1">

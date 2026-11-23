@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
+import mongoose from "mongoose";
 import { connectDB } from "@/lib/mongodb";
 import { requireRole } from "@/lib/session";
 import { Assignment, Submission, ClassPost } from "@/models";
-import { validateFields } from "@/lib/profanity-filter";
 
 type RouteContext = {
   params: Promise<{ id: string }>;
@@ -15,6 +15,29 @@ export async function GET(_req: Request, context: RouteContext) {
   try {
     const { id } = await context.params;
     await connectDB();
+
+    if (mongoose.Types.ObjectId.isValid(id)) {
+      const rawDoc = await Assignment.collection.findOne(
+        { _id: new mongoose.Types.ObjectId(id) },
+        { projection: { comments: 1 } }
+      );
+      if (rawDoc && Array.isArray(rawDoc.comments)) {
+        let needsIdFix = false;
+        const fixedComments = rawDoc.comments.map((c: Record<string, unknown>) => {
+          if (!c._id) {
+            needsIdFix = true;
+            return { ...c, _id: new mongoose.Types.ObjectId() };
+          }
+          return c;
+        });
+        if (needsIdFix) {
+          await Assignment.collection.updateOne(
+            { _id: new mongoose.Types.ObjectId(id) },
+            { $set: { comments: fixedComments } }
+          );
+        }
+      }
+    }
 
     const assignment = await Assignment.findById(id)
       .populate("courseClassId", "name code bannerColor studentIds")
@@ -105,18 +128,9 @@ export async function PUT(req: Request, context: RouteContext) {
       isPublished,
     } = body;
 
-    const fieldValidation = validateFields({
-      title,
-      instructions,
-      description,
-    });
-    if (!fieldValidation.isValid) {
+    if (title !== undefined && !String(title).trim()) {
       return NextResponse.json(
-        {
-          success: false,
-          message: fieldValidation.message,
-          field: fieldValidation.field,
-        },
+        { success: false, message: "Judul tugas tidak boleh kosong" },
         { status: 400 }
       );
     }

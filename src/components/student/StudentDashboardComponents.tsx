@@ -9,7 +9,6 @@ import {
   FileArchive,
   FileText,
   Filter,
-  MoreHorizontal,
   PlaySquare,
   UserRound,
   X,
@@ -60,23 +59,91 @@ export function FooterBar() {
   return null;
 }
 
-export function JoinClassBanner() {
+export interface StudentBannerInfo {
+  name: string;
+  email?: string;
+  nis?: string | null;
+  nisn?: string | null;
+  photoUrl?: string | null;
+  grade?: string | null;
+  rombelName?: string | null;
+  departmentName?: string | null;
+  departmentCode?: string | null;
+  academicYear?: string | null;
+}
+
+export function JoinClassBanner({ student }: { student?: StudentBannerInfo | null }) {
   const [modalOpen, setModalOpen] = useState(false);
+  const initial = student?.name ? student.name.charAt(0).toUpperCase() : "S";
 
   return (
     <>
-      <section className="relative min-h-[210px] overflow-hidden rounded-xl bg-[var(--primary)] px-8 py-12 text-white shadow-sm">
-        <div className="absolute right-[-34px] top-[-34px] size-40 rounded-full bg-white/10" />
-        <h1 className="font-[family-name:var(--font-display)] text-4xl font-extrabold tracking-[-0.03em]">
-          Join Kelas Mapel
-        </h1>
-        <button
-          onClick={() => setModalOpen(true)}
-          className="mt-6 inline-flex items-center gap-2 rounded-md bg-white px-6 py-3 text-sm font-extrabold text-[var(--primary)] transition duration-300 hover:-translate-y-1 cursor-pointer"
-        >
-          <CirclePlus className="size-5" />
-          Join Kelas Baru
-        </button>
+      <section className="relative min-h-[210px] overflow-hidden rounded-xl bg-[var(--primary)] px-7 py-8 text-white shadow-sm flex flex-col justify-between">
+        <div className="absolute right-[-34px] top-[-34px] size-40 rounded-full bg-white/10 pointer-events-none" />
+        {student ? (
+          <div className="relative z-10 flex flex-col sm:flex-row sm:items-center gap-4">
+            <div className="size-16 rounded-2xl border-2 border-white/30 bg-white/15 overflow-hidden flex items-center justify-center text-2xl font-extrabold text-white shrink-0 shadow-xs">
+              {student.photoUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={student.photoUrl}
+                  alt={student.name}
+                  className="size-full object-cover"
+                />
+              ) : (
+                initial
+              )}
+            </div>
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                {student.rombelName && (
+                  <span className="rounded-md bg-white/20 px-2.5 py-0.5 text-[11px] font-extrabold uppercase tracking-wider text-white">
+                    {student.rombelName}
+                  </span>
+                )}
+                {student.departmentCode && (
+                  <span className="rounded-md bg-white/15 px-2.5 py-0.5 text-[11px] font-bold text-blue-100">
+                    {student.departmentCode}
+                  </span>
+                )}
+                {student.nisn && (
+                  <span className="text-[11px] font-mono text-blue-100">
+                    NISN: {student.nisn}
+                  </span>
+                )}
+              </div>
+              <h1 className="mt-1.5 font-[family-name:var(--font-display)] text-2xl sm:text-3xl font-extrabold tracking-[-0.03em] truncate">
+                {student.name}
+              </h1>
+              <p className="mt-0.5 text-xs text-blue-100 truncate">
+                {student.departmentName || student.email || "Portal Akademik Siswa"}
+                {student.academicYear ? ` • TA ${student.academicYear}` : ""}
+              </p>
+            </div>
+          </div>
+        ) : (
+          <h1 className="font-[family-name:var(--font-display)] text-4xl font-extrabold tracking-[-0.03em]">
+            Join Kelas Mapel
+          </h1>
+        )}
+
+        <div className="relative z-10 mt-6 flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            onClick={() => setModalOpen(true)}
+            className="inline-flex items-center gap-2 rounded-md bg-white px-5 py-2.5 text-xs font-extrabold text-[var(--primary)] transition duration-300 hover:-translate-y-0.5 cursor-pointer shadow-xs"
+          >
+            <CirclePlus className="size-4" />
+            Join Kelas Baru
+          </button>
+          <Link
+            href="/siswa/profile"
+            className="inline-flex items-center gap-1.5 rounded-md border border-white/30 bg-white/10 px-4 py-2.5 text-xs font-bold text-white hover:bg-white/20 transition"
+          >
+            <UserRound className="size-3.5" />
+            Profil Saya
+          </Link>
+        </div>
       </section>
 
       <JoinClassModal isOpen={modalOpen} onClose={() => setModalOpen(false)} />
@@ -84,27 +151,49 @@ export function JoinClassBanner() {
   );
 }
 
-export function AverageScoreCard({ average = 0 }: { average?: number }) {
-  const displayScore = Math.round(average);
+export function AverageScoreCard({
+  average = 0,
+  totalGraded = 0,
+}: {
+  average?: number;
+  totalGraded?: number;
+}) {
+  const hasGrades = totalGraded > 0;
+  const displayScore = Math.round(average * 10) / 10;
   return (
-    <section className="rounded-xl border border-[#e4e6ef] bg-white p-7 shadow-sm">
-      <h2 className="font-[family-name:var(--font-display)] text-xl font-extrabold text-slate-800">
-        Nilai rata-rata
-      </h2>
-      <div className="mt-8 flex items-end gap-3">
-        <span className="font-[family-name:var(--font-display)] text-6xl font-extrabold leading-none text-slate-900">
-          {displayScore}
-        </span>
-        <span className="mb-2 text-xl font-extrabold text-[var(--primary)]">/ 100</span>
+    <section className="rounded-xl border border-[#e4e6ef] bg-white p-7 shadow-sm flex flex-col justify-between">
+      <div>
+        <h2 className="font-[family-name:var(--font-display)] text-xl font-extrabold text-slate-800">
+          Nilai rata-rata
+        </h2>
+        {hasGrades ? (
+          <>
+            <div className="mt-6 flex items-end gap-2">
+              <span className="font-[family-name:var(--font-display)] text-5xl font-extrabold leading-none text-slate-900">
+                {displayScore}
+              </span>
+              <span className="mb-1 text-lg font-extrabold text-[var(--primary)]">
+                / 100
+              </span>
+            </div>
+            <div className="mt-6 h-2 rounded-full bg-[#e7ebf5]">
+              <div
+                className="h-full rounded-full bg-[var(--primary)] transition-[width] duration-700"
+                style={{ width: `${Math.min(Math.max(displayScore, 0), 100)}%` }}
+              />
+            </div>
+          </>
+        ) : (
+          <div className="mt-6 rounded-xl bg-slate-50 border border-slate-100 p-4">
+            <p className="text-sm font-extrabold text-slate-700">Belum ada nilai</p>
+            <p className="mt-1 text-xs text-slate-500 leading-relaxed">
+              Nilai rata-rata akan dihitung otomatis setelah tugas atau kuis Anda dinilai.
+            </p>
+          </div>
+        )}
       </div>
-      <div className="mt-7 h-2 rounded-full bg-[#e7ebf5]">
-        <div
-          className="h-full rounded-full bg-[var(--primary)] transition-[width] duration-700"
-          style={{ width: `${Math.min(Math.max(displayScore, 0), 100)}%` }}
-        />
-      </div>
-      <p className="mt-8 text-[10px] font-bold uppercase tracking-wide text-slate-400">
-        Terus semangat
+      <p className="mt-5 text-[10px] font-bold uppercase tracking-wide text-slate-400">
+        {hasGrades ? `Berdasarkan ${totalGraded} penilaian` : "Belum ada tugas dinilai"}
       </p>
     </section>
   );
@@ -116,37 +205,63 @@ export function DashboardSubjectCard({
   subtitle,
   urgent,
   completed,
+  totalTasks,
+  completedTasks,
 }: {
   id?: string;
   title: string;
   subtitle: string;
   urgent?: string;
   completed?: boolean;
+  totalTasks?: number;
+  completedTasks?: number;
 }) {
   return (
-    <article className={`rounded-xl border border-[#e4e6ef] bg-white p-5 shadow-sm transition duration-300 hover:-translate-y-1 hover:shadow-[var(--shadow)] ${completed ? "border-t-8 border-t-[#00796f]" : "border-t-8 border-t-[var(--primary)]"}`}>
+    <article
+      className={`rounded-xl border border-[#e4e6ef] bg-white p-5 shadow-sm transition duration-300 hover:-translate-y-1 hover:shadow-[var(--shadow)] ${
+        completed
+          ? "border-t-8 border-t-[#00796f]"
+          : "border-t-8 border-t-[var(--primary)]"
+      }`}
+    >
       <div className="flex items-start justify-between">
         <div className="min-w-0 flex-1 pr-2">
-          <h3 className="font-[family-name:var(--font-display)] text-xl font-extrabold truncate text-slate-900">{title}</h3>
+          <h3 className="font-[family-name:var(--font-display)] text-xl font-extrabold truncate text-slate-900">
+            {title}
+          </h3>
           <p className="mt-1 text-sm text-slate-500 truncate">{subtitle}</p>
         </div>
-        <span className={`grid size-7 place-items-center rounded-md shrink-0 ${completed ? "bg-[#e3f6f2] text-[#00796f]" : "bg-[#e5f1ff] text-[var(--primary)]"}`}>
+        <span
+          className={`grid size-7 place-items-center rounded-md shrink-0 ${
+            completed
+              ? "bg-[#e3f6f2] text-[#00796f]"
+              : "bg-[#e5f1ff] text-[var(--primary)]"
+          }`}
+        >
           <BookOpen className="size-4" />
         </span>
       </div>
-      <p className={`mt-7 text-[11px] font-extrabold uppercase truncate ${completed ? "text-[#00796f]" : "text-red-600"}`}>
-        {completed ? "All tasks completed" : urgent || "Belum ada tugas"}
+      {typeof totalTasks === "number" && (
+        <p className="mt-3 text-xs font-semibold text-slate-500">
+          Progres: <strong className="text-slate-800">{completedTasks ?? 0}</strong> / {totalTasks} aktivitas selesai
+        </p>
+      )}
+      <p
+        className={`mt-4 text-[11px] font-extrabold uppercase truncate ${
+          completed ? "text-[#00796f]" : "text-red-600"
+        }`}
+      >
+        {completed ? "Semua tugas & kuis selesai" : urgent || "Belum ada tugas"}
       </p>
       <div className="mt-5 flex items-center gap-3">
         <Link
           href={id ? `/siswa/courses/${id}` : "/siswa/courses"}
-          className={`h-11 flex-1 rounded-md text-sm font-extrabold text-white text-center flex items-center justify-center transition duration-300 hover:-translate-y-0.5 ${completed ? "bg-[#00796f]" : "bg-[var(--primary)]"}`}
+          className={`h-11 flex-1 rounded-md text-sm font-extrabold text-white text-center flex items-center justify-center transition duration-300 hover:-translate-y-0.5 ${
+            completed ? "bg-[#00796f]" : "bg-[var(--primary)]"
+          }`}
         >
-          LIHAT
+          LIHAT KELAS
         </Link>
-        <button className="grid size-9 place-items-center rounded-md border border-[#d9deeb] bg-white text-slate-500 transition hover:text-[var(--primary)]">
-          <MoreHorizontal className="size-4" />
-        </button>
       </div>
     </article>
   );
@@ -161,57 +276,88 @@ export function TaskList({
     className: string;
     status: string;
     isUrgent?: boolean;
-    dueDate?: string;
+    dueDate?: string | null;
+    score?: number | null;
+    maxScore?: number;
+    feedback?: string | null;
+    href?: string;
   }>;
 }) {
   const displayTasks = tasks || [];
-  const urgentCount = displayTasks.filter((t) => t.isUrgent || t.status === "late").length;
+  const urgentCount = displayTasks.filter(
+    (t) => t.isUrgent || t.status === "late"
+  ).length;
 
   return (
     <section>
       <div className="mb-5 flex items-center justify-between">
-        <h2 className="font-[family-name:var(--font-display)] text-2xl font-extrabold">Tugas</h2>
-        {urgentCount > 0 && (
-          <span className="rounded bg-red-100 px-3 py-1 text-[10px] font-extrabold uppercase text-red-600">
-            {urgentCount} urgent
-          </span>
-        )}
+        <h2 className="font-[family-name:var(--font-display)] text-2xl font-extrabold text-slate-900">
+          Tugas
+        </h2>
+        <div className="flex items-center gap-2">
+          {urgentCount > 0 && (
+            <span className="rounded bg-red-100 px-3 py-1 text-[10px] font-extrabold uppercase text-red-600">
+              {urgentCount} perlu perhatian
+            </span>
+          )}
+          <Link
+            href="/siswa/assignments"
+            className="text-xs font-extrabold text-[var(--primary)] hover:underline"
+          >
+            View All &gt;
+          </Link>
+        </div>
       </div>
       <div className="overflow-hidden rounded-xl border border-[#e4e6ef] bg-white">
         {displayTasks.length === 0 ? (
           <div className="p-8 text-center text-sm text-slate-500">
-            Belum ada tugas.
+            Belum ada tugas untuk kelas Anda.
           </div>
         ) : (
           displayTasks.map((task) => {
             const tone =
-              task.status === "graded" || task.status === "turned_in"
-                ? "blue"
-                : task.status === "late" || task.isUrgent
-                ? "red"
-                : "orange";
+              task.status === "graded"
+                ? "green"
+                : task.status === "turned_in"
+                  ? "blue"
+                  : task.status === "late" || task.isUrgent
+                    ? "red"
+                    : "orange";
 
             const statusText =
               task.status === "graded"
                 ? "Dinilai"
                 : task.status === "turned_in"
-                ? "Diserahkan"
-                : task.status === "late"
-                ? "Terlambat"
-                : "Belum Selesai";
+                  ? "Diserahkan"
+                  : task.status === "late"
+                    ? "Terlambat"
+                    : "Belum Selesai";
+
+            const dueStr = task.dueDate
+              ? new Date(task.dueDate).toLocaleDateString("id-ID", {
+                  day: "numeric",
+                  month: "short",
+                  year: "numeric",
+                })
+              : "Tanpa tenggat";
+
+            const targetHref = task.href || `/siswa/assignments/${task._id}`;
 
             return (
-              <div
+              <Link
                 key={task._id}
-                className="flex items-center gap-4 border-b border-[#e4e6ef] p-4 last:border-0"
+                href={targetHref}
+                className="flex items-start gap-3.5 border-b border-[#e4e6ef] p-4 last:border-0 hover:bg-slate-50 transition"
               >
                 <span
-                  className={`grid size-10 place-items-center rounded-full shrink-0 ${
-                    tone === "blue"
-                      ? "bg-[#e5f1ff] text-[var(--primary)]"
-                      : tone === "orange"
-                      ? "bg-orange-100 text-orange-500"
-                      : "bg-red-100 text-red-500"
+                  className={`grid size-10 place-items-center rounded-full shrink-0 mt-0.5 ${
+                    tone === "green"
+                      ? "bg-emerald-100 text-emerald-700"
+                      : tone === "blue"
+                        ? "bg-[#e5f1ff] text-[var(--primary)]"
+                        : tone === "orange"
+                          ? "bg-orange-100 text-orange-500"
+                          : "bg-red-100 text-red-500"
                   }`}
                 >
                   <BookOpen className="size-5" />
@@ -220,20 +366,34 @@ export function TaskList({
                   <p className="truncate text-sm font-extrabold text-slate-800">
                     {task.title}
                   </p>
-                  <p className="text-xs text-slate-500">{task.className}</p>
+                  <p className="text-xs text-slate-500">
+                    {task.className} &bull; Tenggat: {dueStr}
+                  </p>
+                  {task.status === "graded" && task.score !== null && task.score !== undefined && (
+                    <p className="mt-1 text-xs font-extrabold text-emerald-700">
+                      Nilai: {task.score} / {task.maxScore || 100}
+                    </p>
+                  )}
+                  {task.feedback && (
+                    <p className="mt-0.5 text-[11px] italic text-slate-500 line-clamp-1">
+                      Catatan Guru: &ldquo;{task.feedback}&rdquo;
+                    </p>
+                  )}
                 </div>
                 <span
-                  className={`rounded px-3 py-1 text-[10px] font-extrabold uppercase shrink-0 ${
-                    tone === "blue"
-                      ? "bg-slate-100 text-slate-600"
-                      : tone === "orange"
-                      ? "bg-orange-100 text-orange-600"
-                      : "bg-red-100 text-red-600"
+                  className={`rounded px-2.5 py-1 text-[10px] font-extrabold uppercase shrink-0 ${
+                    tone === "green"
+                      ? "bg-emerald-100 text-emerald-700"
+                      : tone === "blue"
+                        ? "bg-blue-100 text-blue-700"
+                        : tone === "orange"
+                          ? "bg-orange-100 text-orange-600"
+                          : "bg-red-100 text-red-600"
                   }`}
                 >
                   {statusText}
                 </span>
-              </div>
+              </Link>
             );
           })
         )}
@@ -404,14 +564,10 @@ export function SubjectCourseCard({
       </div>
       <div className="p-5 pt-0">
         <div className="flex items-center justify-between border-t border-slate-100 pt-4">
-          <div className="flex -space-x-2">
-            {[0, 1, 2].map((item) => (
-              <span key={item} className="size-6 rounded-full border-2 border-white bg-slate-300" />
-            ))}
-            <span className="grid size-6 place-items-center rounded-full border-2 border-white bg-[#eee9ff] text-[9px] font-bold text-[#674ce7]">
-              +{course.avatars ?? 12}
-            </span>
-          </div>
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-[#eee9ff] px-2.5 py-1 text-[10px] font-bold text-[#674ce7]">
+            <UserRound className="size-3" />
+            <span>{course.avatars ?? 0} Siswa</span>
+          </span>
           {onSelect ? (
             <button
               type="button"

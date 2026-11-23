@@ -1,12 +1,70 @@
 import { NextResponse } from "next/server";
+import mongoose from "mongoose";
 import { connectDB } from "@/lib/mongodb";
 import { requireRole } from "@/lib/session";
-import { Assignment, CourseClass } from "@/models";
+import { Assignment, CourseClass, User } from "@/models";
 import { validateComment } from "@/lib/profanity-filter";
 
 type RouteContext = {
   params: Promise<{ id: string }>;
 };
+
+/**
+ * Ensures any legacy or seeded comment without an `_id` in MongoDB receives a persistent ObjectId.
+ */
+async function ensureAssignmentCommentIds(assignmentId: string) {
+  if (!mongoose.Types.ObjectId.isValid(assignmentId)) return;
+  const rawDoc = await Assignment.collection.findOne(
+    { _id: new mongoose.Types.ObjectId(assignmentId) },
+    { projection: { comments: 1 } }
+  );
+  if (!rawDoc || !Array.isArray(rawDoc.comments)) return;
+
+  let needsUpdate = false;
+  const fixedComments = rawDoc.comments.map((c: Record<string, unknown>) => {
+    if (!c._id) {
+      needsUpdate = true;
+      return { ...c, _id: new mongoose.Types.ObjectId() };
+    }
+    return c;
+  });
+
+  if (needsUpdate) {
+    await Assignment.collection.updateOne(
+      { _id: new mongoose.Types.ObjectId(assignmentId) },
+      { $set: { comments: fixedComments } }
+    );
+  }
+}
+
+async function isStudentEnrolledInAssignmentClass(studentId: string, courseClassId: unknown): Promise<boolean> {
+  if (!courseClassId) return true;
+  const courseClass = (await CourseClass.findById(courseClassId).lean()) as Record<string, unknown> | null;
+  if (!courseClass) return false;
+
+  const enrolledIds = Array.isArray(courseClass.studentIds)
+    ? courseClass.studentIds.map((sid: unknown) => String(sid))
+    : [];
+  if (enrolledIds.includes(studentId)) return true;
+
+  const studentUser = (await User.findById(studentId).select("classId").lean()) as { classId?: unknown } | null;
+  const studentRombelId = studentUser?.classId ? String(studentUser.classId) : null;
+  if (!studentRombelId) return false;
+
+  const classRombelIdStr = courseClass.classRombelId ? String(courseClass.classRombelId) : null;
+  const assignedRombelStrs = Array.isArray(courseClass.assignedRombelIds)
+    ? courseClass.assignedRombelIds.map((r: unknown) => String(r))
+    : [];
+
+  if (studentRombelId === classRombelIdStr || assignedRombelStrs.includes(studentRombelId)) {
+    await CourseClass.findByIdAndUpdate(courseClass._id, {
+      $addToSet: { studentIds: studentId },
+    });
+    return true;
+  }
+
+  return false;
+}
 
 export async function GET(_req: Request, context: RouteContext) {
   const { session, error } = await requireRole(["guru", "admin", "siswa", "kurikulum", "kepsek"]);
@@ -15,6 +73,7 @@ export async function GET(_req: Request, context: RouteContext) {
   try {
     const { id } = await context.params;
     await connectDB();
+    await ensureAssignmentCommentIds(id);
 
     const assignment = await Assignment.findById(id).select("comments courseClassId teacherId");
     if (!assignment) {
@@ -37,11 +96,8 @@ export async function GET(_req: Request, context: RouteContext) {
 
     // Role check: if siswa, ensure enrolled in class
     if (session.role === "siswa" && assignment.courseClassId) {
-      const courseClass = await CourseClass.findById(assignment.courseClassId);
-      if (
-        courseClass &&
-        !courseClass.studentIds.map((sid: unknown) => String(sid)).includes(session.id)
-      ) {
+      const enrolled = await isStudentEnrolledInAssignmentClass(session.id, assignment.courseClassId);
+      if (!enrolled) {
         return NextResponse.json(
           { success: false, message: "Akses ditolak: Anda tidak terdaftar di kelas ini" },
           { status: 403 }
@@ -62,12 +118,13 @@ export async function GET(_req: Request, context: RouteContext) {
 }
 
 export async function POST(req: Request, context: RouteContext) {
-  const { session, error } = await requireRole(["guru", "siswa"]);
+  const { session, error } = await requireRole(["guru", "siswa", "admin"]);
   if (error || !session) return error;
 
   try {
     const { id } = await context.params;
     await connectDB();
+    await ensureAssignmentCommentIds(id);
     const body = await req.json();
 
     const { message, parentId } = body;
@@ -100,11 +157,8 @@ export async function POST(req: Request, context: RouteContext) {
 
     // Role check for student
     if (session.role === "siswa" && assignment.courseClassId) {
-      const courseClass = await CourseClass.findById(assignment.courseClassId);
-      if (
-        courseClass &&
-        !courseClass.studentIds.map((sid: unknown) => String(sid)).includes(session.id)
-      ) {
+      const enrolled = await isStudentEnrolledInAssignmentClass(session.id, assignment.courseClassId);
+      if (!enrolled) {
         return NextResponse.json(
           { success: false, message: "Akses ditolak: Anda tidak terdaftar di kelas ini" },
           { status: 403 }
@@ -112,19 +166,29 @@ export async function POST(req: Request, context: RouteContext) {
       }
     }
 
-    let resolvedParentId = null;
+    let resolvedParentId: mongoose.Types.ObjectId | null = null;
     if (parentId) {
-      const parentComment = (assignment.comments || []).find(
+      const allComments = assignment.comments || [];
+      const topComments = allComments.filter((c: { parentId?: unknown }) => !c.parentId);
+      let parentComment = allComments.find(
         (c: { _id?: unknown }) => String(c._id) === String(parentId)
       );
-      if (parentComment) {
+      if (!parentComment && String(parentId).startsWith("top-")) {
+        const topIdx = Number(String(parentId).replace("top-", ""));
+        if (!Number.isNaN(topIdx) && topComments[topIdx]) {
+          parentComment = topComments[topIdx];
+        }
+      }
+      if (parentComment && parentComment._id) {
         // Single-level threading: If replying to a reply, attach to root parent
-        resolvedParentId = parentComment.parentId ? parentComment.parentId : parentComment._id;
+        const targetId = parentComment.parentId ? parentComment.parentId : parentComment._id;
+        resolvedParentId = new mongoose.Types.ObjectId(String(targetId));
       }
     }
 
     const newComment = {
-      userId: session.id,
+      _id: new mongoose.Types.ObjectId(),
+      userId: new mongoose.Types.ObjectId(session.id),
       userName: session.name,
       userRole: session.role,
       message: message.trim(),
@@ -162,6 +226,7 @@ export async function PUT(req: Request, context: RouteContext) {
   try {
     const { id } = await context.params;
     await connectDB();
+    await ensureAssignmentCommentIds(id);
     const body = await req.json();
 
     const { commentId, message } = body;
@@ -234,6 +299,7 @@ export async function DELETE(req: Request, context: RouteContext) {
   try {
     const { id } = await context.params;
     await connectDB();
+    await ensureAssignmentCommentIds(id);
 
     const url = new URL(req.url);
     let commentId = url.searchParams.get("commentId");
@@ -307,6 +373,7 @@ export async function DELETE(req: Request, context: RouteContext) {
     // If top-level parent (no parentId):
     //   If active replies exist -> preserve thread using placeholder "Komentar ini telah dihapus"
     //   If no active replies exist -> remove comment completely
+    let usedPlaceholder = false;
     if (comment.parentId) {
       assignment.comments.splice(commentIndex, 1);
     } else {
@@ -316,10 +383,11 @@ export async function DELETE(req: Request, context: RouteContext) {
       );
 
       if (hasReplies) {
+        usedPlaceholder = true;
         assignment.comments[commentIndex].isDeleted = true;
         assignment.comments[commentIndex].message = "Komentar ini telah dihapus";
         assignment.comments[commentIndex].deletedAt = new Date();
-        assignment.comments[commentIndex].deletedBy = session.id;
+        assignment.comments[commentIndex].deletedBy = new mongoose.Types.ObjectId(session.id);
       } else {
         assignment.comments.splice(commentIndex, 1);
       }
@@ -330,6 +398,9 @@ export async function DELETE(req: Request, context: RouteContext) {
     return NextResponse.json({
       success: true,
       message: "Komentar berhasil dihapus",
+      action: usedPlaceholder ? "placeholder" : "removed",
+      isDeleted: usedPlaceholder,
+      commentId,
       data: { commentId },
     });
   } catch (err: unknown) {

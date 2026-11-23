@@ -13,7 +13,7 @@ export async function GET(_req: Request) {
     // 1. Fetch joined classes
     const joinedClasses: any[] = await CourseClass.find({
       studentIds: session.id,
-      isArchived: { $ne: true },
+      isActive: true,
     })
       .populate("teacherId", "name title degree email")
       .populate("subjectId", "name code category description")

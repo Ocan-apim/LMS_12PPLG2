@@ -14,7 +14,7 @@ export async function GET(req: Request) {
     // 2. Fetch all active course classes student has joined
     const joinedClasses: any[] = await CourseClass.find({
       studentIds: session.id,
-      isArchived: { $ne: true },
+      isActive: true,
     })
       .populate("teacherId", "name title degree email")
       .populate("subjectId", "name code category")
@@ -35,16 +35,18 @@ export async function GET(req: Request) {
       });
     }
 
-    // 3. Fetch all graded submissions strictly belonging to session.id
-    const submissions: any[] = await Submission.find({
+    // 3. Fetch all graded submissions strictly belonging to session.id in active classes
+    const rawSubmissions: any[] = await Submission.find({
       studentId: session.id,
+      courseClassId: { $in: joinedClassIds },
       status: "graded",
+      score: { $exists: true, $ne: null },
     })
-      .populate("assignmentId", "title maxScore type subjectId courseClassId")
-      .populate("quizId", "title totalPoints")
+      .populate("assignmentId", "title maxScore type subjectId courseClassId isArchived")
+      .populate("quizId", "title totalPoints isPublished")
       .populate({
         path: "courseClassId",
-        select: "name bannerColor teacherId subjectId",
+        select: "name bannerColor teacherId subjectId isActive",
         populate: [
           { path: "teacherId", select: "name title degree" },
           { path: "subjectId", select: "name code category" },
@@ -52,6 +54,10 @@ export async function GET(req: Request) {
       })
       .sort({ gradedAt: -1, submittedAt: -1 })
       .lean();
+
+    const submissions = rawSubmissions.filter(
+      (sub) => !sub.assignmentId?.isArchived && sub.courseClassId?.isActive !== false
+    );
 
     // 4. Calculate Current GPA / Average
     let totalScoreSum = 0;

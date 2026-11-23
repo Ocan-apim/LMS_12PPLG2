@@ -800,7 +800,7 @@ export default function GuruClassDetailPage({
                             >
                               <div className="flex items-center justify-between">
                                 <span className="font-bold">
-                                  {c.senderName || "Pengguna"}
+                                  {(c as any).userName || c.senderName || "Pengguna"}
                                 </span>
                                 <span
                                   className={`text-[10px] ${

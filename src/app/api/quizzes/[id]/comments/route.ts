@@ -102,7 +102,8 @@ export async function POST(req: Request, context: RouteContext) {
     }
 
     const newComment = {
-      userId: session.id,
+      _id: new mongoose.Types.ObjectId(),
+      userId: new mongoose.Types.ObjectId(session.id),
       userName: session.name,
       userRole: session.role,
       message: message.trim(),

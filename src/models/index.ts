@@ -14,3 +14,4 @@ export { ClassPost } from "./ClassPost";
 export { Notification } from "./Notification";
 export { SupportTicket } from "./SupportTicket";
 export { SupportMessage } from "./SupportMessage";
+export { StudentEvent } from "./StudentEvent";

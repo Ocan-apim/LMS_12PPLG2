@@ -223,8 +223,17 @@ export function StudentProfile() {
         <div className="absolute top-0 right-0 h-32 w-64 bg-linear-to-bl from-blue-500/10 via-indigo-500/5 to-transparent rounded-bl-full pointer-events-none" />
 
         <div className="flex flex-col sm:flex-row items-center sm:items-start gap-6">
-          <div className="size-22 rounded-2xl bg-linear-to-tr from-blue-600 to-indigo-600 text-white flex items-center justify-center text-3xl font-extrabold shadow-md shrink-0">
-            {initial}
+          <div className="size-22 rounded-2xl bg-linear-to-tr from-blue-600 to-indigo-600 text-white overflow-hidden flex items-center justify-center text-3xl font-extrabold shadow-md shrink-0">
+            {user.photoUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={user.photoUrl}
+                alt={user.name}
+                className="size-full object-cover"
+              />
+            ) : (
+              initial
+            )}
           </div>
 
           <div className="flex-1 text-center sm:text-left space-y-2">
@@ -233,9 +242,11 @@ export function StudentProfile() {
               <span className="rounded-full bg-blue-50 px-2.5 py-0.5 text-[11px] font-semibold text-blue-700 border border-blue-200">
                 Siswa Aktif
               </span>
-              <span className="rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-700 border border-emerald-200">
-                Tingkat {user.grade || user.classId?.grade || "12"}
-              </span>
+              {(user.grade || user.classId?.grade) && (
+                <span className="rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-700 border border-emerald-200">
+                  Tingkat {user.grade || user.classId?.grade}
+                </span>
+              )}
             </div>
 
             <p className="text-xs text-slate-500 font-mono">
@@ -248,10 +259,12 @@ export function StudentProfile() {
                 <GraduationCap className="size-3.5 text-blue-600" />
                 {user.classId?.name || "Kelas Belum Diatur"}
               </span>
-              <span className="flex items-center gap-1.5">
-                <Layers className="size-3.5 text-purple-600" />
-                {user.departmentId?.name || "PPLG"}
-              </span>
+              {user.departmentId?.name && (
+                <span className="flex items-center gap-1.5">
+                  <Layers className="size-3.5 text-purple-600" />
+                  {user.departmentId.name}
+                </span>
+              )}
               <span className="flex items-center gap-1.5">
                 <Mail className="size-3.5 text-slate-400" />
                 {user.email}
@@ -372,7 +385,7 @@ export function StudentProfile() {
                 Kompetensi Keahlian (Jurusan)
               </span>
               <p className="text-xs font-semibold text-slate-800">
-                {user.departmentId?.name || "Pengembangan Perangkat Lunak & Gim (PPLG)"}
+                {user.departmentId?.name || "-"}
               </p>
             </div>
 
@@ -391,7 +404,7 @@ export function StudentProfile() {
                 Jenis Kelamin
               </span>
               <p className="text-xs font-semibold text-slate-800">
-                {user.gender || "Laki-laki"}
+                {user.gender || "-"}
               </p>
             </div>
 

@@ -19,7 +19,6 @@ import {
   Image as ImageIcon,
   ChevronRight,
 } from "lucide-react";
-import { validateFields } from "@/lib/profanity-filter";
 
 interface TeacherClass {
   _id: string;
@@ -135,18 +134,6 @@ function BuatTugasForm() {
     }
     if (!selectedClassId) {
       setError("Pilih kelas untuk tugas ini");
-      return;
-    }
-
-    const clientValidation = validateFields({
-      "Judul Tugas": title,
-      "Instruksi": instructions,
-    });
-    if (!clientValidation.isValid) {
-      setError(
-        clientValidation.message ||
-          "Konten tugas mengandung kata atau ungkapan yang tidak diperbolehkan. Silakan periksa kembali tulisan Anda."
-      );
       return;
     }
 
