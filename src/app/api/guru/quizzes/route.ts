@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import { requireRole } from "@/lib/session";
-import { Quiz, Assignment, CourseClass, ClassPost } from "@/models";
+import { Quiz, CourseClass, ClassPost } from "@/models";
+import { calculateQuizMaxRawScore } from "@/lib/quiz-scoring";
 
 export async function GET(req: Request) {
   const { session, error } = await requireRole(["guru", "admin"]);
@@ -45,7 +46,6 @@ export async function POST(req: Request) {
       durationSeconds,
       questions,
       totalPoints,
-      publishAsAssignment,
       dueDate,
     } = body;
 
@@ -78,16 +78,21 @@ export async function POST(req: Request) {
       );
     }
 
-    const sanitizedQuestions = (Array.isArray(questions) ? questions : []).map((q: any, idx: number) => {
+    const sanitizedQuestions = (Array.isArray(questions) ? questions : []).map((q: Record<string, unknown>, idx: number) => {
       const qText = String(q?.question || q?.prompt || `Pertanyaan ${idx + 1}`).trim();
+      const rawPts = q?.points !== undefined && q?.points !== null ? Number(q.points) : 10;
+      const rawPtsFalse =
+        q?.pointsFalse !== undefined && q?.pointsFalse !== null ? Number(q.pointsFalse) : 0;
+
       return {
         id: String(q?.id || `q-${idx + 1}-${Date.now()}`),
         question: qText || `Pertanyaan ${idx + 1}`,
-        type: q?.type === "essay" ? "essay" : "pilihan_ganda",
+        type: q?.type === "essay" ? ("essay" as const) : ("pilihan_ganda" as const),
         imageUrl: q?.imageUrl ? String(q.imageUrl) : undefined,
-        options: Array.isArray(q?.options) ? q.options.map((o: any) => String(o || "").trim()) : [],
+        options: Array.isArray(q?.options) ? q.options.map((o: unknown) => String(o || "").trim()) : [],
         correctAnswer: q?.correctAnswer !== undefined && q?.correctAnswer !== "" ? q.correctAnswer : 0,
-        points: Number(q?.points) || 10,
+        points: Number.isFinite(rawPts) ? rawPts : 10,
+        pointsFalse: Number.isFinite(rawPtsFalse) ? rawPtsFalse : 0,
       };
     });
 
@@ -98,6 +103,15 @@ export async function POST(req: Request) {
       );
     }
 
+    const maxScoreSummary = calculateQuizMaxRawScore(sanitizedQuestions);
+    const computedMaxRawPoints = maxScoreSummary.maxRawScore;
+    const rawTotalPoints =
+      computedMaxRawPoints > 0
+        ? computedMaxRawPoints
+        : Number.isFinite(Number(totalPoints))
+          ? Number(totalPoints)
+          : 0;
+
     const quiz = await Quiz.create({
       title: title.trim(),
       description: body.description ? String(body.description).trim() : undefined,
@@ -105,7 +119,8 @@ export async function POST(req: Request) {
       courseClassId,
       durationSeconds: Number(durationSeconds) || 60,
       questions: sanitizedQuestions,
-      totalPoints: Number(totalPoints) || 100,
+      totalPoints: rawTotalPoints,
+      maxRawPoints: computedMaxRawPoints,
       dueDate: dueDate ? new Date(dueDate) : undefined,
       isPublished: true,
     });
@@ -116,7 +131,7 @@ export async function POST(req: Request) {
       teacherId: session.id,
       type: "quiz",
       title: `Ulangan Harian: ${title.trim()}`,
-      content: `${sanitizedQuestions.length} Soal • Poin Total: ${Number(totalPoints) || 100}`,
+      content: `${sanitizedQuestions.length} Soal • Poin Mentah Maksimal: ${rawTotalPoints} (Skala Nilai Akhir: 100)`,
       refId: quiz._id,
       comments: [],
     });

@@ -10,9 +10,10 @@ import {
   Quiz,
   Submission,
 } from "@/models";
+import { resolveSubmissionScoring, roundScore } from "@/lib/quiz-scoring";
 
 export async function GET(req: NextRequest) {
-  const { session, error } = await requireRole(["kurikulum"]);
+  const { session, error } = await requireRole(["kurikulum", "kepsek", "admin"]);
   if (error || !session) return error;
 
   try {
@@ -22,7 +23,6 @@ export async function GET(req: NextRequest) {
     const classIdParam = searchParams.get("classId");
     const academicYearParam = searchParams.get("academicYear");
 
-    // Fetch list of classes (rombels) for dropdown
     const classRombels = await ClassModel.find({ isActive: true })
       .sort({ name: 1 })
       .select("_id name grade academicYear studentIds")
@@ -36,7 +36,6 @@ export async function GET(req: NextRequest) {
       studentCount: (c.studentIds || []).length,
     }));
 
-    // If no classes exist at all
     if (classesList.length === 0) {
       return NextResponse.json({
         success: true,
@@ -53,7 +52,6 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    // Determine target class
     let targetClassId = classIdParam;
     if (targetClassId && !mongoose.Types.ObjectId.isValid(targetClassId)) {
       return NextResponse.json(
@@ -71,7 +69,6 @@ export async function GET(req: NextRequest) {
       targetClassId = String(selectedRombel._id);
     }
 
-    // Find students enrolled in this class
     const studentQuery: Record<string, any> = {
       role: "siswa",
       isActive: true,
@@ -89,7 +86,6 @@ export async function GET(req: NextRequest) {
 
     const studentIds = students.map((s) => s._id);
 
-    // Find all CourseClasses associated with this rombel or having these students
     const courseClassQuery: Record<string, any> = {
       $or: [
         { classRombelId: selectedRombel._id },
@@ -107,29 +103,41 @@ export async function GET(req: NextRequest) {
 
     const courseClassIds = courseClasses.map((cc) => cc._id);
 
-    // Find all published assignments and quizzes for these course classes
     const assignments: any[] = await Assignment.find({
       courseClassId: { $in: courseClassIds },
       isPublished: true,
       isArchived: { $ne: true },
     })
-      .select("_id title type courseClassId maxScore")
+      .select("_id title type courseClassId maxScore quizId")
       .lean();
 
     const assignmentIds = assignments.map((a) => a._id);
+    const assignMap = new Map<string, any>(
+      assignments.map((a) => [String(a._id), a])
+    );
 
     const quizzes: any[] = await Quiz.find({
       courseClassId: { $in: courseClassIds },
       isPublished: true,
     })
-      .select("_id title courseClassId totalPoints")
+      .select("_id title courseClassId totalPoints maxRawPoints questions")
       .lean();
 
     const quizIds = quizzes.map((q) => q._id);
+    const quizMap = new Map<string, any>(
+      quizzes.map((q) => [String(q._id), q])
+    );
 
-    const totalLmsActivities = assignments.length + quizzes.length;
+    const linkedQuizIds = new Set(
+      assignments
+        .map((a) => (a.quizId ? String(a.quizId) : null))
+        .filter(Boolean) as string[]
+    );
+    const standaloneQuizzes = quizzes.filter(
+      (q) => !linkedQuizIds.has(String(q._id))
+    );
+    const totalLmsActivities = assignments.length + standaloneQuizzes.length;
 
-    // Fetch all submissions for these students in these assignments/quizzes
     const submissions: any[] = await Submission.find({
       studentId: { $in: studentIds },
       $or: [
@@ -139,7 +147,6 @@ export async function GET(req: NextRequest) {
       ],
     }).lean();
 
-    // Group submissions by student
     const studentSubMap = new Map<string, any[]>();
     for (const sub of submissions) {
       const sId = String(sub.studentId);
@@ -149,7 +156,6 @@ export async function GET(req: NextRequest) {
       studentSubMap.get(sId)!.push(sub);
     }
 
-    // Calculate per-student metrics
     const distribution = { A: 0, B: 0, C: 0, D: 0 };
     let classTotalScore = 0;
     let classGradedCount = 0;
@@ -158,51 +164,82 @@ export async function GET(req: NextRequest) {
     const studentRows = students.map((st) => {
       const stSubs = studentSubMap.get(String(st._id)) || [];
 
-      // Completed activities (turned_in, late, graded)
       const completedSubs = stSubs.filter(
-        (s) => s.status === "turned_in" || s.status === "late" || s.status === "graded"
+        (s) =>
+          s.status === "turned_in" ||
+          s.status === "late" ||
+          s.status === "graded"
       );
       const studentProgress =
         totalLmsActivities > 0
-          ? Math.min(100, Math.round((completedSubs.length / totalLmsActivities) * 100))
+          ? Math.min(
+              100,
+              Math.round((completedSubs.length / totalLmsActivities) * 100)
+            )
           : 0;
       totalProgressSum += studentProgress;
 
-      // Graded submissions (scores)
-      const gradedSubs = stSubs.filter(
-        (s) => s.status === "graded" && typeof s.score === "number"
-      );
+      const resolvedGraded: Array<{ normalizedScore: number; isQuiz: boolean }> = [];
+      for (const s of stSubs) {
+        const aDoc = s.assignmentId
+          ? assignMap.get(String(s.assignmentId))
+          : null;
+        if (aDoc?.isArchived) continue;
+        const qIdStr = s.quizId
+          ? String(s.quizId)
+          : aDoc?.quizId
+            ? String(aDoc.quizId)
+            : null;
+        const qDoc = qIdStr ? quizMap.get(qIdStr) : null;
+
+        const resolved = resolveSubmissionScoring(s, qDoc, aDoc);
+        if (resolved.isFinalGraded && resolved.normalizedScore !== null) {
+          resolvedGraded.push({
+            normalizedScore: resolved.normalizedScore,
+            isQuiz:
+              Boolean(s.quizId) ||
+              aDoc?.type === "kuis" ||
+              Boolean(aDoc?.quizId) ||
+              resolved.isQuiz,
+          });
+        }
+      }
 
       let studentAvg: number | null = null;
       let assignmentAvg: number | null = null;
       let quizAvg: number | null = null;
 
-      if (gradedSubs.length > 0) {
-        const sum = gradedSubs.reduce((acc, curr) => acc + curr.score, 0);
-        studentAvg = Math.round((sum / gradedSubs.length) * 10) / 10;
+      if (resolvedGraded.length > 0) {
+        const sum = resolvedGraded.reduce(
+          (acc, curr) => acc + curr.normalizedScore,
+          0
+        );
+        studentAvg = roundScore(sum / resolvedGraded.length);
         classTotalScore += sum;
-        classGradedCount += gradedSubs.length;
+        classGradedCount += resolvedGraded.length;
 
-        // Class grade distribution
         if (studentAvg >= 85) distribution.A++;
         else if (studentAvg >= 75) distribution.B++;
         else if (studentAvg >= 60) distribution.C++;
         else distribution.D++;
       }
 
-      // Breakdown tugas vs kuis
-      const gradedAssignments = gradedSubs.filter(
-        (s) => s.assignmentId && (!s.quizId || s.assignmentId.type !== "kuis")
-      );
+      const gradedAssignments = resolvedGraded.filter((s) => !s.isQuiz);
       if (gradedAssignments.length > 0) {
-        const sumA = gradedAssignments.reduce((acc, curr) => acc + curr.score, 0);
-        assignmentAvg = Math.round((sumA / gradedAssignments.length) * 10) / 10;
+        const sumA = gradedAssignments.reduce(
+          (acc, curr) => acc + curr.normalizedScore,
+          0
+        );
+        assignmentAvg = roundScore(sumA / gradedAssignments.length);
       }
 
-      const gradedQuizzes = gradedSubs.filter((s) => s.quizId);
+      const gradedQuizzes = resolvedGraded.filter((s) => s.isQuiz);
       if (gradedQuizzes.length > 0) {
-        const sumQ = gradedQuizzes.reduce((acc, curr) => acc + curr.score, 0);
-        quizAvg = Math.round((sumQ / gradedQuizzes.length) * 10) / 10;
+        const sumQ = gradedQuizzes.reduce(
+          (acc, curr) => acc + curr.normalizedScore,
+          0
+        );
+        quizAvg = roundScore(sumQ / gradedQuizzes.length);
       }
 
       return {
@@ -218,7 +255,7 @@ export async function GET(req: NextRequest) {
 
     const classAverage =
       classGradedCount > 0
-        ? Math.round((classTotalScore / classGradedCount) * 10) / 10
+        ? roundScore(classTotalScore / classGradedCount)
         : null;
 
     const classProgress =
@@ -246,7 +283,10 @@ export async function GET(req: NextRequest) {
       },
     });
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Gagal memuat monitoring nilai kelas";
+    const message =
+      err instanceof Error
+        ? err.message
+        : "Gagal memuat monitoring nilai kelas";
     return NextResponse.json({ success: false, message }, { status: 500 });
   }
 }

@@ -1,5 +1,5 @@
-import { StudentSettings } from "@/components/student/StudentSettings";
+import { redirect } from "next/navigation";
 
-export default function SiswaSettingsPage() {
-  return <StudentSettings />;
+export default function SiswaSettingsRedirectPage() {
+  redirect("/siswa/profile");
 }

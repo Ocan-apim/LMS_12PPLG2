@@ -48,9 +48,14 @@ interface SubmissionAttachment {
 
 interface QuizAnswerItem {
   questionId: string;
-  answer: number | string;
+  questionType?: "pilihan_ganda" | "essay";
+  answer: number | string | null;
   isCorrect?: boolean;
-  scoreAwarded?: number;
+  isAnswered?: boolean;
+  isGraded?: boolean;
+  scoreAwarded?: number | null;
+  maxPoints?: number;
+  pointsFalse?: number;
 }
 
 interface QuizQuestionInfo {
@@ -61,6 +66,7 @@ interface QuizQuestionInfo {
   options: string[];
   correctAnswer: number | string;
   points: number;
+  pointsFalse?: number;
 }
 
 interface QuizInfo {
@@ -68,6 +74,10 @@ interface QuizInfo {
   title: string;
   durationSeconds?: number;
   totalPoints: number;
+  maxRawScore?: number;
+  objectiveMaxRawScore?: number;
+  essayMaxRawScore?: number;
+  hasEssayQuestions?: boolean;
   questions: QuizQuestionInfo[];
 }
 
@@ -76,7 +86,15 @@ interface SubmissionData {
   student: StudentItem;
   hasSubmitted: boolean;
   status: "turned_in" | "late" | "graded" | "assigned";
+  gradingStatus?: "not_started" | "pending_manual" | "completed" | "invalid_max_score";
+  isPendingManual?: boolean;
   score: number | null;
+  rawScore?: number | null;
+  maxRawScore?: number;
+  normalizedScore?: number | null;
+  provisionalScore?: number | null;
+  objectiveRawScore?: number | null;
+  essayRawScore?: number | null;
   draftScore: number | null;
   feedback: string;
   privateComments: PrivateComment[];
@@ -93,6 +111,7 @@ interface AssignmentInfo {
   type?: string;
   instructions?: string;
   maxScore: number;
+  maxRawScore?: number;
   dueDate?: string;
   className: string;
   quiz?: QuizInfo | null;
@@ -165,28 +184,55 @@ export default function GoogleClassroomSubmissionsPage({
   }, [selectedStudentId, selectedItem]);
 
   function handleEssayScoreChange(questionId: string, newPoints: number, maxPoints: number) {
-    const clamped = Math.max(0, Math.min(newPoints, maxPoints));
+    const safeVal = Number.isFinite(newPoints) ? newPoints : 0;
+    const clamped = Math.max(0, Math.min(safeVal, maxPoints));
     setEditingQuizAnswers((prev) => {
       const existing = prev.find((a) => a.questionId === questionId);
       let updated: QuizAnswerItem[];
       if (existing) {
         updated = prev.map((a) =>
           a.questionId === questionId
-            ? { ...a, scoreAwarded: clamped, isCorrect: clamped > 0 }
+            ? {
+                ...a,
+                questionType: "essay",
+                scoreAwarded: clamped,
+                isGraded: true,
+                isCorrect: clamped > 0,
+              }
             : a
         );
       } else {
         updated = [
           ...prev,
-          { questionId, answer: "", scoreAwarded: clamped, isCorrect: clamped > 0 },
+          {
+            questionId,
+            questionType: "essay",
+            answer: "",
+            scoreAwarded: clamped,
+            isGraded: true,
+            isCorrect: clamped > 0,
+          },
         ];
       }
-      // Recompute total score across all quiz questions
-      const totalFromQuestions = updated.reduce(
-        (sum, a) => sum + (Number(a.scoreAwarded) || 0),
+      // Recompute total raw score & normalized 0-100 score across all quiz questions
+      const totalRawFromQuestions = updated.reduce(
+        (sum, a) => sum + (typeof a.scoreAwarded === "number" ? a.scoreAwarded : 0),
         0
       );
-      setCurrentScore(String(totalFromQuestions));
+      const maxRaw =
+        assignment?.quiz?.maxRawScore ||
+        assignment?.maxRawScore ||
+        assignment?.quiz?.totalPoints ||
+        100;
+      const norm =
+        maxRaw > 0
+          ? Math.round(
+              (Math.max(0, Math.min(100, (totalRawFromQuestions / maxRaw) * 100)) +
+                Number.EPSILON) *
+                100
+            ) / 100
+          : 0;
+      setCurrentScore(String(norm));
       return updated;
     });
   }
@@ -267,25 +313,59 @@ export default function GoogleClassroomSubmissionsPage({
       const json = await res.json();
       if (json.success) {
         setSaveNotification(
-          asDraft ? "Draft nilai berhasil disimpan" : "Nilai berhasil dikembalikan ke siswa!"
+          asDraft
+            ? "Draft nilai berhasil disimpan"
+            : json.data?.gradingStatus === "pending_manual"
+              ? "Nilai sementara disimpan (masih ada soal essay belum dinilai)"
+              : "Nilai berhasil dikembalikan ke siswa!"
         );
-        // Update local state
+        // Update local state from authoritative backend response
+        const savedSub = json.data;
         setItems((prev) =>
           prev.map((i) => {
             if (i.student._id === selectedItem.student._id) {
               return {
                 ...i,
-                submissionId: json.data._id,
-                status: asDraft ? i.status : "graded",
-                score: asDraft ? i.score : (numericScore ?? null),
-                draftScore: asDraft ? (numericScore ?? null) : null,
+                submissionId: savedSub._id,
+                status: savedSub.status || (asDraft ? i.status : "graded"),
+                gradingStatus: savedSub.gradingStatus || i.gradingStatus,
+                isPendingManual: savedSub.gradingStatus === "pending_manual",
+                score:
+                  savedSub.score !== undefined
+                    ? savedSub.score
+                    : asDraft
+                      ? i.score
+                      : (numericScore ?? null),
+                rawScore:
+                  savedSub.rawScore !== undefined ? savedSub.rawScore : i.rawScore,
+                maxRawScore:
+                  savedSub.maxRawScore !== undefined
+                    ? savedSub.maxRawScore
+                    : i.maxRawScore,
+                normalizedScore:
+                  savedSub.normalizedScore !== undefined
+                    ? savedSub.normalizedScore
+                    : i.normalizedScore,
+                provisionalScore:
+                  savedSub.provisionalScore !== undefined
+                    ? savedSub.provisionalScore
+                    : i.provisionalScore,
+                draftScore:
+                  savedSub.draftScore !== undefined
+                    ? savedSub.draftScore
+                    : asDraft
+                      ? (numericScore ?? null)
+                      : null,
                 feedback: currentFeedback,
-                quizAnswers: editingQuizAnswers,
+                quizAnswers: savedSub.quizAnswers || editingQuizAnswers,
               };
             }
             return i;
           })
         );
+        if (savedSub?.normalizedScore !== undefined && savedSub?.normalizedScore !== null) {
+          setCurrentScore(String(savedSub.normalizedScore));
+        }
         setTimeout(() => setSaveNotification(null), 3000);
       } else {
         alert(json.message || "Gagal menyimpan nilai");
@@ -523,10 +603,30 @@ export default function GoogleClassroomSubmissionsPage({
                     </div>
 
                     <div className="text-right shrink-0 ml-2">
-                      {isGraded ? (
-                        <span className="font-bold text-emerald-600 dark:text-emerald-400">
-                          {item.score}/{assignment.maxScore}
-                        </span>
+                      {item.isPendingManual || item.gradingStatus === "pending_manual" ? (
+                        <div className="text-right">
+                          <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-800 dark:bg-amber-950 dark:text-amber-300">
+                            Perlu Nilai Essay
+                          </span>
+                          {typeof item.rawScore === "number" && (
+                            <p className="text-[10px] font-semibold text-muted-foreground mt-0.5">
+                              Mentah: {item.rawScore}/{item.maxRawScore ?? assignment.maxRawScore ?? 100}
+                            </p>
+                          )}
+                        </div>
+                      ) : isGraded ? (
+                        <div className="text-right">
+                          <span className="font-bold text-emerald-600 dark:text-emerald-400">
+                            {item.normalizedScore ?? item.score}/100
+                          </span>
+                          {assignment.type === "kuis" &&
+                            typeof item.rawScore === "number" &&
+                            typeof item.maxRawScore === "number" && (
+                              <p className="text-[10px] font-semibold text-muted-foreground">
+                                Mentah: {item.rawScore}/{item.maxRawScore}
+                              </p>
+                            )}
+                        </div>
                       ) : isLate ? (
                         <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-800 dark:bg-amber-950 dark:text-amber-300">
                           Terlambat
@@ -704,9 +804,17 @@ export default function GoogleClassroomSubmissionsPage({
                               editingQuizAnswers.find((a) => a.questionId === q.id) ||
                               selectedItem.quizAnswers?.find((a) => a.questionId === q.id);
                             const isMCQ = q.type === "pilihan_ganda";
-                            const currentAwarded =
-                              studentAns?.scoreAwarded ??
-                              (studentAns?.isCorrect ? q.points : 0);
+                            const isEssayGraded =
+                              !isMCQ &&
+                              studentAns &&
+                              typeof studentAns.scoreAwarded === "number" &&
+                              studentAns.isGraded !== false;
+                            const currentAwarded = isMCQ
+                              ? (studentAns?.scoreAwarded ??
+                                (studentAns?.isCorrect ? q.points : (q.pointsFalse ?? 0)))
+                              : isEssayGraded
+                                ? Number(studentAns?.scoreAwarded)
+                                : 0;
 
                             return (
                               <div
@@ -724,7 +832,10 @@ export default function GoogleClassroomSubmissionsPage({
                                           {isMCQ ? "Pilihan Ganda" : "Essay / Uraian"}
                                         </span>
                                         <span className="text-[10px] text-muted-foreground">
-                                          • {q.points} Poin
+                                          • PT: {q.points} Poin
+                                          {isMCQ && q.pointsFalse !== undefined
+                                            ? ` • PF: ${q.pointsFalse} Poin`
+                                            : ""}
                                         </span>
                                       </div>
                                       <p className="text-xs font-medium text-foreground mt-1">
@@ -741,18 +852,18 @@ export default function GoogleClassroomSubmissionsPage({
                                         </span>
                                       ) : (
                                         <span className="inline-flex items-center gap-1 rounded-md bg-rose-50 px-2 py-1 text-[11px] font-bold text-rose-700 dark:bg-rose-950/40 dark:text-rose-300">
-                                          <AlertCircle className="size-3" /> Salah (0 Poin)
+                                          <AlertCircle className="size-3" /> Salah ({currentAwarded} Poin)
                                         </span>
                                       )
                                     ) : (
                                       <span
                                         className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-bold ${
-                                          currentAwarded > 0
+                                          isEssayGraded
                                             ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300"
                                             : "bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300"
                                         }`}
                                       >
-                                        {currentAwarded > 0
+                                        {isEssayGraded
                                           ? `Nilai: ${currentAwarded}/${q.points}`
                                           : "Belum Dinilai"}
                                       </span>
@@ -950,18 +1061,65 @@ export default function GoogleClassroomSubmissionsPage({
                   )}
                 </div>
 
-                {/* Score Input Card matching Google Classroom */}
+                {/* Score Input Card matching Google Classroom + Raw Score Breakdown for Quizzes */}
+                {assignment.type === "kuis" && (
+                  <div className="rounded-xl border border-blue-200/70 bg-blue-50/40 p-3 space-y-1.5 text-xs">
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-slate-600">Skor Mentah (Raw):</span>
+                      <span className="font-bold text-slate-900">
+                        {editingQuizAnswers.length > 0
+                          ? Math.round(
+                              (editingQuizAnswers.reduce(
+                                (sum, a) =>
+                                  sum +
+                                  (typeof a.scoreAwarded === "number" ? a.scoreAwarded : 0),
+                                0
+                              ) +
+                                Number.EPSILON) *
+                                100
+                            ) / 100
+                          : (selectedItem.rawScore ?? 0)}{" "}
+                        /{" "}
+                        {assignment.quiz?.maxRawScore ??
+                          selectedItem.maxRawScore ??
+                          assignment.maxRawScore ??
+                          100}{" "}
+                        Poin
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-slate-600">Status Penilaian:</span>
+                      <span
+                        className={`font-bold ${
+                          selectedItem.isPendingManual ||
+                          selectedItem.gradingStatus === "pending_manual"
+                            ? "text-amber-700"
+                            : "text-emerald-700"
+                        }`}
+                      >
+                        {selectedItem.isPendingManual ||
+                        selectedItem.gradingStatus === "pending_manual"
+                          ? "Menunggu Penilaian Essay"
+                          : "Selesai Dinilai"}
+                      </span>
+                    </div>
+                  </div>
+                )}
+
                 <div className="flex items-center justify-between rounded-xl border border-border bg-muted/20 p-3">
-                  <span className="text-xs font-semibold text-foreground">Nilai:</span>
+                  <span className="text-xs font-semibold text-foreground">
+                    {assignment.type === "kuis" ? "Nilai Akhir (0-100):" : "Nilai:"}
+                  </span>
                   <div className="flex items-center gap-1.5">
                     <input
                       type="number"
                       min="0"
                       max={assignment.maxScore}
+                      step="any"
                       value={currentScore}
                       onChange={(e) => setCurrentScore(e.target.value)}
                       placeholder="0"
-                      className="w-16 rounded-lg border border-border bg-background p-1.5 text-center font-bold text-sm text-foreground focus:border-blue-500 focus:outline-none"
+                      className="w-20 rounded-lg border border-border bg-background p-1.5 text-center font-bold text-sm text-foreground focus:border-blue-500 focus:outline-none"
                     />
                     <span className="text-xs font-bold text-muted-foreground">
                       / {assignment.maxScore}

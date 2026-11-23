@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import mongoose from "mongoose";
 import { connectDB } from "@/lib/mongodb";
 import { requireRole } from "@/lib/session";
-import { Assignment, CourseClass, User } from "@/models";
+import { Assignment, CourseClass, User, Quiz } from "@/models";
 import { validateComment } from "@/lib/profanity-filter";
 
 type RouteContext = {
@@ -14,27 +14,41 @@ type RouteContext = {
  */
 async function ensureAssignmentCommentIds(assignmentId: string) {
   if (!mongoose.Types.ObjectId.isValid(assignmentId)) return;
-  const rawDoc = await Assignment.collection.findOne(
-    { _id: new mongoose.Types.ObjectId(assignmentId) },
-    { projection: { comments: 1 } }
-  );
-  if (!rawDoc || !Array.isArray(rawDoc.comments)) return;
-
-  let needsUpdate = false;
-  const fixedComments = rawDoc.comments.map((c: Record<string, unknown>) => {
-    if (!c._id) {
-      needsUpdate = true;
-      return { ...c, _id: new mongoose.Types.ObjectId() };
-    }
-    return c;
-  });
-
-  if (needsUpdate) {
-    await Assignment.collection.updateOne(
+  for (const col of [Assignment.collection, Quiz.collection]) {
+    const rawDoc = await col.findOne(
       { _id: new mongoose.Types.ObjectId(assignmentId) },
-      { $set: { comments: fixedComments } }
+      { projection: { comments: 1 } }
     );
+    if (!rawDoc || !Array.isArray(rawDoc.comments)) continue;
+
+    let needsUpdate = false;
+    const fixedComments = rawDoc.comments.map((c: Record<string, unknown>) => {
+      if (!c._id) {
+        needsUpdate = true;
+        return { ...c, _id: new mongoose.Types.ObjectId() };
+      }
+      return c;
+    });
+
+    if (needsUpdate) {
+      await col.updateOne(
+        { _id: new mongoose.Types.ObjectId(assignmentId) },
+        { $set: { comments: fixedComments } }
+      );
+    }
   }
+}
+
+async function findAssignmentOrQuizById(id: string, selectFields?: string) {
+  if (!mongoose.Types.ObjectId.isValid(id)) return null;
+  const assignQuery = Assignment.findById(id);
+  if (selectFields) assignQuery.select(selectFields);
+  const assignment = await assignQuery;
+  if (assignment) return assignment;
+
+  const quizQuery = Quiz.findById(id);
+  if (selectFields) quizQuery.select(selectFields);
+  return await quizQuery;
 }
 
 async function isStudentEnrolledInAssignmentClass(studentId: string, courseClassId: unknown): Promise<boolean> {
@@ -75,10 +89,10 @@ export async function GET(_req: Request, context: RouteContext) {
     await connectDB();
     await ensureAssignmentCommentIds(id);
 
-    const assignment = await Assignment.findById(id).select("comments courseClassId teacherId");
+    const assignment = await findAssignmentOrQuizById(id, "comments courseClassId teacherId");
     if (!assignment) {
       return NextResponse.json(
-        { success: false, message: "Tugas tidak ditemukan" },
+        { success: false, message: "Tugas atau kuis tidak ditemukan" },
         { status: 404 }
       );
     }
@@ -136,10 +150,10 @@ export async function POST(req: Request, context: RouteContext) {
       );
     }
 
-    const assignment = await Assignment.findById(id);
+    const assignment = await findAssignmentOrQuizById(id);
     if (!assignment) {
       return NextResponse.json(
-        { success: false, message: "Tugas tidak ditemukan" },
+        { success: false, message: "Tugas atau kuis tidak ditemukan" },
         { status: 404 }
       );
     }
@@ -197,13 +211,11 @@ export async function POST(req: Request, context: RouteContext) {
       createdAt: new Date(),
     };
 
-    const updated = await Assignment.findByIdAndUpdate(
-      id,
-      { $push: { comments: newComment } },
-      { new: true }
-    ).select("comments");
+    assignment.comments.push(newComment);
+    await assignment.save();
 
-    const addedComment = updated?.comments?.[updated.comments.length - 1] || newComment;
+    const addedComment =
+      assignment.comments?.[assignment.comments.length - 1] || newComment;
 
     return NextResponse.json(
       {
@@ -245,10 +257,10 @@ export async function PUT(req: Request, context: RouteContext) {
       );
     }
 
-    const assignment = await Assignment.findById(id);
+    const assignment = await findAssignmentOrQuizById(id);
     if (!assignment) {
       return NextResponse.json(
-        { success: false, message: "Tugas tidak ditemukan" },
+        { success: false, message: "Tugas atau kuis tidak ditemukan" },
         { status: 404 }
       );
     }
@@ -317,10 +329,10 @@ export async function DELETE(req: Request, context: RouteContext) {
       );
     }
 
-    const assignment = await Assignment.findById(id);
+    const assignment = await findAssignmentOrQuizById(id);
     if (!assignment) {
       return NextResponse.json(
-        { success: false, message: "Tugas tidak ditemukan" },
+        { success: false, message: "Tugas atau kuis tidak ditemukan" },
         { status: 404 }
       );
     }

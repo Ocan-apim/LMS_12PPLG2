@@ -8,6 +8,7 @@ export interface IQuizQuestion {
   options: string[];
   correctAnswer: number | string; // index (0, 1, 2, ...) or rubric text
   points: number;
+  pointsFalse?: number;
 }
 
 export interface IQuizComment {
@@ -31,6 +32,7 @@ export interface IQuiz {
   durationSeconds: number; // e.g. 60 or total time
   questions: IQuizQuestion[];
   totalPoints: number;
+  maxRawPoints?: number;
   dueDate?: Date;
   isPublished: boolean;
   comments: IQuizComment[];
@@ -47,6 +49,7 @@ const QuizQuestionSchema = new Schema<IQuizQuestion>(
     options: [{ type: String }],
     correctAnswer: { type: Schema.Types.Mixed, default: 0 },
     points: { type: Number, default: 10 },
+    pointsFalse: { type: Number, default: 0 },
   },
   { _id: false }
 );
@@ -75,6 +78,7 @@ const QuizSchema = new Schema<IQuiz>(
     durationSeconds: { type: Number, default: 60 },
     questions: [QuizQuestionSchema],
     totalPoints: { type: Number, default: 100 },
+    maxRawPoints: { type: Number },
     dueDate: { type: Date },
     isPublished: { type: Boolean, default: true },
     comments: [QuizCommentSchema],

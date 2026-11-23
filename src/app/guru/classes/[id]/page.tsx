@@ -642,9 +642,7 @@ export default function GuruClassDetailPage({
             filteredPosts.map((post) => {
               const isQuiz = post.type === "quiz";
               const targetUrl = post.refId
-                ? isQuiz
-                  ? `/siswa/quiz/${post.refId}`
-                  : `/guru/assignments/${post.refId}`
+                ? `/guru/assignments/${post.refId}`
                 : null;
               const isExpanded = expandedPostId === post._id;
               const commentsCount = post.comments?.length || 0;

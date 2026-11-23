@@ -17,18 +17,15 @@ import {
   BookOpen,
   FolderOpen,
   HelpCircle,
-  Bell,
-  Calendar as CalendarIcon,
   ClipboardList,
-  CheckCircle2,
-  Clock,
-  Award,
 } from "lucide-react";
 
 interface DashboardData {
   student?: StudentBannerInfo;
   stats?: {
     totalClasses: number;
+    tenggatTugas?: number;
+    tenggatKuis?: number;
     totalAssignments: number;
     completedAssignments: number;
     pendingAssignments: number;
@@ -37,8 +34,7 @@ interface DashboardData {
     pendingQuizzes: number;
     averageGrade: number;
     totalGraded: number;
-    upcomingDeadlines: number;
-    unreadNotifications: number;
+    upcomingDeadlines?: number;
   };
   averageGrade: number;
   totalGraded: number;
@@ -78,6 +74,12 @@ interface DashboardData {
     type: "kuis";
     dueDate?: string | null;
     maxScore: number;
+    rawScore?: number | null;
+    maxRawScore?: number;
+    normalizedScore?: number | null;
+    provisionalScore?: number | null;
+    gradingStatus?: string;
+    isPendingManual?: boolean;
     durationSeconds?: number;
     totalQuestions?: number;
     className: string;
@@ -96,6 +98,12 @@ interface DashboardData {
     type: "tugas" | "kuis";
     dueDate?: string;
     maxScore: number;
+    rawScore?: number | null;
+    maxRawScore?: number;
+    normalizedScore?: number | null;
+    provisionalScore?: number | null;
+    gradingStatus?: string;
+    isPendingManual?: boolean;
     className: string;
     bannerColor: string;
     status: string;
@@ -103,23 +111,6 @@ interface DashboardData {
     feedback?: string | null;
     isUrgent?: boolean;
     href?: string;
-  }>;
-  notifications?: Array<{
-    _id: string;
-    type: string;
-    title: string;
-    message: string;
-    link?: string;
-    read: boolean;
-    createdAt: string;
-  }>;
-  unreadNotificationsCount?: number;
-  personalEvents?: Array<{
-    _id: string;
-    title: string;
-    description?: string;
-    startDate: string;
-    endDate: string;
   }>;
   recentFiles: Array<{
     name: string;
@@ -154,7 +145,27 @@ export default function SiswaDashboardPage() {
   };
 
   useEffect(() => {
-    fetchDashboard();
+    let active = true;
+    (async () => {
+      try {
+        const res = await fetch("/api/siswa/dashboard");
+        const json = await res.json();
+        if (!active) return;
+        if (!res.ok || !json.success) {
+          throw new Error(json.message || "Gagal memuat dashboard");
+        }
+        setData(json.data);
+        setError(null);
+      } catch (err: unknown) {
+        if (!active) return;
+        setError(err instanceof Error ? err.message : "Terjadi kesalahan koneksi.");
+      } finally {
+        if (active) setLoading(false);
+      }
+    })();
+    return () => {
+      active = false;
+    };
   }, []);
 
   if (loading) {
@@ -201,33 +212,22 @@ export default function SiswaDashboardPage() {
         href: q.href || `/siswa/quiz/${q._id}`,
       }));
 
-  const stats = data.stats || {
-    totalClasses: data.totalJoinedClasses,
-    totalAssignments: tugasItems.length,
-    completedAssignments: tugasItems.filter(
-      (t) => t.status === "graded" || t.status === "turned_in"
-    ).length,
-    pendingAssignments: tugasItems.filter(
-      (t) => t.status !== "graded" && t.status !== "turned_in"
-    ).length,
-    totalQuizzes: kuisItems.length,
-    completedQuizzes: kuisItems.filter((q) => q.isCompleted).length,
-    pendingQuizzes: kuisItems.filter((q) => !q.isCompleted).length,
-    averageGrade: data.averageGrade,
-    totalGraded: data.totalGraded,
-    upcomingDeadlines:
-      tugasItems.filter((t) => t.status !== "graded" && t.status !== "turned_in").length +
-      kuisItems.filter((q) => !q.isCompleted).length,
-    unreadNotifications: data.unreadNotificationsCount || 0,
-  };
+  const pendingAssignmentsCount =
+    data.stats?.tenggatTugas ??
+    data.stats?.pendingAssignments ??
+    tugasItems.filter((t) => t.status !== "graded" && t.status !== "turned_in").length;
 
-  const notifications = data.notifications || [];
-  const unreadCount = data.unreadNotificationsCount ?? stats.unreadNotifications;
-  const personalEvents = data.personalEvents || [];
+  const pendingQuizzesCount =
+    data.stats?.tenggatKuis ??
+    data.stats?.pendingQuizzes ??
+    kuisItems.filter((q) => !q.isCompleted).length;
+
+  const totalClassesCount =
+    data.stats?.totalClasses ?? data.totalJoinedClasses ?? data.classes.length;
 
   return (
     <div className="animate-fade-up space-y-8 pb-8">
-      {/* 1. Student Profile Banner & Average Score */}
+      {/* 1. Simplified Welcome Container & Nilai rata-rata */}
       <div className="grid gap-6 xl:grid-cols-[1fr_300px]">
         <JoinClassBanner student={data.student} />
         <AverageScoreCard
@@ -236,69 +236,58 @@ export default function SiswaDashboardPage() {
         />
       </div>
 
-      {/* 2. Real Database-Backed Academic Progress & Statistics */}
-      <section className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <div className="rounded-xl border border-[#e4e6ef] bg-white p-4 shadow-xs flex items-center gap-3.5">
-          <div className="grid size-10 shrink-0 place-items-center rounded-xl bg-blue-50 text-[var(--primary)]">
+      {/* 2. Three Balanced Summary Cards: Mata Pelajaran, Tenggat Tugas, Tenggat Kuis */}
+      <section className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <Link
+          href="/siswa/courses"
+          className="rounded-xl border border-[#e4e6ef] bg-white p-5 shadow-xs flex items-center gap-4 hover:border-blue-300 transition"
+        >
+          <div className="grid size-11 shrink-0 place-items-center rounded-xl bg-blue-50 text-[var(--primary)]">
             <BookOpen className="size-5" />
           </div>
           <div>
             <p className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
               Mata Pelajaran
             </p>
-            <p className="text-lg font-extrabold text-slate-900">
-              {stats.totalClasses} Kelas
+            <p className="text-xl font-extrabold text-slate-900">
+              {totalClassesCount} Kelas
             </p>
           </div>
-        </div>
+        </Link>
 
-        <div className="rounded-xl border border-[#e4e6ef] bg-white p-4 shadow-xs flex items-center gap-3.5">
-          <div className="grid size-10 shrink-0 place-items-center rounded-xl bg-purple-50 text-[#674ce7]">
+        <Link
+          href="/siswa/assignments"
+          className="rounded-xl border border-[#e4e6ef] bg-white p-5 shadow-xs flex items-center gap-4 hover:border-purple-300 transition"
+        >
+          <div className="grid size-11 shrink-0 place-items-center rounded-xl bg-purple-50 text-[#674ce7]">
             <ClipboardList className="size-5" />
           </div>
           <div>
             <p className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
-              Progres Tugas
+              Tenggat Tugas
             </p>
-            <p className="text-lg font-extrabold text-slate-900">
-              {stats.completedAssignments} / {stats.totalAssignments}
-            </p>
-            <p className="text-[10px] text-slate-500">
-              {stats.pendingAssignments} belum selesai
+            <p className="text-xl font-extrabold text-slate-900">
+              {pendingAssignmentsCount} Tugas
             </p>
           </div>
-        </div>
+        </Link>
 
-        <div className="rounded-xl border border-[#e4e6ef] bg-white p-4 shadow-xs flex items-center gap-3.5">
-          <div className="grid size-10 shrink-0 place-items-center rounded-xl bg-emerald-50 text-[#00796f]">
+        <Link
+          href="/siswa/quiz"
+          className="rounded-xl border border-[#e4e6ef] bg-white p-5 shadow-xs flex items-center gap-4 hover:border-emerald-300 transition"
+        >
+          <div className="grid size-11 shrink-0 place-items-center rounded-xl bg-emerald-50 text-[#00796f]">
             <HelpCircle className="size-5" />
           </div>
           <div>
             <p className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
-              Progres Kuis
+              Tenggat Kuis
             </p>
-            <p className="text-lg font-extrabold text-slate-900">
-              {stats.completedQuizzes} / {stats.totalQuizzes}
-            </p>
-            <p className="text-[10px] text-slate-500">
-              {stats.pendingQuizzes} tersedia
+            <p className="text-xl font-extrabold text-slate-900">
+              {pendingQuizzesCount} Kuis
             </p>
           </div>
-        </div>
-
-        <div className="rounded-xl border border-[#e4e6ef] bg-white p-4 shadow-xs flex items-center gap-3.5">
-          <div className="grid size-10 shrink-0 place-items-center rounded-xl bg-amber-50 text-amber-600">
-            <Clock className="size-5" />
-          </div>
-          <div>
-            <p className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
-              Tenggat Aktif
-            </p>
-            <p className="text-lg font-extrabold text-slate-900">
-              {stats.upcomingDeadlines} Aktivitas
-            </p>
-          </div>
-        </div>
+        </Link>
       </section>
 
       {/* 3. Mata Pelajaran & Tugas */}
@@ -347,205 +336,7 @@ export default function SiswaDashboardPage() {
         <TaskList tasks={tugasItems} />
       </div>
 
-      {/* 4. Kuis, Kalender Pribadi, & Notifikasi */}
-      <div className="grid gap-8 lg:grid-cols-3">
-        {/* Kuis Section */}
-        <section className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="font-[family-name:var(--font-display)] text-xl font-extrabold text-slate-900 flex items-center gap-2">
-              <HelpCircle className="size-5 text-[#674ce7]" />
-              <span>Kuis ({kuisItems.length})</span>
-            </h2>
-            <Link
-              href="/siswa/quiz"
-              className="text-xs font-extrabold text-[var(--primary)] hover:underline"
-            >
-              View All &gt;
-            </Link>
-          </div>
-
-          <div className="overflow-hidden rounded-xl border border-[#e4e6ef] bg-white">
-            {kuisItems.length === 0 ? (
-              <div className="p-8 text-center">
-                <HelpCircle className="mx-auto size-8 text-slate-300 mb-2" />
-                <p className="text-xs font-bold text-slate-700">Belum ada kuis aktif.</p>
-                <p className="mt-0.5 text-[11px] text-slate-400">
-                  Kuis yang diterbitkan oleh guru akan muncul di sini.
-                </p>
-              </div>
-            ) : (
-              <div className="divide-y divide-[#e4e6ef]">
-                {kuisItems.slice(0, 4).map((quiz) => {
-                  const dueText = quiz.dueDate
-                    ? new Date(quiz.dueDate).toLocaleDateString("id-ID", {
-                        day: "numeric",
-                        month: "short",
-                        year: "numeric",
-                      })
-                    : "Tanpa batas waktu";
-
-                  return (
-                    <Link
-                      key={quiz._id}
-                      href={quiz.href}
-                      className="flex items-start justify-between gap-3 p-4 hover:bg-slate-50 transition"
-                    >
-                      <div className="min-w-0 flex-1">
-                        <p className="text-xs font-extrabold text-slate-900 truncate">
-                          {quiz.title}
-                        </p>
-                        <p className="mt-0.5 text-[11px] text-slate-500">
-                          {quiz.className} &bull; Tenggat: {dueText}
-                        </p>
-                        {quiz.isGraded && quiz.score !== null && (
-                          <p className="mt-1 text-xs font-extrabold text-[#00796f] flex items-center gap-1">
-                            <Award className="size-3.5" />
-                            <span>
-                              Nilai: {quiz.score} / {quiz.maxScore}
-                            </span>
-                          </p>
-                        )}
-                      </div>
-                      <span
-                        className={`rounded px-2.5 py-0.5 text-[10px] font-extrabold uppercase shrink-0 ${
-                          quiz.isCompleted
-                            ? "bg-emerald-100 text-emerald-700"
-                            : quiz.status === "late"
-                              ? "bg-red-100 text-red-700"
-                              : "bg-[#eee9ff] text-[#674ce7]"
-                        }`}
-                      >
-                        {quiz.isCompleted
-                          ? "Selesai"
-                          : quiz.status === "late"
-                            ? "Terlambat"
-                            : "Tersedia"}
-                      </span>
-                    </Link>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        </section>
-
-        {/* Kalender & Agenda Pribadi Section */}
-        <section className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="font-[family-name:var(--font-display)] text-xl font-extrabold text-slate-900 flex items-center gap-2">
-              <CalendarIcon className="size-5 text-blue-600" />
-              <span>Event Kalender ({personalEvents.length})</span>
-            </h2>
-            <Link
-              href="/siswa/schedule"
-              className="text-xs font-extrabold text-[var(--primary)] hover:underline"
-            >
-              Buka Kalender &gt;
-            </Link>
-          </div>
-
-          <div className="overflow-hidden rounded-xl border border-[#e4e6ef] bg-white">
-            {personalEvents.length === 0 ? (
-              <div className="p-8 text-center">
-                <CalendarIcon className="mx-auto size-8 text-slate-300 mb-2" />
-                <p className="text-xs font-bold text-slate-700">Belum ada event pribadi.</p>
-                <p className="mt-0.5 text-[11px] text-slate-400">
-                  Tambahkan jadwal belajar Anda di halaman Kalender.
-                </p>
-                <Link
-                  href="/siswa/schedule"
-                  className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-blue-50 px-3 py-1.5 text-xs font-bold text-blue-600 hover:bg-blue-100 transition"
-                >
-                  + Tambah Event
-                </Link>
-              </div>
-            ) : (
-              <div className="divide-y divide-[#e4e6ef]">
-                {personalEvents.slice(0, 4).map((ev) => (
-                  <Link
-                    key={ev._id}
-                    href="/siswa/schedule"
-                    className="block p-4 hover:bg-slate-50 transition"
-                  >
-                    <p className="text-xs font-extrabold text-slate-900 truncate">
-                      {ev.title}
-                    </p>
-                    {ev.description && (
-                      <p className="mt-0.5 text-[11px] text-slate-500 line-clamp-1">
-                        {ev.description}
-                      </p>
-                    )}
-                    <p className="mt-1 text-[10px] font-bold text-blue-600">
-                      {ev.startDate === ev.endDate
-                        ? ev.startDate
-                        : `${ev.startDate} s/d ${ev.endDate}`}
-                    </p>
-                  </Link>
-                ))}
-              </div>
-            )}
-          </div>
-        </section>
-
-        {/* Notifikasi Section */}
-        <section className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="font-[family-name:var(--font-display)] text-xl font-extrabold text-slate-900 flex items-center gap-2">
-              <Bell className="size-5 text-amber-500" />
-              <span>Notifikasi</span>
-              {unreadCount > 0 && (
-                <span className="rounded-full bg-red-600 px-2 py-0.5 text-[10px] font-extrabold text-white">
-                  {unreadCount} baru
-                </span>
-              )}
-            </h2>
-            <Link
-              href="/siswa/notifications"
-              className="text-xs font-extrabold text-[var(--primary)] hover:underline"
-            >
-              View All &gt;
-            </Link>
-          </div>
-
-          <div className="overflow-hidden rounded-xl border border-[#e4e6ef] bg-white">
-            {notifications.length === 0 ? (
-              <div className="p-8 text-center">
-                <Bell className="mx-auto size-8 text-slate-300 mb-2" />
-                <p className="text-xs font-bold text-slate-700">Belum ada notifikasi.</p>
-                <p className="mt-0.5 text-[11px] text-slate-400">
-                  Pemberitahuan tugas, kuis, dan nilai akan tampil di sini.
-                </p>
-              </div>
-            ) : (
-              <div className="divide-y divide-[#e4e6ef]">
-                {notifications.slice(0, 4).map((notif) => (
-                  <Link
-                    key={notif._id}
-                    href={notif.link || "/siswa/notifications"}
-                    className={`block p-4 hover:bg-slate-50 transition ${
-                      !notif.read ? "bg-blue-50/30" : ""
-                    }`}
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="text-xs font-extrabold text-slate-900 truncate">
-                        {notif.title}
-                      </p>
-                      {!notif.read && (
-                        <span className="size-2 shrink-0 rounded-full bg-blue-600" />
-                      )}
-                    </div>
-                    <p className="mt-0.5 text-[11px] text-slate-500 line-clamp-2">
-                      {notif.message}
-                    </p>
-                  </Link>
-                ))}
-              </div>
-            )}
-          </div>
-        </section>
-      </div>
-
-      {/* 5. File yang dibagi */}
+      {/* 4. File yang dibagi */}
       <section>
         <div className="mb-5 flex items-center justify-between">
           <h2 className="font-[family-name:var(--font-display)] text-2xl font-extrabold text-slate-900">

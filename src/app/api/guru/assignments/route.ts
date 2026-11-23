@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import { requireRole } from "@/lib/session";
-import { Assignment, CourseClass, ClassPost, Submission } from "@/models";
+import { Assignment, CourseClass, ClassPost, Submission, Quiz } from "@/models";
 
 export async function GET(req: Request) {
   const { session, error } = await requireRole(["guru", "admin"]);
@@ -38,16 +38,27 @@ export async function GET(req: Request) {
       .sort({ createdAt: -1 })
       .lean();
 
+    const linkedQuizIds = new Set<string>();
+    assignments.forEach((a: any) => {
+      if (a.quizId) {
+        linkedQuizIds.add(String(a.quizId._id || a.quizId));
+      }
+    });
+
     // Enrich with submissions count
-    const enriched = await Promise.all(
-      assignments.map(async (a) => {
+    const enrichedAssignments = await Promise.all(
+      assignments.map(async (a: any) => {
+        const subOrConds: Record<string, unknown>[] = [{ assignmentId: a._id }];
+        if (a.quizId) {
+          subOrConds.push({ quizId: a.quizId._id || a.quizId });
+        }
         const [totalTurnedIn, totalGraded] = await Promise.all([
           Submission.countDocuments({
-            assignmentId: a._id,
+            $or: subOrConds,
             status: { $in: ["turned_in", "late", "graded"] },
           }),
           Submission.countDocuments({
-            assignmentId: a._id,
+            $or: subOrConds,
             status: "graded",
           }),
         ]);
@@ -60,7 +71,70 @@ export async function GET(req: Request) {
       })
     );
 
-    return NextResponse.json({ success: true, data: enriched });
+    // Also include standalone Quizzes owned by this teacher when type filter allows "kuis"
+    let enrichedStandaloneQuizzes: any[] = [];
+    if (!type || type === "all" || type === "kuis") {
+      const quizQuery: Record<string, unknown> = {
+        teacherId: session.id,
+        isPublished: { $ne: false },
+      };
+      if (courseClassId && courseClassId !== "all") {
+        quizQuery.courseClassId = courseClassId;
+      }
+      if (search) {
+        quizQuery.title = { $regex: search, $options: "i" };
+      }
+
+      const standaloneQuizzes = await Quiz.find(quizQuery)
+        .populate("courseClassId", "name code classRombelId")
+        .sort({ createdAt: -1 })
+        .lean();
+
+      const unlinkedQuizzes = standaloneQuizzes.filter(
+        (q: any) => !linkedQuizIds.has(String(q._id))
+      );
+
+      enrichedStandaloneQuizzes = await Promise.all(
+        unlinkedQuizzes.map(async (q: any) => {
+          const [totalTurnedIn, totalGraded] = await Promise.all([
+            Submission.countDocuments({
+              quizId: q._id,
+              status: { $in: ["turned_in", "late", "graded"] },
+            }),
+            Submission.countDocuments({
+              quizId: q._id,
+              status: "graded",
+            }),
+          ]);
+
+          return {
+            _id: q._id,
+            title: q.title,
+            instructions: q.description || "",
+            description: q.description || "",
+            type: "kuis",
+            courseClassId: q.courseClassId,
+            teacherId: q.teacherId,
+            dueDate: q.dueDate,
+            maxScore: 100,
+            quizId: q,
+            isPublished: q.isPublished,
+            createdAt: q.createdAt,
+            updatedAt: q.updatedAt,
+            submittedCount: totalTurnedIn,
+            gradedCount: totalGraded,
+          };
+        })
+      );
+    }
+
+    const combined = [...enrichedAssignments, ...enrichedStandaloneQuizzes].sort(
+      (a, b) =>
+        new Date(b.createdAt || 0).getTime() -
+        new Date(a.createdAt || 0).getTime()
+    );
+
+    return NextResponse.json({ success: true, data: combined });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Gagal memuat daftar tugas";
     return NextResponse.json({ success: false, message }, { status: 500 });

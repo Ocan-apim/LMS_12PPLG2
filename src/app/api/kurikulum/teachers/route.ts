@@ -4,7 +4,7 @@ import { requireRole } from "@/lib/session";
 import { User, CourseClass, Subject } from "@/models";
 
 export async function GET(req: NextRequest) {
-  const { session, error } = await requireRole(["kurikulum"]);
+  const { session, error } = await requireRole(["kurikulum", "kepsek", "admin"]);
   if (error || !session) return error;
 
   try {

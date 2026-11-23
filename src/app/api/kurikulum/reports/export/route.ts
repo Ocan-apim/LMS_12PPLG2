@@ -11,9 +11,10 @@ import {
   Quiz,
   Submission,
 } from "@/models";
+import { resolveSubmissionScoring, roundScore } from "@/lib/quiz-scoring";
 
 export async function GET(req: NextRequest) {
-  const { session, error } = await requireRole(["kurikulum"]);
+  const { session, error } = await requireRole(["kurikulum", "kepsek", "admin"]);
   if (error || !session) return error;
 
   try {
@@ -25,7 +26,6 @@ export async function GET(req: NextRequest) {
     const classIdParam = searchParams.get("classId");
     const academicYearParam = searchParams.get("academicYear");
 
-    // Validate ID parameters
     if (subjectIdParam && !mongoose.Types.ObjectId.isValid(subjectIdParam)) {
       return NextResponse.json(
         { success: false, message: "subjectId tidak valid" },
@@ -45,7 +45,6 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    // Build filter for CourseClass
     const courseClassQuery: Record<string, any> = { isActive: true };
     if (subjectIdParam) courseClassQuery.subjectId = subjectIdParam;
     if (teacherIdParam) courseClassQuery.teacherId = teacherIdParam;
@@ -68,7 +67,6 @@ export async function GET(req: NextRequest) {
 
     const courseClassIds = courseClasses.map((cc) => cc._id);
 
-    // Enrolled students
     const studentIdSet = new Set<string>();
     courseClasses.forEach((cc) => {
       (cc.studentIds || []).forEach((sid: any) => studentIdSet.add(String(sid)));
@@ -86,45 +84,76 @@ export async function GET(req: NextRequest) {
       students.map((s) => [String(s._id), s])
     );
 
-    // Fetch assignments and quizzes
     const [assignments, quizzes] = await Promise.all([
       Assignment.find({
         courseClassId: { $in: courseClassIds },
         isPublished: true,
         isArchived: { $ne: true },
       })
-        .select("_id title type courseClassId")
+        .select("_id title type maxScore quizId courseClassId")
         .lean(),
       Quiz.find({
         courseClassId: { $in: courseClassIds },
         isPublished: true,
       })
-        .select("_id title courseClassId")
+        .select("_id title totalPoints maxRawPoints questions courseClassId")
         .lean(),
     ]);
 
-    const quizIds = quizzes.map((q: any) => q._id);
-    const quizIdSet = new Set(quizIds.map(String));
+    const assignMap = new Map<string, any>(
+      assignments.map((a: any) => [String(a._id), a])
+    );
+    const quizMap = new Map<string, any>(
+      quizzes.map((q: any) => [String(q._id), q])
+    );
+    const quizIdSet = new Set(quizzes.map((q: any) => String(q._id)));
+    const quizAssignmentIdSet = new Set(
+      assignments
+        .filter((a: any) => a.type === "kuis" || Boolean(a.quizId))
+        .map((a: any) => String(a._id))
+    );
 
-    // Graded submissions
     const submissions: any[] = await Submission.find({
       courseClassId: { $in: courseClassIds },
       status: "graded",
-      score: { $exists: true, $ne: null },
     })
-      .select("studentId courseClassId assignmentId quizId score")
+      .select(
+        "studentId courseClassId assignmentId quizId status score rawScore maxRawScore normalizedScore provisionalScore gradingStatus quizAnswers"
+      )
       .lean();
 
-    const subMap = new Map<string, any[]>();
+    const subMap = new Map<string, Array<{ normalizedScore: number; isQuiz: boolean }>>();
     for (const sub of submissions) {
+      const aDoc = sub.assignmentId ? assignMap.get(String(sub.assignmentId)) : null;
+      if (aDoc?.isArchived) continue;
+      const qIdStr = sub.quizId
+        ? String(sub.quizId)
+        : aDoc?.quizId
+          ? String(aDoc.quizId)
+          : null;
+      const qDoc = qIdStr ? quizMap.get(qIdStr) : null;
+
+      const resolved = resolveSubmissionScoring(sub, qDoc, aDoc);
+      if (!resolved.isFinalGraded || resolved.normalizedScore === null) {
+        continue;
+      }
+
+      const isQuiz =
+        Boolean(sub.quizId) ||
+        (sub.quizId && quizIdSet.has(String(sub.quizId))) ||
+        (sub.assignmentId && quizAssignmentIdSet.has(String(sub.assignmentId))) ||
+        resolved.isQuiz;
+
       const key = `${sub.studentId}_${sub.courseClassId}`;
       if (!subMap.has(key)) {
         subMap.set(key, []);
       }
-      subMap.get(key)!.push(sub);
+      subMap.get(key)!.push({
+        normalizedScore: resolved.normalizedScore,
+        isQuiz,
+      });
     }
 
-    // Build rows
     const dataRows: (string | number)[][] = [];
     let counter = 1;
 
@@ -145,23 +174,28 @@ export async function GET(req: NextRequest) {
         let finalAvg: number | string = "-";
 
         if (stSubs.length > 0) {
-          const sum = stSubs.reduce((acc, curr) => acc + curr.score, 0);
-          finalAvg = Math.round((sum / stSubs.length) * 10) / 10;
-
-          const assignSubs = stSubs.filter(
-            (s) => !s.quizId && !quizIdSet.has(String(s.assignmentId))
+          const sum = stSubs.reduce(
+            (acc, curr) => acc + curr.normalizedScore,
+            0
           );
+          finalAvg = roundScore(sum / stSubs.length);
+
+          const assignSubs = stSubs.filter((s) => !s.isQuiz);
           if (assignSubs.length > 0) {
-            const sumA = assignSubs.reduce((acc, curr) => acc + curr.score, 0);
-            assignAvg = Math.round((sumA / assignSubs.length) * 10) / 10;
+            const sumA = assignSubs.reduce(
+              (acc, curr) => acc + curr.normalizedScore,
+              0
+            );
+            assignAvg = roundScore(sumA / assignSubs.length);
           }
 
-          const qSubs = stSubs.filter(
-            (s) => Boolean(s.quizId) || quizIdSet.has(String(s.assignmentId))
-          );
+          const qSubs = stSubs.filter((s) => s.isQuiz);
           if (qSubs.length > 0) {
-            const sumQ = qSubs.reduce((acc, curr) => acc + curr.score, 0);
-            quizAvg = Math.round((sumQ / qSubs.length) * 10) / 10;
+            const sumQ = qSubs.reduce(
+              (acc, curr) => acc + curr.normalizedScore,
+              0
+            );
+            quizAvg = roundScore(sumQ / qSubs.length);
           }
         }
 
@@ -179,14 +213,12 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // Sort dataRows by Kelas then Nama Siswa
     dataRows.sort((a, b) => {
       const cmpClass = String(a[3]).localeCompare(String(b[3]));
       if (cmpClass !== 0) return cmpClass;
       return String(a[2]).localeCompare(String(b[2]));
     });
 
-    // Re-index row numbers
     dataRows.forEach((r, idx) => {
       r[0] = idx + 1;
     });
@@ -206,7 +238,6 @@ export async function GET(req: NextRequest) {
     const aoa = [headers, ...dataRows];
     const ws = XLSX.utils.aoa_to_sheet(aoa);
 
-    // Auto calculate column widths
     const colWidths = headers.map((h, i) => {
       let maxLen = h.length;
       dataRows.forEach((row) => {
@@ -232,7 +263,8 @@ export async function GET(req: NextRequest) {
       },
     });
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Gagal mengekspor laporan nilai";
+    const message =
+      err instanceof Error ? err.message : "Gagal mengekspor laporan nilai";
     return NextResponse.json({ success: false, message }, { status: 500 });
   }
 }

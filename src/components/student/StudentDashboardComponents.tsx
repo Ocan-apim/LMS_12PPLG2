@@ -74,58 +74,27 @@ export interface StudentBannerInfo {
 
 export function JoinClassBanner({ student }: { student?: StudentBannerInfo | null }) {
   const [modalOpen, setModalOpen] = useState(false);
-  const initial = student?.name ? student.name.charAt(0).toUpperCase() : "S";
+
+  const studyProgramText = student?.departmentName || "Program Studi";
+  const academicYearText = student?.academicYear
+    ? `TA ${student.academicYear}`
+    : null;
+  const subtitleText = [studyProgramText, academicYearText]
+    .filter(Boolean)
+    .join(" • ");
 
   return (
     <>
       <section className="relative min-h-[210px] overflow-hidden rounded-xl bg-[var(--primary)] px-7 py-8 text-white shadow-sm flex flex-col justify-between">
         <div className="absolute right-[-34px] top-[-34px] size-40 rounded-full bg-white/10 pointer-events-none" />
-        {student ? (
-          <div className="relative z-10 flex flex-col sm:flex-row sm:items-center gap-4">
-            <div className="size-16 rounded-2xl border-2 border-white/30 bg-white/15 overflow-hidden flex items-center justify-center text-2xl font-extrabold text-white shrink-0 shadow-xs">
-              {student.photoUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={student.photoUrl}
-                  alt={student.name}
-                  className="size-full object-cover"
-                />
-              ) : (
-                initial
-              )}
-            </div>
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                {student.rombelName && (
-                  <span className="rounded-md bg-white/20 px-2.5 py-0.5 text-[11px] font-extrabold uppercase tracking-wider text-white">
-                    {student.rombelName}
-                  </span>
-                )}
-                {student.departmentCode && (
-                  <span className="rounded-md bg-white/15 px-2.5 py-0.5 text-[11px] font-bold text-blue-100">
-                    {student.departmentCode}
-                  </span>
-                )}
-                {student.nisn && (
-                  <span className="text-[11px] font-mono text-blue-100">
-                    NISN: {student.nisn}
-                  </span>
-                )}
-              </div>
-              <h1 className="mt-1.5 font-[family-name:var(--font-display)] text-2xl sm:text-3xl font-extrabold tracking-[-0.03em] truncate">
-                {student.name}
-              </h1>
-              <p className="mt-0.5 text-xs text-blue-100 truncate">
-                {student.departmentName || student.email || "Portal Akademik Siswa"}
-                {student.academicYear ? ` • TA ${student.academicYear}` : ""}
-              </p>
-            </div>
-          </div>
-        ) : (
-          <h1 className="font-[family-name:var(--font-display)] text-4xl font-extrabold tracking-[-0.03em]">
-            Join Kelas Mapel
+        <div className="relative z-10 space-y-2">
+          <h1 className="font-[family-name:var(--font-display)] text-2xl sm:text-3xl font-extrabold tracking-[-0.03em] truncate">
+            {student?.name || "Siswa Learnix"}
           </h1>
-        )}
+          <p className="text-sm font-medium text-blue-100 truncate">
+            {subtitleText}
+          </p>
+        </div>
 
         <div className="relative z-10 mt-6 flex flex-wrap items-center gap-3">
           <button
@@ -136,13 +105,6 @@ export function JoinClassBanner({ student }: { student?: StudentBannerInfo | nul
             <CirclePlus className="size-4" />
             Join Kelas Baru
           </button>
-          <Link
-            href="/siswa/profile"
-            className="inline-flex items-center gap-1.5 rounded-md border border-white/30 bg-white/10 px-4 py-2.5 text-xs font-bold text-white hover:bg-white/20 transition"
-          >
-            <UserRound className="size-3.5" />
-            Profil Saya
-          </Link>
         </div>
       </section>
 
@@ -159,7 +121,7 @@ export function AverageScoreCard({
   totalGraded?: number;
 }) {
   const hasGrades = totalGraded > 0;
-  const displayScore = Math.round(average * 10) / 10;
+  const displayScore = Math.round((average + Number.EPSILON) * 100) / 100;
   return (
     <section className="rounded-xl border border-[#e4e6ef] bg-white p-7 shadow-sm flex flex-col justify-between">
       <div>

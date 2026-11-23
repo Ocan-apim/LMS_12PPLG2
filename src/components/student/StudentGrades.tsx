@@ -41,6 +41,9 @@ interface GradedItem {
   teacherName: string;
   score: number;
   maxScore: number;
+  rawScore?: number | null;
+  maxRawScore?: number;
+  normalizedScore?: number | null;
   percentage: number;
   feedback?: string | null;
   submittedAt: string;
@@ -343,10 +346,22 @@ export function StudentGrades() {
                         </p>
                       )}
                       <div className="text-right">
-                        <span className="font-[family-name:var(--font-display)] text-xl font-black text-[#674ce7]">
-                          {item.score}
-                        </span>
-                        <span className="text-xs font-bold text-slate-400"> / {item.maxScore}</span>
+                        <div>
+                          <span className="font-[family-name:var(--font-display)] text-xl font-black text-[#674ce7]">
+                            {item.normalizedScore ?? item.score}
+                          </span>
+                          <span className="text-xs font-bold text-slate-400">
+                            {" "}
+                            / {item.maxScore || 100}
+                          </span>
+                        </div>
+                        {typeof item.rawScore === "number" &&
+                          typeof item.maxRawScore === "number" &&
+                          item.maxRawScore !== 100 && (
+                            <p className="text-[11px] font-semibold text-slate-500">
+                              Skor Mentah: {item.rawScore} / {item.maxRawScore} Poin
+                            </p>
+                          )}
                       </div>
                     </div>
                   </div>

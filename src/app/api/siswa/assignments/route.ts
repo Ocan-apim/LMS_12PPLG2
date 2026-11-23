@@ -3,6 +3,7 @@ import mongoose from "mongoose";
 import { connectDB } from "@/lib/mongodb";
 import { requireRole } from "@/lib/session";
 import { Assignment, Quiz, CourseClass, Submission, User } from "@/models";
+import { resolveSubmissionScoring, roundScore } from "@/lib/quiz-scoring";
 
 export async function GET(req: Request) {
   const { session, error } = await requireRole(["siswa"]);
@@ -81,6 +82,9 @@ export async function GET(req: Request) {
       .sort({ dueDate: 1, createdAt: -1 })
       .lean();
 
+    const quizMap = new Map<string, any>();
+    standaloneQuizzes.forEach((q: any) => quizMap.set(String(q._id), q));
+
     const unlinkedQuizzes = standaloneQuizzes.filter(
       (q: any) => !linkedQuizIds.has(String(q._id))
     );
@@ -126,6 +130,9 @@ export async function GET(req: Request) {
         submissionMap.get(a._id.toString()) ||
         (a.quizId ? quizSubmissionMap.get(String(a.quizId)) : undefined);
       const dueDate = a.dueDate ? new Date(a.dueDate) : null;
+      const isQuiz = a.type === "kuis" || Boolean(a.quizId);
+      const linkedQuizDoc = a.quizId ? quizMap.get(String(a.quizId)) : null;
+      const resolved = resolveSubmissionScoring(sub, linkedQuizDoc, a);
 
       let status: "pending" | "late" | "completed" = "pending";
       let statusDetail = "Pending";
@@ -134,11 +141,13 @@ export async function GET(req: Request) {
       if (sub && ["turned_in", "late", "graded"].includes(sub.status)) {
         status = "completed";
         completedCount++;
-        if (sub.status === "graded" && typeof sub.score === "number") {
+        if (resolved.isFinalGraded && resolved.normalizedScore !== null) {
           statusDetail = "Graded";
-          scoreStr = `${sub.score} / ${a.maxScore || 100}`;
-          gradedScoreSum += sub.score;
+          scoreStr = `${resolved.normalizedScore} / 100`;
+          gradedScoreSum += resolved.normalizedScore;
           gradedCount++;
+        } else if (resolved.isPendingManual) {
+          statusDetail = "Menunggu Penilaian Essay";
         } else {
           statusDetail = sub.status === "late" ? "Submitted (Late)" : "Submitted";
         }
@@ -198,8 +207,6 @@ export async function GET(req: Request) {
         icon = "math";
       }
 
-      const isQuiz = a.type === "kuis" || Boolean(a.quizId);
-
       return {
         _id: a._id.toString(),
         quizId: a.quizId ? String(a.quizId) : null,
@@ -213,7 +220,13 @@ export async function GET(req: Request) {
         status,
         statusDetail,
         score: scoreStr,
-        maxScore: a.maxScore || 100,
+        rawScore: resolved.rawScore,
+        maxRawScore: resolved.maxRawScore,
+        normalizedScore: resolved.normalizedScore,
+        provisionalScore: resolved.provisionalScore,
+        gradingStatus: resolved.gradingStatus,
+        isPendingManual: resolved.isPendingManual,
+        maxScore: isQuiz ? 100 : a.maxScore || 100,
         type: isQuiz ? "kuis" : a.type || "tugas",
         href: isQuiz ? `/siswa/quiz/${a.quizId || a._id}` : `/siswa/assignments/${a._id}`,
         icon,
@@ -225,6 +238,7 @@ export async function GET(req: Request) {
     unlinkedQuizzes.forEach((q: any) => {
       const sub = quizSubmissionMap.get(String(q._id));
       const dueDate = q.dueDate ? new Date(q.dueDate) : null;
+      const resolved = resolveSubmissionScoring(sub, q, null);
 
       let status: "pending" | "late" | "completed" = "pending";
       let statusDetail = "Pending";
@@ -233,11 +247,13 @@ export async function GET(req: Request) {
       if (sub && ["turned_in", "late", "graded"].includes(sub.status)) {
         status = "completed";
         completedCount++;
-        if (sub.status === "graded" && typeof sub.score === "number") {
+        if (resolved.isFinalGraded && resolved.normalizedScore !== null) {
           statusDetail = "Graded";
-          scoreStr = `${sub.score} / ${q.totalPoints || 100}`;
-          gradedScoreSum += sub.score;
+          scoreStr = `${resolved.normalizedScore} / 100`;
+          gradedScoreSum += resolved.normalizedScore;
           gradedCount++;
+        } else if (resolved.isPendingManual) {
+          statusDetail = "Menunggu Penilaian Essay";
         } else {
           statusDetail = "Submitted";
         }
@@ -286,7 +302,13 @@ export async function GET(req: Request) {
         status,
         statusDetail,
         score: scoreStr,
-        maxScore: q.totalPoints || 100,
+        rawScore: resolved.rawScore,
+        maxRawScore: resolved.maxRawScore,
+        normalizedScore: resolved.normalizedScore,
+        provisionalScore: resolved.provisionalScore,
+        gradingStatus: resolved.gradingStatus,
+        isPendingManual: resolved.isPendingManual,
+        maxScore: 100,
         type: "kuis",
         href: `/siswa/quiz/${q._id}`,
         icon: "file" as const,
@@ -296,7 +318,7 @@ export async function GET(req: Request) {
     });
 
     // Calculate Average Score
-    const averageScore = gradedCount > 0 ? Math.round(gradedScoreSum / gradedCount) : 0;
+    const averageScore = gradedCount > 0 ? roundScore(gradedScoreSum / gradedCount) : 0;
 
     // Filter by tab if requested
     let filteredList = enrichedAssignments;

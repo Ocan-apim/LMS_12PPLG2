@@ -49,6 +49,7 @@ export const ROLE_NAV: Record<Role, NavItem[]> = {
     { href: "/admin/subjects", label: "Mata Pelajaran", icon: "subjects" },
     { href: "/admin/academic-years", label: "Tahun Ajaran", icon: "academic" },
     { href: "/admin/support", label: "Bantuan Siswa", icon: "support" },
+    { href: "/admin/profile", label: "Profil", icon: "users" },
   ],
   guru: [
     { href: "/guru", label: "Dashboard", icon: "dashboard" },
@@ -64,12 +65,14 @@ export const ROLE_NAV: Record<Role, NavItem[]> = {
     { href: "/kurikulum/grades/subjects", label: "Nilai Mapel", icon: "academic" },
     { href: "/kurikulum/reports", label: "Laporan", icon: "reports" },
     { href: "/kurikulum/files", label: "Berkas Akademik", icon: "materials" },
+    { href: "/kurikulum/profile", label: "Profil", icon: "users" },
   ],
   kepsek: [
     { href: "/kepsek", label: "Dashboard", icon: "dashboard" },
     { href: "/kepsek/overview", label: "Ringkasan", icon: "overview" },
     { href: "/kepsek/teachers", label: "Guru", icon: "teachers" },
     { href: "/kepsek/reports", label: "Laporan", icon: "reports" },
+    { href: "/kepsek/profile", label: "Profil", icon: "users" },
   ],
   siswa: [
     { href: "/siswa", label: "Dashboard", icon: "dashboard" },
@@ -79,6 +82,7 @@ export const ROLE_NAV: Record<Role, NavItem[]> = {
     { href: "/siswa/grades", label: "Penilaian", icon: "grades" },
     { href: "/siswa/files", label: "File", icon: "materials" },
     { href: "/siswa/support", label: "Bantuan", icon: "support" },
+    { href: "/siswa/profile", label: "Profil", icon: "users" },
   ],
 };
 

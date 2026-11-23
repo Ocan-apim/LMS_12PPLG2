@@ -1,13 +1,50 @@
 import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import { requireRole } from "@/lib/session";
-import { Quiz, Assignment, CourseClass, Submission } from "@/models";
+import { Quiz, Assignment, CourseClass, Submission, User } from "@/models";
 import { validateContent } from "@/lib/profanity-filter";
+import { evaluateQuizSubmission } from "@/lib/quiz-scoring";
 import mongoose from "mongoose";
 
 type RouteContext = {
   params: Promise<{ id: string }>;
 };
+
+async function verifyStudentQuizClassMembership(
+  studentId: string,
+  courseClass: Record<string, any> | null
+): Promise<boolean> {
+  if (!courseClass) return false;
+  const studentIds = Array.isArray(courseClass.studentIds)
+    ? courseClass.studentIds.map((sid: unknown) => String(sid))
+    : [];
+  if (studentIds.includes(studentId)) return true;
+
+  const studentUser = (await User.findById(studentId)
+    .select("classId")
+    .lean()) as { classId?: unknown } | null;
+  const studentRombelId = studentUser?.classId ? String(studentUser.classId) : null;
+  if (!studentRombelId) return false;
+
+  const classRombelStr = courseClass.classRombelId
+    ? String(courseClass.classRombelId)
+    : null;
+  const assignedRombelStrs = Array.isArray(courseClass.assignedRombelIds)
+    ? courseClass.assignedRombelIds.map((r: unknown) => String(r))
+    : [];
+
+  if (
+    studentRombelId === classRombelStr ||
+    assignedRombelStrs.includes(studentRombelId)
+  ) {
+    await CourseClass.findByIdAndUpdate(courseClass._id, {
+      $addToSet: { studentIds: studentId },
+    });
+    return true;
+  }
+
+  return false;
+}
 
 export async function POST(req: Request, context: RouteContext) {
   const { session, error } = await requireRole(["siswa"]);
@@ -29,7 +66,10 @@ export async function POST(req: Request, context: RouteContext) {
     let assignment: any = null;
 
     if (quiz) {
-      assignment = await Assignment.findOne({ quizId: quiz._id, isArchived: { $ne: true } });
+      assignment = await Assignment.findOne({
+        quizId: quiz._id,
+        isArchived: { $ne: true },
+      });
     } else {
       assignment = await Assignment.findById(id);
       if (assignment && assignment.quizId) {
@@ -45,22 +85,29 @@ export async function POST(req: Request, context: RouteContext) {
     }
 
     // 2. Security Check: Enforce class membership
-    const courseClass = await CourseClass.findById(quiz.courseClassId);
-    if (
-      !courseClass ||
-      !Array.isArray(courseClass.studentIds) ||
-      !courseClass.studentIds.map((sid: any) => sid.toString()).includes(session.id)
-    ) {
+    const courseClass: any = await CourseClass.findById(quiz.courseClassId).lean();
+    const enrolled = await verifyStudentQuizClassMembership(session.id, courseClass);
+    if (!enrolled) {
       return NextResponse.json(
-        { success: false, message: "Akses ditolak: Anda tidak terdaftar di kelas kuis ini" },
+        {
+          success: false,
+          message: "Akses ditolak: Anda tidak terdaftar di kelas kuis ini",
+        },
         { status: 403 }
       );
     }
 
-    // 3. Check for existing completed submission strictly by quizId and studentId
-    let submission = await Submission.findOne({ quizId: quiz._id, studentId: session.id });
+    // 3. Check for existing submission by quizId or assignmentId
+    const orConds: Record<string, unknown>[] = [
+      { quizId: quiz._id, studentId: session.id },
+    ];
+    if (assignment?._id) {
+      orConds.push({ assignmentId: assignment._id, studentId: session.id });
+    }
 
-    if (submission && ["graded", "turned_in"].includes(submission.status)) {
+    let submission = await Submission.findOne({ $or: orConds });
+
+    if (submission && ["graded", "turned_in", "late"].includes(submission.status)) {
       return NextResponse.json(
         {
           success: false,
@@ -86,118 +133,99 @@ export async function POST(req: Request, context: RouteContext) {
       }
     }
 
-    // Map student answers by questionId
-    const studentAnswerMap = new Map<string, any>();
-    for (const item of rawAnswers) {
-      if (item && item.questionId != null) {
-        studentAnswerMap.set(String(item.questionId), item.answer);
-      }
-    }
-
-    // 5. SERVER-SIDE AUTHORITATIVE GRADING
-    let totalEarnedPoints = 0;
-    let totalPossibleQuestionPoints = 0;
-    let correctCount = 0;
-    let incorrectCount = 0;
-
-    const letterToIndex = (val: any) => {
-      if (typeof val === "string" && /^[A-Fa-f]$/.test(val.trim())) {
-        return val.trim().toUpperCase().charCodeAt(0) - 65;
-      }
-      if (typeof val === "number" && !isNaN(val)) return val;
-      if (typeof val === "string" && !isNaN(Number(val)) && val.trim() !== "") {
-        return Number(val);
-      }
-      return null;
-    };
-
-    const enrichedAnswers = (quiz.questions || []).map((q: any) => {
-      const qPoints = Number(q.points) || 10;
-      totalPossibleQuestionPoints += qPoints;
-
-      const studentAns = studentAnswerMap.get(String(q.id));
-      let isCorrect = false;
-
-      if (studentAns !== undefined && studentAns !== null) {
-        const correctIdx = letterToIndex(q.correctAnswer);
-        const studentIdx = letterToIndex(studentAns);
-
-        if (correctIdx !== null && studentIdx !== null) {
-          isCorrect = correctIdx === studentIdx;
-        } else if (Array.isArray(q.options) && studentIdx !== null && q.options[studentIdx] !== undefined) {
-          isCorrect = String(q.options[studentIdx]).trim().toLowerCase() === String(q.correctAnswer).trim().toLowerCase();
-        } else if (Array.isArray(q.options) && correctIdx !== null && q.options[correctIdx] !== undefined) {
-          isCorrect = String(studentAns).trim().toLowerCase() === String(q.options[correctIdx]).trim().toLowerCase();
-        } else {
-          isCorrect = String(studentAns).trim().toLowerCase() === String(q.correctAnswer).trim().toLowerCase();
-        }
-      }
-
-      if (isCorrect) {
-        totalEarnedPoints += qPoints;
-        correctCount++;
-      } else {
-        incorrectCount++;
-      }
-
-      return {
-        questionId: String(q.id),
-        answer: studentAns !== undefined ? studentAns : null,
-        isCorrect,
-        scoreAwarded: isCorrect ? qPoints : 0,
-      };
+    // 5. SERVER-SIDE AUTHORITATIVE GRADING & NORMALIZATION (0-100 SCALE)
+    const evalResult = evaluateQuizSubmission(quiz.questions || [], rawAnswers, {
+      isTeacherGrading: false,
     });
-
-    // Scale final score to quiz.totalPoints (default 100)
-    const targetMaxPoints = Number(quiz.totalPoints) || 100;
-    let finalScore = 0;
-    if (totalPossibleQuestionPoints > 0) {
-      finalScore = Math.round((totalEarnedPoints / totalPossibleQuestionPoints) * targetMaxPoints);
-    } else {
-      finalScore = 0;
-    }
-
-    // Cap between 0 and targetMaxPoints
-    finalScore = Math.max(0, Math.min(targetMaxPoints, finalScore));
 
     const now = new Date();
 
     // 6. Save or Update Submission
+    // Notice: When manual essay grading is pending (gradingStatus === "pending_manual"),
+    // status is "turned_in" and score/normalizedScore are null so provisional scores
+    // are never falsely treated as final grades in reports.
+    const finalStatus = evalResult.submissionStatus;
+    const finalScore =
+      evalResult.gradingStatus === "completed" ? evalResult.normalizedScore : null;
+
     if (submission) {
-      submission.quizAnswers = enrichedAnswers;
+      if (!submission.assignmentId) {
+        submission.assignmentId = assignment?._id || quiz._id;
+      }
+      submission.quizId = quiz._id;
+      submission.courseClassId = quiz.courseClassId;
+      submission.quizAnswers = evalResult.quizAnswers;
+      submission.rawScore = evalResult.rawScore;
+      submission.maxRawScore = evalResult.maxRawScore;
+      submission.objectiveRawScore = evalResult.objectiveRawScore;
+      submission.essayRawScore = evalResult.essayRawScore;
+      submission.normalizedScore = evalResult.normalizedScore;
+      submission.provisionalScore = evalResult.provisionalScore;
+      submission.gradingStatus = evalResult.gradingStatus;
       submission.score = finalScore;
-      submission.status = "graded";
+      submission.draftScore = evalResult.isPendingManual
+        ? evalResult.provisionalScore
+        : null;
+      submission.status = finalStatus;
       submission.submittedAt = now;
-      submission.gradedAt = now;
+      submission.gradedAt = finalStatus === "graded" ? now : undefined;
       await submission.save();
     } else {
       submission = await Submission.create({
+        assignmentId: assignment?._id || quiz._id,
         quizId: quiz._id,
         studentId: session.id,
         courseClassId: quiz.courseClassId,
-        quizAnswers: enrichedAnswers,
+        quizAnswers: evalResult.quizAnswers,
+        rawScore: evalResult.rawScore,
+        maxRawScore: evalResult.maxRawScore,
+        objectiveRawScore: evalResult.objectiveRawScore,
+        essayRawScore: evalResult.essayRawScore,
+        normalizedScore: evalResult.normalizedScore,
+        provisionalScore: evalResult.provisionalScore,
+        gradingStatus: evalResult.gradingStatus,
         score: finalScore,
-        status: "graded",
+        draftScore: evalResult.isPendingManual
+          ? evalResult.provisionalScore
+          : undefined,
+        status: finalStatus,
         submittedAt: now,
-        gradedAt: now,
+        gradedAt: finalStatus === "graded" ? now : undefined,
       });
     }
 
     return NextResponse.json({
       success: true,
-      message: "Kuis berhasil diselesaikan",
+      message: evalResult.isPendingManual
+        ? "Kuis berhasil dikumpulkan. Menunggu penilaian manual guru untuk soal essay."
+        : "Kuis berhasil diselesaikan",
       data: {
+        submissionId: submission._id.toString(),
         quizId: quiz._id.toString(),
+        assignmentId: assignment?._id ? String(assignment._id) : null,
+        rawScore: evalResult.rawScore,
+        maxRawScore: evalResult.maxRawScore,
+        objectiveRawScore: evalResult.objectiveRawScore,
+        essayRawScore: evalResult.essayRawScore,
+        objectiveMaxRawScore: evalResult.objectiveMaxRawScore,
+        essayMaxRawScore: evalResult.essayMaxRawScore,
+        normalizedScore: evalResult.normalizedScore,
+        provisionalScore: evalResult.provisionalScore,
+        gradingStatus: evalResult.gradingStatus,
+        isPendingManual: evalResult.isPendingManual,
         score: finalScore,
-        maxScore: targetMaxPoints,
-        correctCount,
-        incorrectCount,
-        totalQuestions: quiz.questions.length,
+        maxScore: 100,
+        correctCount: evalResult.correctCount,
+        incorrectCount: evalResult.incorrectCount,
+        unansweredCount: evalResult.unansweredCount,
+        pendingEssayCount: evalResult.pendingEssayCount,
+        totalQuestions: evalResult.totalQuestions,
         submittedAt: now,
       },
     });
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Gagal mengumpulkan kuis";
+    const message =
+      err instanceof Error ? err.message : "Gagal mengumpulkan kuis";
     return NextResponse.json({ success: false, message }, { status: 500 });
   }
 }

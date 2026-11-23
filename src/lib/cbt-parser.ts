@@ -58,14 +58,14 @@ export function parseCbtText(rawText: string): ParseCbtResult {
     }
 
     // Check for Points True: PT>: or PT:
-    const ptMatch = line.match(/^PT\s*(?:>:|:)\s*(\d+(?:\.\d+)?)/i);
+    const ptMatch = line.match(/^PT\s*(?:>:|:)\s*(-?\d+(?:\.\d+)?)/i);
     if (ptMatch) {
       currentQuestion.points = parseFloat(ptMatch[1]);
       continue;
     }
 
     // Check for Points False: PF>: or PF:
-    const pfMatch = line.match(/^PF\s*(?:>:|:)\s*(\d+(?:\.\d+)?)/i);
+    const pfMatch = line.match(/^PF\s*(?:>:|:)\s*(-?\d+(?:\.\d+)?)/i);
     if (pfMatch) {
       currentQuestion.pointsFalse = parseFloat(pfMatch[1]);
       continue;

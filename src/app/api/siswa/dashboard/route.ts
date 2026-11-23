@@ -8,10 +8,12 @@ import {
   Quiz,
   Submission,
   Material,
-  Notification,
-  StudentEvent,
   User,
 } from "@/models";
+import {
+  resolveSubmissionScoring,
+  roundScore,
+} from "@/lib/quiz-scoring";
 
 export async function GET() {
   const { session, error } = await requireRole(["siswa"]);
@@ -129,10 +131,20 @@ export async function GET() {
             ],
           })
             .select(
-              "_id assignmentId quizId courseClassId status score feedback submittedAt gradedAt"
+              "_id assignmentId quizId courseClassId status score rawScore maxRawScore normalizedScore provisionalScore objectiveRawScore essayRawScore gradingStatus quizAnswers feedback submittedAt gradedAt"
             )
             .lean()
         : [];
+
+    const quizMapById = new Map<string, any>();
+    allQuizzes.forEach((q: any) => quizMapById.set(String(q._id), q));
+    allAssignments.forEach((a: any) => {
+      if (a.quizId && typeof a.quizId === "object" && a.quizId._id) {
+        quizMapById.set(String(a.quizId._id), a.quizId);
+      }
+    });
+    const assignMapById = new Map<string, any>();
+    allAssignments.forEach((a: any) => assignMapById.set(String(a._id), a));
 
     const subByAssignment = new Map<string, any>();
     const subByQuiz = new Map<string, any>();
@@ -141,22 +153,29 @@ export async function GET() {
       if (s.quizId) subByQuiz.set(String(s.quizId), s);
     });
 
-    // 5. Calculate Average Grade ONLY from valid graded submissions (no ungraded counted as 0, no double-counting)
-    const uniqueGradedSubmissions = new Map<string, any>();
+    // 5. Calculate Average Grade ONLY from valid completed graded submissions (normalized 0-100)
+    const uniqueGradedScores = new Map<string, number>();
     studentSubmissions.forEach((s: any) => {
-      if (s.status === "graded" && typeof s.score === "number" && !Number.isNaN(s.score)) {
-        uniqueGradedSubmissions.set(String(s._id), s);
+      const qDoc = s.quizId ? quizMapById.get(String(s.quizId)) : null;
+      const aDoc = s.assignmentId ? assignMapById.get(String(s.assignmentId)) : null;
+      const resolved = resolveSubmissionScoring(s, qDoc, aDoc);
+      if (
+        resolved.isFinalGraded &&
+        typeof resolved.normalizedScore === "number" &&
+        !Number.isNaN(resolved.normalizedScore)
+      ) {
+        uniqueGradedScores.set(String(s._id), resolved.normalizedScore);
       }
     });
 
-    const gradedList = Array.from(uniqueGradedSubmissions.values());
+    const gradedList = Array.from(uniqueGradedScores.values());
     let averageGrade = 0;
     if (gradedList.length > 0) {
       const totalScore = gradedList.reduce(
-        (acc: number, curr: any) => acc + Number(curr.score),
+        (acc: number, curr: number) => acc + curr,
         0
       );
-      averageGrade = Math.round((totalScore / gradedList.length) * 10) / 10;
+      averageGrade = roundScore(totalScore / gradedList.length);
     }
 
     const now = Date.now();
@@ -183,9 +202,10 @@ export async function GET() {
       const isSubmitted = Boolean(
         sub && ["turned_in", "late", "graded"].includes(sub.status)
       );
-      const isGraded = Boolean(
-        sub && sub.status === "graded" && typeof sub.score === "number"
-      );
+      const qDocForResolve =
+        linkedQuizObj || (resolvedQuizId ? quizMapById.get(resolvedQuizId) : null);
+      const resolved = resolveSubmissionScoring(sub, qDocForResolve, a);
+      const isGraded = resolved.isFinalGraded;
       const isLate = !isSubmitted && dueTime !== null && dueTime < now;
       const status = sub ? sub.status : isLate ? "late" : "assigned";
       const isUrgent =
@@ -207,7 +227,13 @@ export async function GET() {
           title: a.title,
           type: "kuis" as const,
           dueDate: a.dueDate || linkedQuizObj?.dueDate || null,
-          maxScore: Number(linkedQuizObj?.totalPoints || a.maxScore) || 100,
+          maxScore: 100,
+          rawScore: resolved.rawScore,
+          maxRawScore: resolved.maxRawScore,
+          normalizedScore: resolved.normalizedScore,
+          provisionalScore: resolved.provisionalScore,
+          gradingStatus: resolved.gradingStatus,
+          isPendingManual: resolved.isPendingManual,
           durationSeconds: Number(linkedQuizObj?.durationSeconds) || 1800,
           totalQuestions: Array.isArray(linkedQuizObj?.questions)
             ? linkedQuizObj.questions.length
@@ -219,7 +245,7 @@ export async function GET() {
           status,
           isCompleted: isSubmitted,
           isGraded,
-          score: isGraded ? sub.score : null,
+          score: isGraded ? resolved.normalizedScore : null,
           feedback: sub?.feedback || null,
           submittedAt: sub?.submittedAt || null,
           gradedAt: sub?.gradedAt || null,
@@ -233,6 +259,10 @@ export async function GET() {
           type: "tugas" as const,
           dueDate: a.dueDate || null,
           maxScore: Number(a.maxScore) || 100,
+          rawScore: resolved.rawScore,
+          maxRawScore: resolved.maxRawScore,
+          normalizedScore: resolved.normalizedScore,
+          gradingStatus: resolved.gradingStatus,
           className,
           courseClassId: String((a.courseClassId as any)?._id || a.courseClassId),
           teacherName,
@@ -240,7 +270,7 @@ export async function GET() {
           status,
           isSubmitted,
           isGraded,
-          score: isGraded ? sub.score : null,
+          score: isGraded ? resolved.normalizedScore : null,
           feedback: sub?.feedback || null,
           submittedAt: sub?.submittedAt || null,
           gradedAt: sub?.gradedAt || null,
@@ -257,9 +287,8 @@ export async function GET() {
       const isCompleted = Boolean(
         sub && ["turned_in", "late", "graded"].includes(sub.status)
       );
-      const isGraded = Boolean(
-        sub && sub.status === "graded" && typeof sub.score === "number"
-      );
+      const resolved = resolveSubmissionScoring(sub, q, null);
+      const isGraded = resolved.isFinalGraded;
       const isLate = !isCompleted && dueTime !== null && dueTime < now;
       const status = sub ? sub.status : isLate ? "late" : "assigned";
       const isUrgent =
@@ -277,7 +306,13 @@ export async function GET() {
         title: q.title,
         type: "kuis" as const,
         dueDate: q.dueDate || null,
-        maxScore: Number(q.totalPoints) || 100,
+        maxScore: 100,
+        rawScore: resolved.rawScore,
+        maxRawScore: resolved.maxRawScore,
+        normalizedScore: resolved.normalizedScore,
+        provisionalScore: resolved.provisionalScore,
+        gradingStatus: resolved.gradingStatus,
+        isPendingManual: resolved.isPendingManual,
         durationSeconds: Number(q.durationSeconds) || 60,
         totalQuestions: Array.isArray(q.questions) ? q.questions.length : 0,
         className: (q.courseClassId as any)?.name || "Kelas",
@@ -287,7 +322,7 @@ export async function GET() {
         status,
         isCompleted,
         isGraded,
-        score: isGraded ? sub.score : null,
+        score: isGraded ? resolved.normalizedScore : null,
         feedback: sub?.feedback || null,
         submittedAt: sub?.submittedAt || null,
         gradedAt: sub?.gradedAt || null,
@@ -419,42 +454,21 @@ export async function GET() {
         new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime()
     );
 
-    // 9. Notifications belonging to the authenticated student
-    const notifications = await Notification.find({ recipientId: session.id })
-      .sort({ createdAt: -1 })
-      .limit(5)
-      .lean();
-
-    const unreadNotificationsCount = await Notification.countDocuments({
-      recipientId: session.id,
-      read: false,
-    });
-
-    // 10. Student-created personal calendar events (Task 4)
-    const rawPersonalEvents = await StudentEvent.find({
-      studentId: session.id,
-    })
-      .sort({ startDate: 1, endDate: 1 })
-      .limit(6)
-      .lean();
-
-    const personalEvents = rawPersonalEvents.map((ev: any) => ({
-      _id: String(ev._id),
-      title: ev.title,
-      description: ev.description || "",
-      startDate: ev.startDate,
-      endDate: ev.endDate,
-    }));
-
-    // 11. Academic statistics calculated strictly from real database records
+    // 9. Academic statistics calculated strictly from real database records
+    // Tenggat Tugas: upcoming or overdue (uncompleted/unsubmitted) ordinary assignments
     const completedAssignmentsCount = tugasList.filter((t) => t.isSubmitted).length;
-    const pendingAssignmentsCount = tugasList.length - completedAssignmentsCount;
+    const pendingAssignmentsCount = tugasList.filter((t) => !t.isSubmitted).length;
+
+    // Tenggat Kuis: upcoming or overdue (uncompleted) quizzes
     const completedQuizzesCount = kuisList.filter((q) => q.isCompleted).length;
-    const pendingQuizzesCount = kuisList.length - completedQuizzesCount;
+    const pendingQuizzesCount = kuisList.filter((q) => !q.isCompleted).length;
+
     const upcomingDeadlinesCount = pendingAssignmentsCount + pendingQuizzesCount;
 
     const stats = {
       totalClasses: joinedClasses.length,
+      tenggatTugas: pendingAssignmentsCount,
+      tenggatKuis: pendingQuizzesCount,
       totalAssignments: tugasList.length,
       completedAssignments: completedAssignmentsCount,
       pendingAssignments: pendingAssignmentsCount,
@@ -464,7 +478,6 @@ export async function GET() {
       averageGrade,
       totalGraded: gradedList.length,
       upcomingDeadlines: upcomingDeadlinesCount,
-      unreadNotifications: unreadNotificationsCount,
     };
 
     return NextResponse.json(
@@ -480,9 +493,6 @@ export async function GET() {
           assignments: tugasList,
           quizzes: kuisList,
           upcomingAssignments,
-          notifications,
-          unreadNotificationsCount,
-          personalEvents,
           recentFiles: recentFiles.slice(0, 6),
         },
       },

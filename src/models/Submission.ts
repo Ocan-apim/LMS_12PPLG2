@@ -24,16 +24,28 @@ export interface ISubmission {
   content?: string;
   fileUrl?: string; // backward compat
   attachments: ISubmissionAttachment[];
-  score?: number;
-  draftScore?: number;
+  score?: number | null;
+  draftScore?: number | null;
+  rawScore?: number | null;
+  maxRawScore?: number | null;
+  normalizedScore?: number | null;
+  provisionalScore?: number | null;
+  objectiveRawScore?: number | null;
+  essayRawScore?: number | null;
+  gradingStatus?: "not_started" | "pending_manual" | "completed" | "invalid_max_score";
   status: "turned_in" | "late" | "graded" | "assigned";
   feedback?: string;
   privateComments: IPrivateComment[];
   quizAnswers?: Array<{
     questionId: string;
-    answer: number | string;
+    questionType?: "pilihan_ganda" | "essay";
+    answer: number | string | null;
     isCorrect?: boolean;
-    scoreAwarded?: number;
+    isAnswered?: boolean;
+    isGraded?: boolean;
+    scoreAwarded?: number | null;
+    maxPoints?: number;
+    pointsFalse?: number;
   }>;
   startedAt?: Date;
   submittedAt: Date;
@@ -68,6 +80,16 @@ const SubmissionSchema = new Schema<ISubmission>(
     ],
     score: { type: Number },
     draftScore: { type: Number },
+    rawScore: { type: Number },
+    maxRawScore: { type: Number },
+    normalizedScore: { type: Number },
+    provisionalScore: { type: Number },
+    objectiveRawScore: { type: Number },
+    essayRawScore: { type: Number },
+    gradingStatus: {
+      type: String,
+      enum: ["not_started", "pending_manual", "completed", "invalid_max_score"],
+    },
     status: {
       type: String,
       enum: ["turned_in", "late", "graded", "assigned"],
@@ -86,9 +108,14 @@ const SubmissionSchema = new Schema<ISubmission>(
     quizAnswers: [
       {
         questionId: { type: String },
+        questionType: { type: String, enum: ["pilihan_ganda", "essay"] },
         answer: { type: Schema.Types.Mixed },
         isCorrect: { type: Boolean },
+        isAnswered: { type: Boolean },
+        isGraded: { type: Boolean },
         scoreAwarded: { type: Number },
+        maxPoints: { type: Number },
+        pointsFalse: { type: Number },
       },
     ],
     startedAt: { type: Date },

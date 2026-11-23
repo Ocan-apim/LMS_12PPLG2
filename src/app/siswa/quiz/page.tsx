@@ -25,7 +25,14 @@ interface QuizAssignment {
   dueDate: string;
   dueTime: string;
   status: "pending" | "late" | "completed";
+  statusDetail?: string;
   score?: string;
+  rawScore?: number | null;
+  maxRawScore?: number;
+  normalizedScore?: number | null;
+  provisionalScore?: number | null;
+  gradingStatus?: string;
+  isPendingManual?: boolean;
   type: string;
   href: string;
 }
@@ -136,17 +143,33 @@ export default function SiswaQuizListPage() {
                       {quiz.title}
                     </h2>
 
-                    <div className="mt-3 flex items-center gap-4 text-xs text-slate-500">
+                    <div className="mt-3 flex flex-wrap items-center gap-4 text-xs text-slate-500">
                       <div className="flex items-center gap-1.5">
                         <Clock className="size-3.5 text-slate-400" />
                         <span>Tenggat: {quiz.dueDate}</span>
                       </div>
-                      {quiz.score && (
-                        <div className="flex items-center gap-1.5 font-bold text-[#00796f]">
+                      {quiz.isPendingManual ? (
+                        <div className="flex items-center gap-1.5 font-bold text-amber-700">
                           <Award className="size-3.5" />
-                          <span>Nilai: {quiz.score}</span>
+                          <span>
+                            Menunggu Penilaian Essay (Skor Mentah: {quiz.rawScore ?? 0}/
+                            {quiz.maxRawScore ?? 100})
+                          </span>
                         </div>
-                      )}
+                      ) : quiz.score ? (
+                        <div className="flex flex-wrap items-center gap-2 font-bold text-[#00796f]">
+                          <div className="flex items-center gap-1.5">
+                            <Award className="size-3.5" />
+                            <span>Nilai Akhir: {quiz.score}</span>
+                          </div>
+                          {typeof quiz.rawScore === "number" &&
+                            typeof quiz.maxRawScore === "number" && (
+                              <span className="text-[11px] font-semibold text-slate-500">
+                                (Skor Mentah: {quiz.rawScore}/{quiz.maxRawScore})
+                              </span>
+                            )}
+                        </div>
+                      ) : null}
                     </div>
                   </div>
 

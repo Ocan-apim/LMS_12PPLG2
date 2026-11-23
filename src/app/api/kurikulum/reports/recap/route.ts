@@ -7,14 +7,14 @@ import {
   ClassModel,
   CourseClass,
   User,
-  Subject,
   Submission,
   Assignment,
   Quiz,
 } from "@/models";
+import { resolveSubmissionScoring, roundScore } from "@/lib/quiz-scoring";
 
 export async function GET(req: NextRequest) {
-  const { session, error } = await requireRole(["kurikulum"]);
+  const { session, error } = await requireRole(["kurikulum", "kepsek", "admin"]);
   if (error || !session) return error;
 
   try {
@@ -43,7 +43,9 @@ export async function GET(req: NextRequest) {
       targetClass = await ClassModel.findById(classIdParam).lean();
     }
     if (!targetClass) {
-      targetClass = await ClassModel.findOne({ isActive: true }).sort({ name: 1 }).lean();
+      targetClass = await ClassModel.findOne({ isActive: true })
+        .sort({ name: 1 })
+        .lean();
     }
 
     const studentQuery: Record<string, any> = { role: "siswa", isActive: true };
@@ -85,33 +87,73 @@ export async function GET(req: NextRequest) {
 
     const courseClassIds = courseClasses.map((cc) => cc._id);
 
-    // Quizzes to distinguish assignment vs quiz
-    const quizzes = await Quiz.find({ courseClassId: { $in: courseClassIds } })
-      .select("_id")
-      .lean();
-    const quizIdSet = new Set(quizzes.map((q: any) => String(q._id)));
+    const [assignments, quizzes] = await Promise.all([
+      Assignment.find({
+        courseClassId: { $in: courseClassIds },
+        isArchived: { $ne: true },
+      })
+        .select("_id title type maxScore quizId courseClassId")
+        .lean(),
+      Quiz.find({ courseClassId: { $in: courseClassIds } })
+        .select("_id title totalPoints maxRawPoints questions courseClassId")
+        .lean(),
+    ]);
 
-    // Fetch graded submissions for these students in these course classes
+    const assignMap = new Map<string, any>(
+      assignments.map((a: any) => [String(a._id), a])
+    );
+    const quizMap = new Map<string, any>(
+      quizzes.map((q: any) => [String(q._id), q])
+    );
+    const quizIdSet = new Set(quizzes.map((q: any) => String(q._id)));
+    const quizAssignmentIdSet = new Set(
+      assignments
+        .filter((a: any) => a.type === "kuis" || Boolean(a.quizId))
+        .map((a: any) => String(a._id))
+    );
+
     const submissions: any[] = await Submission.find({
       studentId: { $in: studentIds },
       courseClassId: { $in: courseClassIds },
       status: "graded",
-      score: { $exists: true, $ne: null },
     })
-      .select("studentId courseClassId assignmentId quizId score")
+      .select(
+        "studentId courseClassId assignmentId quizId status score rawScore maxRawScore normalizedScore provisionalScore gradingStatus quizAnswers"
+      )
       .lean();
 
-    // Map submissions: `${studentId}_${courseClassId}`
-    const subMap = new Map<string, any[]>();
+    const subMap = new Map<string, Array<{ normalizedScore: number; isQuiz: boolean }>>();
     for (const s of submissions) {
+      const aDoc = s.assignmentId ? assignMap.get(String(s.assignmentId)) : null;
+      if (aDoc?.isArchived) continue;
+      const qIdStr = s.quizId
+        ? String(s.quizId)
+        : aDoc?.quizId
+          ? String(aDoc.quizId)
+          : null;
+      const qDoc = qIdStr ? quizMap.get(qIdStr) : null;
+
+      const resolved = resolveSubmissionScoring(s, qDoc, aDoc);
+      if (!resolved.isFinalGraded || resolved.normalizedScore === null) {
+        continue;
+      }
+
+      const isQuiz =
+        Boolean(s.quizId) ||
+        (s.quizId && quizIdSet.has(String(s.quizId))) ||
+        (s.assignmentId && quizAssignmentIdSet.has(String(s.assignmentId))) ||
+        resolved.isQuiz;
+
       const key = `${s.studentId}_${s.courseClassId}`;
       if (!subMap.has(key)) {
         subMap.set(key, []);
       }
-      subMap.get(key)!.push(s);
+      subMap.get(key)!.push({
+        normalizedScore: resolved.normalizedScore,
+        isQuiz,
+      });
     }
 
-    // Build recap rows per student
     const rows = students.map((st) => {
       const studentClass =
         (st.classId as any)?.name || targetClass?.name || "Kelas";
@@ -129,12 +171,16 @@ export async function GET(req: NextRequest) {
       let gradedSubjectsCount = 0;
 
       for (const cc of courseClasses) {
-        // Only include if student is in this CourseClass
         const isEnrolled =
           Array.isArray(cc.studentIds) &&
           cc.studentIds.some((sid: any) => String(sid) === String(st._id));
 
-        if (!isEnrolled && targetClass && String(cc.classRombelId?._id || cc.classRombelId) !== String(targetClass._id)) {
+        if (
+          !isEnrolled &&
+          targetClass &&
+          String(cc.classRombelId?._id || cc.classRombelId) !==
+            String(targetClass._id)
+        ) {
           continue;
         }
 
@@ -146,25 +192,30 @@ export async function GET(req: NextRequest) {
         let quizAvg: number | null = null;
 
         if (stSubs.length > 0) {
-          const sum = stSubs.reduce((acc, curr) => acc + curr.score, 0);
-          avg = Math.round((sum / stSubs.length) * 10) / 10;
+          const sum = stSubs.reduce(
+            (acc, curr) => acc + curr.normalizedScore,
+            0
+          );
+          avg = roundScore(sum / stSubs.length);
           totalSubjectScore += avg;
           gradedSubjectsCount++;
 
-          const assignSubs = stSubs.filter(
-            (s) => !s.quizId && !quizIdSet.has(String(s.assignmentId))
-          );
+          const assignSubs = stSubs.filter((s) => !s.isQuiz);
           if (assignSubs.length > 0) {
-            const sumA = assignSubs.reduce((acc, curr) => acc + curr.score, 0);
-            assignAvg = Math.round((sumA / assignSubs.length) * 10) / 10;
+            const sumA = assignSubs.reduce(
+              (acc, curr) => acc + curr.normalizedScore,
+              0
+            );
+            assignAvg = roundScore(sumA / assignSubs.length);
           }
 
-          const qSubs = stSubs.filter(
-            (s) => Boolean(s.quizId) || quizIdSet.has(String(s.assignmentId))
-          );
+          const qSubs = stSubs.filter((s) => s.isQuiz);
           if (qSubs.length > 0) {
-            const sumQ = qSubs.reduce((acc, curr) => acc + curr.score, 0);
-            quizAvg = Math.round((sumQ / qSubs.length) * 10) / 10;
+            const sumQ = qSubs.reduce(
+              (acc, curr) => acc + curr.normalizedScore,
+              0
+            );
+            quizAvg = roundScore(sumQ / qSubs.length);
           }
         }
 
@@ -180,7 +231,7 @@ export async function GET(req: NextRequest) {
 
       const overallAverage =
         gradedSubjectsCount > 0
-          ? Math.round((totalSubjectScore / gradedSubjectsCount) * 10) / 10
+          ? roundScore(totalSubjectScore / gradedSubjectsCount)
           : null;
 
       return {
@@ -208,7 +259,8 @@ export async function GET(req: NextRequest) {
       },
     });
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Gagal memuat rekap laporan";
+    const message =
+      err instanceof Error ? err.message : "Gagal memuat rekap laporan";
     return NextResponse.json({ success: false, message }, { status: 500 });
   }
 }

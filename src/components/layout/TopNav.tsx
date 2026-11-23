@@ -108,16 +108,15 @@ export function TopNav({ userName, roleLabel, role, onMenuClick }: TopNavProps) 
 
   // Debounced search query
   useEffect(() => {
-    if (!query.trim()) {
-      setResults(null);
-      setSearching(false);
+    const trimmed = query.trim();
+    if (!trimmed) {
       return;
     }
 
-    setSearching(true);
     const timer = setTimeout(async () => {
       try {
-        const res = await fetch(`/api/search?q=${encodeURIComponent(query.trim())}`);
+        setSearching(true);
+        const res = await fetch(`/api/search?q=${encodeURIComponent(trimmed)}`);
         const json = await res.json();
         if (json.success) {
           setResults(json.data);
@@ -327,44 +326,44 @@ export function TopNav({ userName, roleLabel, role, onMenuClick }: TopNavProps) 
           </button>
         )}
 
-        {/* Profile Section: Hidden for role === "admin" as requested! */}
-        {role !== "admin" && (
-          <Link
-            href={
-              role === "siswa"
-                ? "/siswa/profile"
-                : role === "guru"
+        {/* Profile Section linking to each role's standardized /<role>/profile page */}
+        <Link
+          href={
+            role === "siswa"
+              ? "/siswa/profile"
+              : role === "guru"
                 ? "/guru/profile"
                 : role === "kurikulum"
-                ? "/kurikulum/profile"
-                : "#"
-            }
-            className="flex items-center gap-2.5 pl-2 border-l border-slate-200 hover:opacity-85 transition"
-          >
-            <div className="text-right hidden sm:block">
-              <p className="text-xs font-bold text-slate-900 leading-tight">
-                {userName || "Pengguna"}
-              </p>
-              <p className="text-[10px] text-slate-500 font-medium">
-                {studentRombel ? `${roleLabel} • ${studentRombel}` : roleLabel || "Portal"}
-              </p>
-            </div>
-            <div className="size-8 rounded-full bg-blue-100 border border-blue-200 overflow-hidden flex items-center justify-center text-xs font-bold text-blue-700">
-              {photoUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={photoUrl}
-                  alt={userName || "Profil"}
-                  className="size-full object-cover"
-                />
-              ) : userName ? (
-                userName.charAt(0).toUpperCase()
-              ) : (
-                "U"
-              )}
-            </div>
-          </Link>
-        )}
+                  ? "/kurikulum/profile"
+                  : role === "kepsek"
+                    ? "/kepsek/profile"
+                    : "/admin/profile"
+          }
+          className="flex items-center gap-2.5 pl-2 border-l border-slate-200 hover:opacity-85 transition"
+        >
+          <div className="text-right hidden sm:block">
+            <p className="text-xs font-bold text-slate-900 leading-tight">
+              {userName || "Pengguna"}
+            </p>
+            <p className="text-[10px] text-slate-500 font-medium">
+              {studentRombel ? `${roleLabel} • ${studentRombel}` : roleLabel || "Portal"}
+            </p>
+          </div>
+          <div className="size-8 rounded-full bg-blue-100 border border-blue-200 overflow-hidden flex items-center justify-center text-xs font-bold text-blue-700">
+            {photoUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={photoUrl}
+                alt={userName || "Profil"}
+                className="size-full object-cover"
+              />
+            ) : userName ? (
+              userName.charAt(0).toUpperCase()
+            ) : (
+              "U"
+            )}
+          </div>
+        </Link>
       </div>
       <span className="sr-only">{roleLabel}</span>
     </header>

@@ -38,6 +38,7 @@ interface QuestionItem {
   options: QuizOption[];
   correctAnswer: string;
   points: number;
+  pointsFalse?: number;
   durationSeconds: number;
   imageUrl?: string;
 }
@@ -308,7 +309,8 @@ function QuizBuilderForm() {
               : [],
           correctAnswer:
             q.type === "pilihan_ganda" ? correctIdx : "",
-          points: Number(q.points) || 10,
+          points: Number.isFinite(Number(q.points)) ? Number(q.points) : 10,
+          pointsFalse: Number.isFinite(Number(q.pointsFalse)) ? Number(q.pointsFalse) : 0,
         };
       });
 

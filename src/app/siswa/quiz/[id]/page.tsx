@@ -34,13 +34,23 @@ interface Question {
   imageUrl?: string;
   options: string[];
   points: number;
+  pointsFalse?: number;
 }
 
 interface QuizResult {
-  score: number;
+  score: number | null;
   maxScore: number;
+  rawScore?: number;
+  maxRawScore?: number;
+  normalizedScore?: number | null;
+  provisionalScore?: number | null;
+  objectiveRawScore?: number | null;
+  essayRawScore?: number | null;
+  gradingStatus?: "not_started" | "pending_manual" | "completed" | "invalid_max_score";
+  isPendingManual?: boolean;
   correctCount: number;
   incorrectCount: number;
+  pendingEssayCount?: number;
   totalQuestions: number;
   submittedAt?: string;
 }
@@ -52,6 +62,8 @@ interface QuizData {
   description?: string;
   durationSeconds: number;
   totalPoints: number;
+  maxRawScore?: number;
+  hasEssayQuestions?: boolean;
   totalQuestions: number;
   courseClass: {
     _id: string;
@@ -387,10 +399,13 @@ export default function SiswaQuizTakePage({ params }: PageProps) {
               <div className="rounded-xl border border-slate-100 bg-[#fbf8ff] p-4 text-center">
                 <Award className="mx-auto size-5 text-[#674ce7]" />
                 <p className="mt-2 text-[10px] font-extrabold uppercase tracking-wide text-slate-500">
-                  Total Nilai
+                  Total Poin Mentah
                 </p>
                 <p className="mt-0.5 font-[family-name:var(--font-display)] text-lg font-extrabold text-slate-800">
-                  {quiz.totalPoints} Poin
+                  {quiz.maxRawScore ?? quiz.totalPoints} Poin
+                </p>
+                <p className="text-[10px] font-semibold text-slate-400">
+                  Skala Nilai Akhir: 0 - 100
                 </p>
               </div>
             </div>
@@ -462,14 +477,52 @@ export default function SiswaQuizTakePage({ params }: PageProps) {
                 </div>
               ) : quiz.isCompleted ? (
                 <div className="space-y-4">
-                  <div className="rounded-xl border border-emerald-200 bg-[#f4fbf8] p-4 text-center">
-                    <p className="text-xs font-extrabold text-[#00796f] uppercase tracking-wider">
-                      Status: Sudah Dikerjakan
+                  <div
+                    className={`rounded-xl border p-4 text-center ${
+                      result?.isPendingManual || result?.gradingStatus === "pending_manual"
+                        ? "border-amber-200 bg-amber-50/70"
+                        : "border-emerald-200 bg-[#f4fbf8]"
+                    }`}
+                  >
+                    <p
+                      className={`text-xs font-extrabold uppercase tracking-wider ${
+                        result?.isPendingManual || result?.gradingStatus === "pending_manual"
+                          ? "text-amber-800"
+                          : "text-[#00796f]"
+                      }`}
+                    >
+                      {result?.isPendingManual || result?.gradingStatus === "pending_manual"
+                        ? "Status: Menunggu Penilaian Manual Essay"
+                        : "Status: Sudah Dikerjakan"}
                     </p>
                     {result && (
-                      <p className="mt-1 text-sm font-bold text-slate-800">
-                        Nilai Akhir: <span className="text-[#00796f] font-extrabold">{result.score}</span> / {result.maxScore || 100} &bull; Benar: {result.correctCount} &bull; Salah: {result.incorrectCount}
-                      </p>
+                      <div className="mt-1.5 space-y-1 text-sm font-bold text-slate-800">
+                        <p>
+                          Skor Mentah:{" "}
+                          <span className="font-extrabold text-slate-900">
+                            {result.rawScore ?? result.score ?? 0}
+                          </span>{" "}
+                          / {result.maxRawScore ?? quiz.maxRawScore ?? quiz.totalPoints} Poin
+                        </p>
+                        {result.isPendingManual || result.gradingStatus === "pending_manual" ? (
+                          <p className="text-xs font-semibold text-amber-800">
+                            Nilai Sementara:{" "}
+                            <span className="font-extrabold">
+                              {result.provisionalScore ?? 0}
+                            </span>{" "}
+                            / 100 (Menunggu Penilaian Essay oleh Guru)
+                          </p>
+                        ) : (
+                          <p>
+                            Nilai Akhir:{" "}
+                            <span className="text-[#00796f] font-extrabold">
+                              {result.normalizedScore ?? result.score ?? 0}
+                            </span>{" "}
+                            / 100 &bull; Benar: {result.correctCount} &bull; Salah:{" "}
+                            {result.incorrectCount}
+                          </p>
+                        )}
+                      </div>
                     )}
                   </div>
                   <button
@@ -584,40 +637,60 @@ export default function SiswaQuizTakePage({ params }: PageProps) {
                   )}
                 </div>
 
-                {/* Options List */}
-                <div className="mt-6 space-y-3">
-                  {currentQuestion.options.map((option, optIdx) => {
-                    const isSelected = answers[currentQuestion.id] === optIdx;
-                    return (
-                      <div
-                        key={optIdx}
-                        onClick={() => handleSelectOption(currentQuestion.id, optIdx)}
-                        className={`flex cursor-pointer items-center gap-3.5 rounded-xl border p-4 transition ${
-                          isSelected
-                            ? "border-[#674ce7] bg-[#fbf8ff] shadow-xs"
-                            : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50/50"
-                        }`}
-                      >
-                        <span
-                          className={`grid size-7 shrink-0 place-items-center rounded-lg text-xs font-bold uppercase transition ${
+                {/* Options List or Essay Input */}
+                {currentQuestion.type === "essay" ? (
+                  <div className="mt-6 space-y-2">
+                    <label className="block text-xs font-bold uppercase tracking-wide text-slate-500">
+                      Jawaban Essay / Uraian Anda
+                    </label>
+                    <textarea
+                      rows={6}
+                      value={String(answers[currentQuestion.id] ?? "")}
+                      onChange={(e) =>
+                        setAnswers((prev) => ({
+                          ...prev,
+                          [currentQuestion.id]: e.target.value,
+                        }))
+                      }
+                      placeholder="Tuliskan jawaban uraian Anda secara lengkap di sini..."
+                      className="w-full rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-800 placeholder-slate-400 focus:border-[#674ce7] focus:outline-none"
+                    />
+                  </div>
+                ) : (
+                  <div className="mt-6 space-y-3">
+                    {currentQuestion.options.map((option, optIdx) => {
+                      const isSelected = answers[currentQuestion.id] === optIdx;
+                      return (
+                        <div
+                          key={optIdx}
+                          onClick={() => handleSelectOption(currentQuestion.id, optIdx)}
+                          className={`flex cursor-pointer items-center gap-3.5 rounded-xl border p-4 transition ${
                             isSelected
-                              ? "bg-[#674ce7] text-white"
-                              : "border border-slate-200 bg-slate-50 text-slate-600"
+                              ? "border-[#674ce7] bg-[#fbf8ff] shadow-xs"
+                              : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50/50"
                           }`}
                         >
-                          {String.fromCharCode(65 + optIdx)}
-                        </span>
-                        <span
-                          className={`text-sm font-medium ${
-                            isSelected ? "font-bold text-slate-900" : "text-slate-700"
-                          }`}
-                        >
-                          {option}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
+                          <span
+                            className={`grid size-7 shrink-0 place-items-center rounded-lg text-xs font-bold uppercase transition ${
+                              isSelected
+                                ? "bg-[#674ce7] text-white"
+                                : "border border-slate-200 bg-slate-50 text-slate-600"
+                            }`}
+                          >
+                            {String.fromCharCode(65 + optIdx)}
+                          </span>
+                          <span
+                            className={`text-sm font-medium ${
+                              isSelected ? "font-bold text-slate-900" : "text-slate-700"
+                            }`}
+                          >
+                            {option}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
 
               {/* Navigation Controls */}
@@ -757,8 +830,8 @@ export default function SiswaQuizTakePage({ params }: PageProps) {
               Evaluasi hasil pengerjaan kuis Anda untuk <strong>{quiz.title}</strong>
             </p>
 
-            {/* Score Metrics Grid matching Figma Page 3 */}
-            <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-3">
+            {/* Score Metrics Grid: Benar, Salah, Skor Mentah, Nilai Akhir (0-100) */}
+            <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
               {/* Benar */}
               <div className="rounded-xl border border-emerald-100 bg-[#f4fbf8] p-5 text-center">
                 <CheckCircle2 className="mx-auto size-6 text-[#00796f]" />
@@ -781,17 +854,48 @@ export default function SiswaQuizTakePage({ params }: PageProps) {
                 </p>
               </div>
 
-              {/* Nilai Akhir */}
+              {/* Skor Mentah (Raw Score) */}
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-5 text-center">
+                <BookOpen className="mx-auto size-6 text-slate-700" />
+                <p className="mt-2 text-[10px] font-extrabold uppercase tracking-wide text-slate-600">
+                  Skor Mentah (Raw Score)
+                </p>
+                <p className="mt-1 font-[family-name:var(--font-display)] text-2xl font-black text-slate-900">
+                  {result.rawScore ?? result.score ?? 0} /{" "}
+                  {result.maxRawScore ?? quiz.maxRawScore ?? quiz.totalPoints}
+                </p>
+              </div>
+
+              {/* Nilai Akhir (0-100) */}
               <div className="rounded-xl border border-[#d9cfee] bg-[#fbf8ff] p-5 text-center">
                 <Award className="mx-auto size-6 text-[#674ce7]" />
                 <p className="mt-2 text-[10px] font-extrabold uppercase tracking-wide text-[#674ce7]">
-                  Nilai Akhir
+                  {result.isPendingManual || result.gradingStatus === "pending_manual"
+                    ? "Nilai Sementara"
+                    : "Nilai Akhir (0-100)"}
                 </p>
-                <p className="mt-1 font-[family-name:var(--font-display)] text-2xl font-black text-[#674ce7]">
-                  {result.score} / {result.maxScore || 100}
-                </p>
+                {result.isPendingManual || result.gradingStatus === "pending_manual" ? (
+                  <div>
+                    <p className="mt-1 font-[family-name:var(--font-display)] text-xl font-black text-amber-700">
+                      {result.provisionalScore ?? 0} / 100
+                    </p>
+                    <p className="mt-1 text-[10px] font-bold text-amber-700">
+                      Menunggu Penilaian Essay
+                    </p>
+                  </div>
+                ) : (
+                  <p className="mt-1 font-[family-name:var(--font-display)] text-2xl font-black text-[#674ce7]">
+                    {result.normalizedScore ?? result.score ?? 0} / 100
+                  </p>
+                )}
               </div>
             </div>
+
+            {(result.isPendingManual || result.gradingStatus === "pending_manual") && (
+              <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3.5 text-xs font-semibold text-amber-800">
+                Kuis ini memiliki soal essay yang memerlukan penilaian manual dari guru. Nilai akhir (skala 0–100) akan diperbarui secara otomatis setelah guru menilai jawaban essay Anda.
+              </div>
+            )}
 
             {/* Action Buttons */}
             <div className="mt-8 flex flex-wrap items-center justify-center gap-3 border-t border-slate-100 pt-6">

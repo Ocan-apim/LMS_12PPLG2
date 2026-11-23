@@ -9,9 +9,10 @@ import {
   Quiz,
   Submission,
 } from "@/models";
+import { resolveSubmissionScoring, roundScore } from "@/lib/quiz-scoring";
 
 export async function GET(req: NextRequest) {
-  const { session, error } = await requireRole(["kurikulum"]);
+  const { session, error } = await requireRole(["kurikulum", "kepsek", "admin"]);
   if (error || !session) return error;
 
   try {
@@ -21,7 +22,6 @@ export async function GET(req: NextRequest) {
     const subjectIdParam = searchParams.get("subjectId");
     const academicYearParam = searchParams.get("academicYear");
 
-    // Fetch all active subjects for dropdown
     const subjects = await Subject.find({ isActive: true })
       .sort({ name: 1 })
       .select("_id name code category")
@@ -49,7 +49,6 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    // Determine selected subject
     let targetSubjectId = subjectIdParam;
     if (targetSubjectId && !mongoose.Types.ObjectId.isValid(targetSubjectId)) {
       return NextResponse.json(
@@ -67,7 +66,6 @@ export async function GET(req: NextRequest) {
       targetSubjectId = String(selectedSubject._id);
     }
 
-    // Find all CourseClasses for this subject
     const courseClassQuery: Record<string, any> = {
       subjectId: selectedSubject._id,
       isActive: true,
@@ -83,59 +81,91 @@ export async function GET(req: NextRequest) {
 
     const courseClassIds = courseClasses.map((cc) => cc._id);
 
-    // Find assignments and quizzes for these course classes
     const [assignments, quizzes] = await Promise.all([
       Assignment.find({
         courseClassId: { $in: courseClassIds },
         isPublished: true,
         isArchived: { $ne: true },
       })
-        .select("_id title type courseClassId createdAt")
+        .select("_id title type maxScore quizId courseClassId createdAt")
         .lean(),
       Quiz.find({
         courseClassId: { $in: courseClassIds },
         isPublished: true,
       })
-        .select("_id title courseClassId createdAt")
+        .select("_id title totalPoints maxRawPoints questions courseClassId createdAt")
         .lean(),
     ]);
 
     const assignmentIds = assignments.map((a: any) => a._id);
     const quizIds = quizzes.map((q: any) => q._id);
+    const assignMap = new Map<string, any>(
+      assignments.map((a: any) => [String(a._id), a])
+    );
+    const quizMap = new Map<string, any>(
+      quizzes.map((q: any) => [String(q._id), q])
+    );
+    const quizIdSet = new Set(quizIds.map(String));
+    const quizAssignmentIdSet = new Set(
+      assignments
+        .filter((a: any) => a.type === "kuis" || Boolean(a.quizId))
+        .map((a: any) => String(a._id))
+    );
 
-    // Fetch all graded submissions
-    const submissions: any[] = await Submission.find({
+    const rawSubmissions: any[] = await Submission.find({
       $or: [
         { assignmentId: { $in: assignmentIds } },
         { quizId: { $in: quizIds } },
         { courseClassId: { $in: courseClassIds } },
       ],
       status: "graded",
-      score: { $exists: true, $ne: null },
     })
-      .select("assignmentId quizId courseClassId score submittedAt gradedAt createdAt")
+      .select(
+        "assignmentId quizId courseClassId status score rawScore maxRawScore normalizedScore provisionalScore gradingStatus quizAnswers submittedAt gradedAt createdAt"
+      )
       .sort({ gradedAt: 1, createdAt: 1 })
       .lean();
 
-    // 1. Calculate overall average and component averages
     let totalScore = 0;
+    let totalCount = 0;
     let assignmentScoreSum = 0;
     let assignmentCount = 0;
     let quizScoreSum = 0;
     let quizCount = 0;
 
-    const quizIdSet = new Set(quizIds.map(String));
-
-    // Group submissions by courseClassId for class comparison and breakdown
-    const classSubMap = new Map<string, any[]>();
-    // Group submissions by period (month YYYY-MM) for trend
+    const classSubMap = new Map<
+      string,
+      Array<{ normalizedScore: number; isQuiz: boolean }>
+    >();
     const periodMap = new Map<string, { sum: number; count: number }>();
 
-    for (const sub of submissions) {
-      const score = sub.score as number;
-      totalScore += score;
+    for (const sub of rawSubmissions) {
+      const aDoc = sub.assignmentId
+        ? assignMap.get(String(sub.assignmentId))
+        : null;
+      if (aDoc?.isArchived) continue;
+      const qIdStr = sub.quizId
+        ? String(sub.quizId)
+        : aDoc?.quizId
+          ? String(aDoc.quizId)
+          : null;
+      const qDoc = qIdStr ? quizMap.get(qIdStr) : null;
 
-      const isQuiz = Boolean(sub.quizId) || quizIdSet.has(String(sub.assignmentId));
+      const resolved = resolveSubmissionScoring(sub, qDoc, aDoc);
+      if (!resolved.isFinalGraded || resolved.normalizedScore === null) {
+        continue;
+      }
+
+      const score = resolved.normalizedScore;
+      totalScore += score;
+      totalCount++;
+
+      const isQuiz =
+        Boolean(sub.quizId) ||
+        (sub.quizId && quizIdSet.has(String(sub.quizId))) ||
+        (sub.assignmentId && quizAssignmentIdSet.has(String(sub.assignmentId))) ||
+        resolved.isQuiz;
+
       if (isQuiz) {
         quizScoreSum += score;
         quizCount++;
@@ -144,14 +174,12 @@ export async function GET(req: NextRequest) {
         assignmentCount++;
       }
 
-      // Group by class
       const ccId = String(sub.courseClassId);
       if (!classSubMap.has(ccId)) {
         classSubMap.set(ccId, []);
       }
-      classSubMap.get(ccId)!.push(sub);
+      classSubMap.get(ccId)!.push({ normalizedScore: score, isQuiz });
 
-      // Period for trend
       const dateVal = sub.gradedAt || sub.submittedAt || sub.createdAt;
       if (dateVal) {
         const d = new Date(dateVal);
@@ -166,21 +194,16 @@ export async function GET(req: NextRequest) {
     }
 
     const overallAverage =
-      submissions.length > 0
-        ? Math.round((totalScore / submissions.length) * 10) / 10
-        : null;
+      totalCount > 0 ? roundScore(totalScore / totalCount) : null;
 
     const assignmentAverage =
       assignmentCount > 0
-        ? Math.round((assignmentScoreSum / assignmentCount) * 10) / 10
+        ? roundScore(assignmentScoreSum / assignmentCount)
         : null;
 
     const quizAverage =
-      quizCount > 0
-        ? Math.round((quizScoreSum / quizCount) * 10) / 10
-        : null;
+      quizCount > 0 ? roundScore(quizScoreSum / quizCount) : null;
 
-    // 2. Class Comparison and Breakdown
     const classComparison: any[] = [];
     const classesBreakdown: any[] = [];
 
@@ -194,23 +217,28 @@ export async function GET(req: NextRequest) {
       let classQuizAvg: number | null = null;
 
       if (ccSubs.length > 0) {
-        const sum = ccSubs.reduce((acc, curr) => acc + curr.score, 0);
-        classAvg = Math.round((sum / ccSubs.length) * 10) / 10;
-
-        const classAssignSubs = ccSubs.filter(
-          (s) => !s.quizId && !quizIdSet.has(String(s.assignmentId))
+        const sum = ccSubs.reduce(
+          (acc, curr) => acc + curr.normalizedScore,
+          0
         );
+        classAvg = roundScore(sum / ccSubs.length);
+
+        const classAssignSubs = ccSubs.filter((s) => !s.isQuiz);
         if (classAssignSubs.length > 0) {
-          const sumA = classAssignSubs.reduce((acc, curr) => acc + curr.score, 0);
-          classAssignAvg = Math.round((sumA / classAssignSubs.length) * 10) / 10;
+          const sumA = classAssignSubs.reduce(
+            (acc, curr) => acc + curr.normalizedScore,
+            0
+          );
+          classAssignAvg = roundScore(sumA / classAssignSubs.length);
         }
 
-        const classQuizSubs = ccSubs.filter(
-          (s) => Boolean(s.quizId) || quizIdSet.has(String(s.assignmentId))
-        );
+        const classQuizSubs = ccSubs.filter((s) => s.isQuiz);
         if (classQuizSubs.length > 0) {
-          const sumQ = classQuizSubs.reduce((acc, curr) => acc + curr.score, 0);
-          classQuizAvg = Math.round((sumQ / classQuizSubs.length) * 10) / 10;
+          const sumQ = classQuizSubs.reduce(
+            (acc, curr) => acc + curr.normalizedScore,
+            0
+          );
+          classQuizAvg = roundScore(sumQ / classQuizSubs.length);
         }
       }
 
@@ -238,14 +266,13 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    // 3. Chronological Trend Array
     const trend: Array<{ period: string; average: number }> = [];
     const sortedPeriods = Array.from(periodMap.keys()).sort();
     for (const p of sortedPeriods) {
       const pData = periodMap.get(p)!;
       trend.push({
         period: p,
-        average: Math.round((pData.sum / pData.count) * 10) / 10,
+        average: roundScore(pData.sum / pData.count),
       });
     }
 
@@ -270,7 +297,10 @@ export async function GET(req: NextRequest) {
       },
     });
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Gagal memuat monitoring nilai mapel";
+    const message =
+      err instanceof Error
+        ? err.message
+        : "Gagal memuat monitoring nilai mapel";
     return NextResponse.json({ success: false, message }, { status: 500 });
   }
 }

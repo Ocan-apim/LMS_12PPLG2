@@ -6,19 +6,17 @@ import { useRouter } from "next/navigation";
 import {
   FileText,
   Download,
-  MessageSquare,
-  CornerDownRight,
-  Send,
   Pencil,
   ChevronRight,
-  ExternalLink,
   Trash2,
   AlertCircle,
-  Loader2,
-  X,
+  HelpCircle,
+  Clock,
+  Award,
+  CheckCircle2,
+  Users,
 } from "lucide-react";
 import { Spinner } from "@/components/ui";
-import { validateComment } from "@/lib/profanity-filter";
 import { ThreadedComments, type CommentItem } from "@/components/comments/ThreadedComments";
 
 interface AssignmentAttachment {
@@ -26,6 +24,17 @@ interface AssignmentAttachment {
   url: string;
   type: string;
   size?: string;
+}
+
+interface QuizQuestionDetail {
+  id: string;
+  type?: "pilihan_ganda" | "essay";
+  question: string;
+  imageUrl?: string;
+  options?: string[];
+  correctAnswer?: number | string;
+  points?: number;
+  pointsFalse?: number;
 }
 
 interface AssignmentDetail {
@@ -36,6 +45,7 @@ interface AssignmentDetail {
   type: string;
   dueDate?: string;
   maxScore: number;
+  maxRawScore?: number;
   turnedInCount: number;
   gradedCount: number;
   courseClassId?: {
@@ -46,7 +56,11 @@ interface AssignmentDetail {
   quizId?: {
     _id: string;
     title: string;
-    questions?: unknown[];
+    description?: string;
+    durationSeconds?: number;
+    totalPoints?: number;
+    maxRawScore?: number;
+    questions?: QuizQuestionDetail[];
   };
   attachments?: AssignmentAttachment[];
   isPublished?: boolean;
@@ -54,6 +68,8 @@ interface AssignmentDetail {
   currentUserId?: string;
   createdAt: string;
 }
+
+const OPTION_LETTERS = ["A", "B", "C", "D", "E", "F"];
 
 export default function AssignmentDetailPage({
   params,
@@ -73,10 +89,6 @@ export default function AssignmentDetailPage({
 
   // Real comments state
   const [comments, setComments] = useState<CommentItem[]>([]);
-  const [newComment, setNewComment] = useState("");
-  const [showCommentInput, setShowCommentInput] = useState(false);
-  const [submittingComment, setSubmittingComment] = useState(false);
-  const [commentError, setCommentError] = useState<string | null>(null);
 
   async function handleDeleteAssignment() {
     setDeleting(true);
@@ -92,10 +104,10 @@ export default function AssignmentDetailPage({
           : "/guru/assignments";
         router.push(backUrl);
       } else {
-        alert(json.message || "Gagal menghapus tugas");
+        alert(json.message || "Gagal menghapus tugas atau kuis");
       }
     } catch {
-      alert("Terjadi kesalahan sistem saat menghapus tugas");
+      alert("Terjadi kesalahan sistem saat menghapus tugas atau kuis");
     } finally {
       setDeleting(false);
     }
@@ -113,55 +125,17 @@ export default function AssignmentDetailPage({
             setComments(json.data.comments);
           }
         } else {
-          setError(json.message || "Gagal memuat detail tugas");
+          setError(json.message || "Gagal memuat detail tugas atau kuis");
         }
       } catch (err: unknown) {
         console.error("Gagal memuat tugas:", err);
-        setError("Terjadi kesalahan jaringan saat memuat tugas");
+        setError("Terjadi kesalahan jaringan saat memuat tugas atau kuis");
       } finally {
         setLoading(false);
       }
     }
     loadDetail();
   }, [id]);
-
-  async function handleAddComment(e: React.FormEvent) {
-    e.preventDefault();
-    if (!newComment.trim() || submittingComment) return;
-    setCommentError(null);
-
-    const clientValidation = validateComment(newComment);
-    if (!clientValidation.isValid) {
-      setCommentError(
-        clientValidation.message ||
-          "Komentar tidak dapat dikirim karena mengandung kata atau ungkapan yang tidak pantas. Silakan ubah komentar Anda."
-      );
-      return;
-    }
-
-    setSubmittingComment(true);
-    try {
-      const res = await fetch(`/api/guru/assignments/${id}/comments`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: newComment.trim() }),
-      });
-      const json = await res.json();
-      if (res.ok && json.success && json.data) {
-        setComments((prev) => [...prev, json.data]);
-        setNewComment("");
-        setCommentError(null);
-        setShowCommentInput(false);
-      } else {
-        setCommentError(json.message || "Gagal menambahkan komentar");
-      }
-    } catch (err) {
-      console.error("Gagal menambahkan komentar:", err);
-      setCommentError("Terjadi kesalahan koneksi saat mengirim komentar");
-    } finally {
-      setSubmittingComment(false);
-    }
-  }
 
   async function handleToggleStatus() {
     if (!assignment) return;
@@ -192,14 +166,24 @@ export default function AssignmentDetailPage({
   if (error) {
     return (
       <div className="rounded-2xl border border-red-200 bg-red-50 p-8 text-center max-w-lg mx-auto">
-        <h2 className="text-base font-bold text-red-900">Gagal Memuat Tugas</h2>
+        <h2 className="text-base font-bold text-red-900">Gagal Memuat Data</h2>
         <p className="mt-2 text-xs text-red-600">{error}</p>
-        <button
-          onClick={() => window.location.reload()}
-          className="mt-4 rounded-xl bg-red-600 px-4 py-2 text-xs font-semibold text-white hover:bg-red-700 transition"
-        >
-          Coba Lagi
-        </button>
+        <div className="mt-4 flex items-center justify-center gap-2">
+          <button
+            onClick={() => window.location.reload()}
+            className="rounded-xl bg-red-600 px-4 py-2 text-xs font-semibold text-white hover:bg-red-700 transition"
+          >
+            Coba Lagi
+          </button>
+          <Link href="/guru/assignments">
+            <button
+              type="button"
+              className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition"
+            >
+              Kembali ke Daftar Tugas
+            </button>
+          </Link>
+        </div>
       </div>
     );
   }
@@ -207,9 +191,9 @@ export default function AssignmentDetailPage({
   if (!assignment) {
     return (
       <div className="rounded-2xl border border-slate-200 bg-white p-12 text-center shadow-xs">
-        <h2 className="text-lg font-bold text-slate-900">Tugas tidak ditemukan</h2>
+        <h2 className="text-lg font-bold text-slate-900">Tugas atau kuis tidak ditemukan</h2>
         <p className="mt-2 text-xs text-slate-500">
-          Tugas ini mungkin telah dihapus atau Anda tidak memiliki akses.
+          Item ini mungkin telah dihapus atau Anda tidak memiliki akses.
         </p>
         <Link href="/guru/assignments" className="mt-4 inline-block">
           <button className="rounded-xl border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50">
@@ -223,10 +207,32 @@ export default function AssignmentDetailPage({
   const className = assignment.courseClassId?.name || "Kelas";
   const classId = assignment.courseClassId?._id;
   const attachments = assignment.attachments || [];
+  const isQuiz = assignment.type === "kuis" || Boolean(assignment.quizId);
+  const quizQuestions = assignment.quizId?.questions || [];
+  const maxRawScore =
+    assignment.maxRawScore ??
+    assignment.quizId?.maxRawScore ??
+    assignment.quizId?.totalPoints ??
+    assignment.maxScore ??
+    100;
+
+  const formattedDate = assignment.dueDate
+    ? `Tenggat: ${new Date(assignment.dueDate).toLocaleDateString("id-ID", {
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+      })}`
+    : assignment.createdAt
+      ? `Dibuat: ${new Date(assignment.createdAt).toLocaleDateString("id-ID", {
+          day: "numeric",
+          month: "long",
+          year: "numeric",
+        })}`
+      : "";
 
   return (
     <div className="space-y-6 pb-24 max-w-7xl mx-auto">
-      {/* Breadcrumb matching Screenshot 3 Left */}
+      {/* Breadcrumb */}
       <div className="flex items-center gap-2 text-xs font-medium text-slate-400">
         <Link
           href={classId ? `/guru/classes/${classId}` : "/guru/classes"}
@@ -244,25 +250,63 @@ export default function AssignmentDetailPage({
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
         {/* Left Column (8 cols) */}
         <div className="lg:col-span-8 space-y-6">
-          {/* Header Card matching Screenshot 3 Left */}
+          {/* Header Card */}
           <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
             <div className="flex items-start gap-4">
-              <div className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600">
-                <FileText className="size-6" />
+              <div
+                className={`flex size-12 shrink-0 items-center justify-center rounded-2xl ${
+                  isQuiz
+                    ? "bg-blue-600 text-white shadow-xs"
+                    : "bg-indigo-50 text-indigo-600"
+                }`}
+              >
+                {isQuiz ? (
+                  <HelpCircle className="size-6" />
+                ) : (
+                  <FileText className="size-6" />
+                )}
               </div>
               <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <span
+                    className={`rounded-md px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wider ${
+                      isQuiz
+                        ? "bg-blue-100 text-blue-700"
+                        : "bg-indigo-100 text-indigo-700"
+                    }`}
+                  >
+                    {isQuiz ? "Ulangan Harian / Kuis" : "Tugas"}
+                  </span>
+                </div>
                 <h1 className="text-xl sm:text-2xl font-bold text-slate-900 leading-tight">
                   {assignment.title}
                 </h1>
-                <p className="text-xs text-slate-400">20 - 21 July 2026</p>
-                <p className="text-xs font-bold text-slate-900 pt-1">
-                  {assignment.maxScore || 100} Poin
-                </p>
+                {formattedDate && (
+                  <p className="text-xs text-slate-500">{formattedDate}</p>
+                )}
+                <div className="flex flex-wrap items-center gap-3 pt-1">
+                  <span className="text-xs font-bold text-slate-900">
+                    Skala Nilai Akhir: {assignment.maxScore || 100} Poin
+                  </span>
+                  {isQuiz && (
+                    <>
+                      <span className="text-xs font-semibold text-blue-700 bg-blue-50 px-2.5 py-0.5 rounded-lg border border-blue-100">
+                        Total Skor Mentah: {maxRawScore} Poin ({quizQuestions.length} Soal)
+                      </span>
+                      {assignment.quizId?.durationSeconds && (
+                        <span className="inline-flex items-center gap-1 text-xs font-medium text-slate-600">
+                          <Clock className="size-3.5 text-slate-400" />
+                          {assignment.quizId.durationSeconds} Detik
+                        </span>
+                      )}
+                    </>
+                  )}
+                </div>
               </div>
             </div>
 
-            {/* Status toggle & "Lihat Submisi" Button matching Screenshot 3 Left */}
-            <div className="flex items-center gap-2">
+            {/* Status toggle & "Lihat Submisi" Button */}
+            <div className="flex flex-wrap items-center gap-2">
               {["admin", "kurikulum", "kepsek"].includes(assignment.currentUserRole || "") ? (
                 <span className="rounded-xl px-3 py-1.5 text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200">
                   Mode Pratinjau (Read-Only)
@@ -271,7 +315,7 @@ export default function AssignmentDetailPage({
                 <button
                   type="button"
                   onClick={handleToggleStatus}
-                  title="Klik untuk mengubah status publikasi tugas"
+                  title="Klik untuk mengubah status publikasi"
                   className={`rounded-xl px-3 py-1.5 text-xs font-bold transition border ${
                     assignment.isPublished !== false
                       ? "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100"
@@ -287,9 +331,10 @@ export default function AssignmentDetailPage({
                   <Link href={`/guru/assignments/${id}/submissions`}>
                     <button
                       type="button"
-                      className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-800 shadow-xs hover:bg-slate-50 transition"
+                      className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-800 shadow-xs hover:bg-slate-50 transition inline-flex items-center gap-1.5"
                     >
-                      Lihat Submisi
+                      <Users className="size-3.5 text-blue-600" />
+                      <span>Lihat Submisi ({assignment.turnedInCount ?? 0})</span>
                     </button>
                   </Link>
                   <button
@@ -298,57 +343,163 @@ export default function AssignmentDetailPage({
                     className="rounded-xl border border-red-200 bg-red-50 px-3.5 py-2 text-xs font-semibold text-red-700 shadow-xs hover:bg-red-100 transition inline-flex items-center gap-1.5"
                   >
                     <Trash2 className="size-3.5" />
-                    <span>Hapus Tugas</span>
+                    <span>{isQuiz ? "Hapus Kuis" : "Hapus Tugas"}</span>
                   </button>
                 </>
               )}
             </div>
           </div>
 
-          {/* Description text */}
+          {/* Description / Instructions text */}
           <div className="text-xs text-slate-700 leading-relaxed bg-slate-50/70 p-4 rounded-2xl border border-slate-100">
-            {assignment.instructions || "Silahkan di kerjakan dan jangan nyontek!"}
+            {assignment.instructions ||
+              assignment.description ||
+              assignment.quizId?.description ||
+              (isQuiz
+                ? "Kuis CBT siap dikerjakan oleh siswa di kelas ini."
+                : "Silahkan dikerjakan sesuai instruksi yang diberikan.")}
           </div>
 
-          {/* File yang dibagi Section matching Screenshot 3 Left */}
-          <div className="space-y-3">
-            <h3 className="text-sm font-bold text-slate-900">File yang dibagi</h3>
-            {attachments.length === 0 ? (
-              <p className="text-xs text-slate-400 italic">Belum ada file yang dibagikan.</p>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {attachments.map((file, idx) => (
-                  <div
-                    key={idx}
-                    className="flex items-center justify-between rounded-2xl border border-slate-200 bg-white p-3.5 shadow-xs hover:border-slate-300 transition"
-                  >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-500">
-                        <FileText className="size-5" />
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-xs font-bold text-slate-900 truncate">
-                          {file.name}
-                        </p>
-                        <p className="text-[11px] text-slate-400">
-                          {file.size || "-"} • {file.type || "file"}
-                        </p>
-                      </div>
-                    </div>
-
-                    <a
-                      href={`/api/files/download?url=${encodeURIComponent(file.url)}&name=${encodeURIComponent(file.name)}`}
-                      download
-                      className="p-2 text-slate-400 hover:text-blue-600 transition"
-                      title="Unduh file"
-                    >
-                      <Download className="size-4" />
-                    </a>
-                  </div>
-                ))}
+          {/* Quiz Questions Review Section (shown when item is a Quiz) */}
+          {isQuiz && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                  <HelpCircle className="size-4 text-blue-600" />
+                  <span>Daftar Soal Kuis ({quizQuestions.length} Soal)</span>
+                </h3>
+                <span className="text-xs text-slate-500">
+                  Nilai akhir siswa otomatis dinormalisasi ke skala 0–100
+                </span>
               </div>
-            )}
-          </div>
+
+              {quizQuestions.length === 0 ? (
+                <div className="rounded-2xl border border-slate-200 bg-white p-6 text-center text-xs text-slate-400">
+                  Belum ada soal yang terdaftar pada kuis ini.
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {quizQuestions.map((q, qIdx) => {
+                    const isEssay = q.type === "essay";
+                    const correctIndex =
+                      typeof q.correctAnswer === "number"
+                        ? q.correctAnswer
+                        : OPTION_LETTERS.indexOf(String(q.correctAnswer || "A").toUpperCase());
+
+                    return (
+                      <div
+                        key={q.id || qIdx}
+                        className="rounded-2xl border border-slate-200 bg-white p-4 shadow-xs space-y-3"
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2.5">
+                          <div className="flex items-center gap-2">
+                            <span className="rounded-lg bg-blue-50 px-2.5 py-1 text-xs font-extrabold text-blue-700">
+                              Soal {qIdx + 1}
+                            </span>
+                            <span className="rounded-lg bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-600">
+                              {isEssay ? "Essay" : "Pilihan Ganda"}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2 text-xs font-bold">
+                            <span className="inline-flex items-center gap-1 rounded-lg bg-emerald-50 px-2.5 py-1 text-emerald-700">
+                              <Award className="size-3.5" />
+                              PT: {q.points ?? 10} Poin
+                            </span>
+                            {typeof q.pointsFalse === "number" && (
+                              <span className="rounded-lg bg-slate-100 px-2.5 py-1 text-slate-600">
+                                PF: {q.pointsFalse}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        <p className="text-xs font-semibold text-slate-800 whitespace-pre-line leading-relaxed">
+                          {q.question}
+                        </p>
+
+                        {!isEssay && Array.isArray(q.options) && q.options.length > 0 && (
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                            {q.options.map((optText, optIdx) => {
+                              const letter = OPTION_LETTERS[optIdx] || String(optIdx + 1);
+                              const isCorrectOpt = optIdx === correctIndex;
+                              return (
+                                <div
+                                  key={optIdx}
+                                  className={`flex items-center justify-between gap-2 rounded-xl border px-3 py-2 text-xs ${
+                                    isCorrectOpt
+                                      ? "border-emerald-300 bg-emerald-50/70 font-bold text-emerald-900"
+                                      : "border-slate-200 bg-slate-50/50 text-slate-700"
+                                  }`}
+                                >
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <span
+                                      className={`grid size-6 shrink-0 place-items-center rounded-md text-[11px] font-extrabold ${
+                                        isCorrectOpt
+                                          ? "bg-emerald-600 text-white"
+                                          : "bg-slate-200 text-slate-700"
+                                      }`}
+                                    >
+                                      {letter}
+                                    </span>
+                                    <span className="truncate">{optText}</span>
+                                  </div>
+                                  {isCorrectOpt && (
+                                    <CheckCircle2 className="size-4 shrink-0 text-emerald-600" />
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* File yang dibagi Section */}
+          {(!isQuiz || attachments.length > 0) && (
+            <div className="space-y-3">
+              <h3 className="text-sm font-bold text-slate-900">File yang dibagi</h3>
+              {attachments.length === 0 ? (
+                <p className="text-xs text-slate-400 italic">Belum ada file yang dibagikan.</p>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {attachments.map((file, idx) => (
+                    <div
+                      key={idx}
+                      className="flex items-center justify-between rounded-2xl border border-slate-200 bg-white p-3.5 shadow-xs hover:border-slate-300 transition"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-500">
+                          <FileText className="size-5" />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-xs font-bold text-slate-900 truncate">
+                            {file.name}
+                          </p>
+                          <p className="text-[11px] text-slate-400">
+                            {file.size || "-"} • {file.type || "file"}
+                          </p>
+                        </div>
+                      </div>
+
+                      <a
+                        href={`/api/files/download?url=${encodeURIComponent(file.url)}&name=${encodeURIComponent(file.name)}`}
+                        download
+                        className="p-2 text-slate-400 hover:text-blue-600 transition"
+                        title="Unduh file"
+                      >
+                        <Download className="size-4" />
+                      </a>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Right Column (4 cols): Kolom Komentar */}
@@ -365,12 +516,12 @@ export default function AssignmentDetailPage({
         </div>
       </div>
 
-      {/* Floating Action Button at Bottom Right: Blue Circular Edit/Pencil matching Screenshot 3 Left (only for teacher owner) */}
+      {/* Floating Action Button at Bottom Right: Blue Circular Edit/Pencil */}
       {!["admin", "kurikulum", "kepsek"].includes(assignment.currentUserRole || "") && (
         <div className="fixed bottom-6 right-8 z-40">
           <Link
             href={`/guru/assignments/${id}/edit`}
-            title="Edit Tugas"
+            title={isQuiz ? "Edit Kuis" : "Edit Tugas"}
             className="flex size-12 items-center justify-center rounded-full bg-blue-600 text-white shadow-lg transition-transform hover:scale-105 hover:bg-blue-700"
           >
             <Pencil className="size-5" />
@@ -387,7 +538,9 @@ export default function AssignmentDetailPage({
                 <AlertCircle className="size-5" />
               </div>
               <div>
-                <h3 className="font-bold text-slate-900 text-sm">Hapus Tugas</h3>
+                <h3 className="font-bold text-slate-900 text-sm">
+                  {isQuiz ? "Hapus Kuis" : "Hapus Tugas"}
+                </h3>
                 <p className="text-xs text-slate-500 line-clamp-1">
                   {assignment.title}
                 </p>
@@ -396,10 +549,10 @@ export default function AssignmentDetailPage({
 
             <div className="space-y-1">
               <p className="text-sm font-semibold text-slate-900">
-                Yakin ingin menghapus tugas?
+                Yakin ingin menghapus {isQuiz ? "kuis" : "tugas"} ini?
               </p>
               <p className="text-xs text-slate-500 leading-relaxed">
-                Tugas yang dihapus tidak dapat dipulihkan.
+                Item yang dihapus tidak akan ditampilkan lagi di aliran kelas.
               </p>
             </div>
 

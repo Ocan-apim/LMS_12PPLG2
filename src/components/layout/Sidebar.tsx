@@ -205,56 +205,14 @@ export function Sidebar({ role, pathname, onNavigate }: SidebarProps) {
           </Link>
         )}
         {role === "guru" && (
-          <>
-            <Link
-              href="/guru/settings"
-              onClick={onNavigate}
-              className={`flex h-8 w-full items-center gap-3 px-2 rounded-lg text-left text-xs font-medium transition ${
-                pathname === "/guru/settings"
-                  ? "bg-blue-50 text-blue-600 font-semibold"
-                  : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
-              }`}
-            >
-              <Settings className="size-4 text-slate-500" />
-              Pengaturan
-            </Link>
-            <button
-              type="button"
-              onClick={() => alert("Pusat Bantuan Learnix: Silakan hubungi admin sekolah di admin@learnix.sch.id atau telepon (021) 888-9999")}
-              className="flex h-8 w-full items-center gap-3 px-2 rounded-lg text-left text-xs font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition"
-            >
-              <HelpCircle className="size-4 text-slate-500" />
-              Bantuan
-            </button>
-          </>
-        )}
-        {role === "siswa" && (
-          <>
-            <Link
-              href="/siswa/settings"
-              onClick={onNavigate}
-              className={`flex h-8 w-full items-center gap-3 px-2 rounded-lg text-left text-xs font-medium transition ${
-                pathname === "/siswa/settings"
-                  ? "bg-blue-50 text-blue-600 font-semibold"
-                  : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
-              }`}
-            >
-              <Settings className="size-4 text-slate-500" />
-              Pengaturan
-            </Link>
-            <Link
-              href="/siswa/profile"
-              onClick={onNavigate}
-              className={`flex h-8 w-full items-center gap-3 px-2 rounded-lg text-left text-xs font-medium transition ${
-                pathname === "/siswa/profile"
-                  ? "bg-blue-50 text-blue-600 font-semibold"
-                  : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
-              }`}
-            >
-              <Users className="size-4 text-slate-500" />
-              Profil Saya
-            </Link>
-          </>
+          <button
+            type="button"
+            onClick={() => alert("Pusat Bantuan Learnix: Silakan hubungi admin sekolah di admin@learnix.sch.id atau telepon (021) 888-9999")}
+            className="flex h-8 w-full items-center gap-3 px-2 rounded-lg text-left text-xs font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition"
+          >
+            <HelpCircle className="size-4 text-slate-500" />
+            Bantuan
+          </button>
         )}
         <div>
           <button

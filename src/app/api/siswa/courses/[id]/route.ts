@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import { requireRole } from "@/lib/session";
 import { CourseClass, Assignment, Submission, ClassPost, Material, Quiz, ClassModel, User } from "@/models";
+import { resolveSubmissionScoring } from "@/lib/quiz-scoring";
 
 type RouteContext = {
   params: Promise<{ id: string }>;
@@ -206,7 +207,7 @@ export async function GET(req: Request, context: RouteContext) {
       courseClassId: targetCourseId,
       isPublished: true,
     })
-      .select("_id title description durationSeconds totalPoints totalQuestions dueDate createdAt")
+      .select("_id title description durationSeconds totalPoints maxRawPoints questions totalQuestions dueDate createdAt")
       .sort({ dueDate: 1, createdAt: -1 })
       .lean();
 
@@ -218,7 +219,7 @@ export async function GET(req: Request, context: RouteContext) {
         quizId: { $in: quizIds },
         studentId: session.id,
       })
-        .select("quizId status score submittedAt")
+        .select("quizId status score rawScore maxRawScore normalizedScore provisionalScore gradingStatus quizAnswers submittedAt")
         .lean();
 
       quizSubMap = new Map(
@@ -229,17 +230,24 @@ export async function GET(req: Request, context: RouteContext) {
     const enrichedQuizzes = quizzes.map((q: any) => {
       const sub = quizSubMap.get(String(q._id));
       const isLate = !sub && q.dueDate && new Date(q.dueDate).getTime() < Date.now();
+      const resolved = resolveSubmissionScoring(sub, q, null);
       return {
         _id: q._id,
         title: q.title,
         description: q.description,
         type: "kuis" as const,
         dueDate: q.dueDate,
-        maxScore: q.totalPoints || 100,
-        totalQuestions: q.totalQuestions,
+        maxScore: 100,
+        rawScore: resolved.rawScore,
+        maxRawScore: resolved.maxRawScore,
+        normalizedScore: resolved.normalizedScore,
+        provisionalScore: resolved.provisionalScore,
+        gradingStatus: resolved.gradingStatus,
+        isPendingManual: resolved.isPendingManual,
+        totalQuestions: Array.isArray(q.questions) ? q.questions.length : q.totalQuestions,
         durationSeconds: q.durationSeconds,
         submissionStatus: sub ? sub.status : isLate ? "late" : "assigned",
-        score: sub ? sub.score : null,
+        score: resolved.isFinalGraded ? resolved.normalizedScore : null,
         submittedAt: sub ? sub.submittedAt : null,
         createdAt: q.createdAt,
       };

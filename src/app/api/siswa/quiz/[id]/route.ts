@@ -1,15 +1,63 @@
 import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import { requireRole } from "@/lib/session";
-import { Quiz, Assignment, CourseClass, Submission } from "@/models";
+import { Quiz, Assignment, CourseClass, Submission, User } from "@/models";
 import mongoose from "mongoose";
+import {
+  calculateQuizMaxRawScore,
+  getQuestionPointsTrue,
+  getQuestionPointsFalse,
+  resolveSubmissionScoring,
+} from "@/lib/quiz-scoring";
 
 type RouteContext = {
   params: Promise<{ id: string }>;
 };
 
+async function verifyStudentQuizClassMembership(
+  studentId: string,
+  courseClass: Record<string, any> | null
+): Promise<boolean> {
+  if (!courseClass) return false;
+  const studentIds = Array.isArray(courseClass.studentIds)
+    ? courseClass.studentIds.map((sid: unknown) => String(sid))
+    : [];
+  if (studentIds.includes(studentId)) return true;
+
+  const studentUser = (await User.findById(studentId)
+    .select("classId")
+    .lean()) as { classId?: unknown } | null;
+  const studentRombelId = studentUser?.classId ? String(studentUser.classId) : null;
+  if (!studentRombelId) return false;
+
+  const classRombelStr = courseClass.classRombelId
+    ? String(courseClass.classRombelId)
+    : null;
+  const assignedRombelStrs = Array.isArray(courseClass.assignedRombelIds)
+    ? courseClass.assignedRombelIds.map((r: unknown) => String(r))
+    : [];
+
+  if (
+    studentRombelId === classRombelStr ||
+    assignedRombelStrs.includes(studentRombelId)
+  ) {
+    await CourseClass.findByIdAndUpdate(courseClass._id, {
+      $addToSet: { studentIds: studentId },
+    });
+    return true;
+  }
+
+  return false;
+}
+
 export async function GET(_req: Request, context: RouteContext) {
-  const { session, error } = await requireRole(["siswa", "guru", "admin", "kurikulum", "kepsek"]);
+  const { session, error } = await requireRole([
+    "siswa",
+    "guru",
+    "admin",
+    "kurikulum",
+    "kepsek",
+  ]);
   if (error || !session) return error;
 
   try {
@@ -23,14 +71,19 @@ export async function GET(_req: Request, context: RouteContext) {
       );
     }
 
-    // 1. Resolve Quiz
+    // 1. Resolve Quiz & Associated Assignment
     let quiz: any = await Quiz.findById(id).lean();
+    let assignment: any = null;
     if (!quiz) {
-      // Check if id is an Assignment that has quizId
-      const assignment: any = await Assignment.findById(id).lean();
+      assignment = await Assignment.findById(id).lean();
       if (assignment && assignment.quizId) {
         quiz = await Quiz.findById(assignment.quizId).lean();
       }
+    } else {
+      assignment = await Assignment.findOne({
+        quizId: quiz._id,
+        isArchived: { $ne: true },
+      }).lean();
     }
 
     if (!quiz || quiz.isPublished === false) {
@@ -46,41 +99,48 @@ export async function GET(_req: Request, context: RouteContext) {
     const isStaff = ["guru", "admin", "kurikulum", "kepsek"].includes(session.role);
 
     if (isStudent) {
-      if (
-        !courseClass ||
-        !Array.isArray(courseClass.studentIds) ||
-        !courseClass.studentIds.map((sid: any) => sid.toString()).includes(session.id)
-      ) {
+      const enrolled = await verifyStudentQuizClassMembership(session.id, courseClass);
+      if (!enrolled) {
         return NextResponse.json(
-          { success: false, message: "Akses ditolak: Anda tidak terdaftar di kelas kuis ini" },
+          {
+            success: false,
+            message: "Akses ditolak: Anda tidak terdaftar di kelas kuis ini",
+          },
           { status: 403 }
         );
       }
     }
 
-    // 3. Check student's submission (STRICTLY for this quizId)
+    // 3. Check student's submission
     let studentSubmission: any = null;
     if (isStudent) {
-      studentSubmission = await Submission.findOne({
-        quizId: quiz._id,
-        studentId: session.id,
-      })
+      const orConds: Record<string, unknown>[] = [
+        { quizId: quiz._id, studentId: session.id },
+      ];
+      if (assignment?._id) {
+        orConds.push({ assignmentId: assignment._id, studentId: session.id });
+      }
+      studentSubmission = await Submission.findOne({ $or: orConds })
         .sort({ submittedAt: -1 })
         .lean();
     }
 
     const isCompleted = Boolean(
-      studentSubmission && ["graded", "turned_in"].includes(studentSubmission.status)
+      studentSubmission &&
+        ["graded", "turned_in", "late"].includes(studentSubmission.status)
     );
 
-    // Calculate sanitized questions
+    const maxScoreSummary = calculateQuizMaxRawScore(quiz.questions || []);
+
+    // Sanitized questions (do not expose correctAnswer to students)
     const sanitizedQuestions = (quiz.questions || []).map((q: any) => ({
       id: q.id,
       type: q.type || "pilihan_ganda",
       question: q.question,
       imageUrl: q.imageUrl || undefined,
       options: q.options || [],
-      points: q.points || 10,
+      points: getQuestionPointsTrue(q),
+      pointsFalse: getQuestionPointsFalse(q),
     }));
 
     // If student has an active taking session
@@ -98,17 +158,41 @@ export async function GET(_req: Request, context: RouteContext) {
     // Calculate real result if completed
     let result = null;
     if (isCompleted && studentSubmission) {
-      const correctCount = (studentSubmission.quizAnswers || []).filter((a: any) => a.isCorrect).length;
+      const resolved = resolveSubmissionScoring(studentSubmission, quiz, assignment);
+      const qAnswers = Array.isArray(studentSubmission.quizAnswers)
+        ? studentSubmission.quizAnswers
+        : [];
+      const correctCount = qAnswers.filter((a: any) => a.isCorrect).length;
+      const pendingEssayCount = qAnswers.filter(
+        (a: any) =>
+          a.questionType === "essay" &&
+          (a.scoreAwarded === null || a.scoreAwarded === undefined || a.isGraded === false)
+      ).length;
       const totalQuestions = sanitizedQuestions.length;
-      const incorrectCount = Math.max(0, totalQuestions - correctCount);
+      const incorrectCount = Math.max(
+        0,
+        totalQuestions - correctCount - pendingEssayCount
+      );
 
       result = {
-        score: studentSubmission.score ?? 0,
-        maxScore: quiz.totalPoints || 100,
+        rawScore: resolved.rawScore ?? 0,
+        maxRawScore: resolved.maxRawScore,
+        normalizedScore: resolved.normalizedScore,
+        provisionalScore: resolved.provisionalScore,
+        objectiveRawScore: resolved.objectiveRawScore,
+        essayRawScore: resolved.essayRawScore,
+        gradingStatus: resolved.gradingStatus,
+        isPendingManual: resolved.isPendingManual,
+        score: resolved.isPendingManual
+          ? null
+          : (resolved.normalizedScore ?? studentSubmission.score ?? 0),
+        maxScore: 100,
         correctCount,
         incorrectCount,
+        pendingEssayCount,
         totalQuestions,
         submittedAt: studentSubmission.submittedAt,
+        gradedAt: studentSubmission.gradedAt || null,
       };
     }
 
@@ -116,10 +200,18 @@ export async function GET(_req: Request, context: RouteContext) {
       success: true,
       data: {
         _id: quiz._id.toString(),
+        assignmentId: assignment?._id ? String(assignment._id) : null,
         title: quiz.title,
-        description: quiz.description || "Kerjakan kuis dengan cermat dan teliti sebelum waktu berakhir.",
+        description:
+          quiz.description ||
+          "Kerjakan kuis dengan cermat dan teliti sebelum waktu berakhir.",
         durationSeconds: quiz.durationSeconds || 60,
-        totalPoints: quiz.totalPoints || 100,
+        totalPoints: maxScoreSummary.maxRawScore || quiz.totalPoints || 100,
+        maxRawScore: maxScoreSummary.maxRawScore,
+        objectiveMaxRawScore: maxScoreSummary.objectiveMaxRawScore,
+        essayMaxRawScore: maxScoreSummary.essayMaxRawScore,
+        hasEssayQuestions: maxScoreSummary.hasEssayQuestions,
+        normalizedMaxScore: 100,
         totalQuestions: sanitizedQuestions.length,
         courseClass: {
           _id: courseClass?._id?.toString() || quiz.courseClassId.toString(),

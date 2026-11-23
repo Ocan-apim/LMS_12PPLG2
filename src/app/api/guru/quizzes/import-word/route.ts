@@ -78,8 +78,8 @@ export async function POST(req: Request) {
         prompt: q.prompt,
         options,
         correctAnswer: q.correctAnswer || "A",
-        points: q.points || 2,
-        pointsFalse: q.pointsFalse || 0,
+        points: Number.isFinite(q.points) ? q.points : 2,
+        pointsFalse: Number.isFinite(q.pointsFalse) ? q.pointsFalse : 0,
         durationSeconds: 60,
       };
     });
