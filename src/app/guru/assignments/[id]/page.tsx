@@ -15,6 +15,8 @@ import {
   Award,
   CheckCircle2,
   Users,
+  ArrowLeft,
+  ExternalLink,
 } from "lucide-react";
 import { Spinner } from "@/components/ui";
 import { ThreadedComments, type CommentItem } from "@/components/comments/ThreadedComments";
@@ -24,6 +26,36 @@ interface AssignmentAttachment {
   url: string;
   type: string;
   size?: string;
+}
+
+interface SubmissionSummaryItem {
+  submissionId: string | null;
+  student: {
+    _id: string;
+    name: string;
+    email: string;
+    nisn?: string;
+  };
+  hasSubmitted: boolean;
+  status: "turned_in" | "late" | "graded" | "assigned";
+  gradingStatus?: string;
+  isPendingManual?: boolean;
+  score: number | null;
+  rawScore?: number | null;
+  maxRawScore?: number;
+  normalizedScore?: number | null;
+  feedback?: string;
+  attachments?: AssignmentAttachment[];
+  submittedAt: string | null;
+  gradedAt: string | null;
+}
+
+interface SubmissionSummaryStats {
+  totalStudents: number;
+  turnedInCount: number;
+  gradedCount: number;
+  assignedCount: number;
+  pendingManualCount: number;
 }
 
 interface QuizQuestionDetail {
@@ -52,6 +84,18 @@ interface AssignmentDetail {
     _id: string;
     name: string;
     code: string;
+    classRombelId?: string | { _id: string; name?: string };
+  };
+  classId?: {
+    _id: string;
+    name: string;
+    grade?: string;
+  };
+  teacherId?: {
+    _id?: string;
+    name?: string;
+    email?: string;
+    degree?: string;
   };
   quizId?: {
     _id: string;
@@ -90,6 +134,10 @@ export default function AssignmentDetailPage({
   // Real comments state
   const [comments, setComments] = useState<CommentItem[]>([]);
 
+  // Student submissions & grades summary state
+  const [submissionItems, setSubmissionItems] = useState<SubmissionSummaryItem[]>([]);
+  const [submissionStats, setSubmissionStats] = useState<SubmissionSummaryStats | null>(null);
+
   async function handleDeleteAssignment() {
     setDeleting(true);
     try {
@@ -99,9 +147,20 @@ export default function AssignmentDetailPage({
       const json = await res.json();
       if (json.success) {
         setDeleteModalOpen(false);
-        const backUrl = assignment?.courseClassId?._id
-          ? `/guru/classes/${assignment.courseClassId._id}`
-          : "/guru/assignments";
+        const role = assignment?.currentUserRole || "guru";
+        const cId = assignment?.courseClassId?._id;
+        const rId =
+          typeof assignment?.courseClassId?.classRombelId === "object"
+            ? assignment?.courseClassId?.classRombelId?._id
+            : assignment?.courseClassId?.classRombelId || assignment?.classId?._id;
+        const backUrl =
+          role === "admin"
+            ? rId && cId
+              ? `/admin/classes/${rId}?courseId=${cId}`
+              : "/admin/classes"
+            : cId
+              ? `/guru/classes/${cId}`
+              : "/guru/assignments";
         router.push(backUrl);
       } else {
         alert(json.message || "Gagal menghapus tugas atau kuis");
@@ -117,8 +176,11 @@ export default function AssignmentDetailPage({
     async function loadDetail() {
       try {
         setError(null);
-        const res = await fetch(`/api/guru/assignments/${id}`);
-        const json = await res.json();
+        const [detailRes, subRes] = await Promise.all([
+          fetch(`/api/guru/assignments/${id}`),
+          fetch(`/api/guru/assignments/${id}/submissions`).catch(() => null),
+        ]);
+        const json = await detailRes.json();
         if (json.success) {
           setAssignment(json.data);
           if (json.data.comments && Array.isArray(json.data.comments)) {
@@ -126,6 +188,14 @@ export default function AssignmentDetailPage({
           }
         } else {
           setError(json.message || "Gagal memuat detail tugas atau kuis");
+        }
+
+        if (subRes && subRes.ok) {
+          const subJson = await subRes.json();
+          if (subJson.success && subJson.data) {
+            setSubmissionItems(subJson.data.items || []);
+            setSubmissionStats(subJson.data.stats || null);
+          }
         }
       } catch (err: unknown) {
         console.error("Gagal memuat tugas:", err);
@@ -175,14 +245,13 @@ export default function AssignmentDetailPage({
           >
             Coba Lagi
           </button>
-          <Link href="/guru/assignments">
-            <button
-              type="button"
-              className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition"
-            >
-              Kembali ke Daftar Tugas
-            </button>
-          </Link>
+          <button
+            type="button"
+            onClick={() => router.back()}
+            className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition"
+          >
+            Kembali
+          </button>
         </div>
       </div>
     );
@@ -195,17 +264,44 @@ export default function AssignmentDetailPage({
         <p className="mt-2 text-xs text-slate-500">
           Item ini mungkin telah dihapus atau Anda tidak memiliki akses.
         </p>
-        <Link href="/guru/assignments" className="mt-4 inline-block">
-          <button className="rounded-xl border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50">
-            Kembali ke Daftar Tugas
+        <div className="mt-4 inline-block">
+          <button
+            type="button"
+            onClick={() => router.back()}
+            className="rounded-xl border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+          >
+            Kembali
           </button>
-        </Link>
+        </div>
       </div>
     );
   }
 
+  const userRole = assignment.currentUserRole || "guru";
+  const isReadOnlyRole = ["kepsek", "kurikulum"].includes(userRole);
+  const canManageContent = userRole === "guru" || userRole === "admin";
+  const canComment = userRole === "guru" || userRole === "admin" || userRole === "siswa";
+
   const className = assignment.courseClassId?.name || "Kelas";
   const classId = assignment.courseClassId?._id;
+  const rombelId =
+    typeof assignment.courseClassId?.classRombelId === "object"
+      ? assignment.courseClassId?.classRombelId?._id
+      : assignment.courseClassId?.classRombelId || assignment.classId?._id;
+
+  const classBackHref =
+    userRole === "admin"
+      ? rombelId && classId
+        ? `/admin/classes/${rombelId}?courseId=${classId}`
+        : "/admin/classes"
+      : userRole === "kepsek"
+        ? rombelId && classId
+          ? `/kepsek/classes/${rombelId}?courseId=${classId}`
+          : "/kepsek/teachers"
+        : classId
+          ? `/guru/classes/${classId}`
+          : "/guru/classes";
+
   const attachments = assignment.attachments || [];
   const isQuiz = assignment.type === "kuis" || Boolean(assignment.quizId);
   const quizQuestions = assignment.quizId?.questions || [];
@@ -232,18 +328,44 @@ export default function AssignmentDetailPage({
 
   return (
     <div className="space-y-6 pb-24 max-w-7xl mx-auto">
-      {/* Breadcrumb */}
-      <div className="flex items-center gap-2 text-xs font-medium text-slate-400">
-        <Link
-          href={classId ? `/guru/classes/${classId}` : "/guru/classes"}
-          className="hover:text-blue-600 transition"
-        >
-          {className}
-        </Link>
-        <ChevronRight className="size-3 text-slate-300" />
-        <span className="text-blue-600 font-semibold truncate max-w-md">
-          {assignment.title}
-        </span>
+      {/* Breadcrumb & Back Navigation */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2 text-xs font-medium text-slate-500">
+          <button
+            type="button"
+            onClick={() => router.back()}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 shadow-2xs hover:bg-slate-50 hover:text-blue-600 transition cursor-pointer mr-1"
+          >
+            <ArrowLeft className="size-3.5" />
+            <span>Kembali</span>
+          </button>
+          {userRole === "kepsek" && (
+            <>
+              <Link href="/kepsek/teachers" className="hover:text-blue-600 transition">
+                Monitor Kinerja Guru
+              </Link>
+              <ChevronRight className="size-3 text-slate-300" />
+            </>
+          )}
+          {userRole === "admin" && (
+            <>
+              <Link href="/admin/classes" className="hover:text-blue-600 transition">
+                Manajemen Kelas
+              </Link>
+              <ChevronRight className="size-3 text-slate-300" />
+            </>
+          )}
+          <Link
+            href={classBackHref}
+            className="hover:text-blue-600 transition font-semibold"
+          >
+            {className}
+          </Link>
+          <ChevronRight className="size-3 text-slate-300" />
+          <span className="text-blue-600 font-semibold truncate max-w-md">
+            {assignment.title}
+          </span>
+        </div>
       </div>
 
       {/* Main Grid: Content on Left (8 cols), Kolom Komentar on Right (4 cols) */}
@@ -307,7 +429,7 @@ export default function AssignmentDetailPage({
 
             {/* Status toggle & "Lihat Submisi" Button */}
             <div className="flex flex-wrap items-center gap-2">
-              {["admin", "kurikulum", "kepsek"].includes(assignment.currentUserRole || "") ? (
+              {isReadOnlyRole ? (
                 <span className="rounded-xl px-3 py-1.5 text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200">
                   Mode Pratinjau (Read-Only)
                 </span>
@@ -326,26 +448,25 @@ export default function AssignmentDetailPage({
                 </button>
               )}
 
-              {!["admin", "kurikulum", "kepsek"].includes(assignment.currentUserRole || "") && (
-                <>
-                  <Link href={`/guru/assignments/${id}/submissions`}>
-                    <button
-                      type="button"
-                      className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-800 shadow-xs hover:bg-slate-50 transition inline-flex items-center gap-1.5"
-                    >
-                      <Users className="size-3.5 text-blue-600" />
-                      <span>Lihat Submisi ({assignment.turnedInCount ?? 0})</span>
-                    </button>
-                  </Link>
-                  <button
-                    type="button"
-                    onClick={() => setDeleteModalOpen(true)}
-                    className="rounded-xl border border-red-200 bg-red-50 px-3.5 py-2 text-xs font-semibold text-red-700 shadow-xs hover:bg-red-100 transition inline-flex items-center gap-1.5"
-                  >
-                    <Trash2 className="size-3.5" />
-                    <span>{isQuiz ? "Hapus Kuis" : "Hapus Tugas"}</span>
-                  </button>
-                </>
+              <Link href={`/guru/assignments/${id}/submissions`}>
+                <button
+                  type="button"
+                  className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-800 shadow-xs hover:bg-slate-50 transition inline-flex items-center gap-1.5"
+                >
+                  <Users className="size-3.5 text-blue-600" />
+                  <span>Lihat Submisi ({assignment.turnedInCount ?? 0})</span>
+                </button>
+              </Link>
+
+              {canManageContent && (
+                <button
+                  type="button"
+                  onClick={() => setDeleteModalOpen(true)}
+                  className="rounded-xl border border-red-200 bg-red-50 px-3.5 py-2 text-xs font-semibold text-red-700 shadow-xs hover:bg-red-100 transition inline-flex items-center gap-1.5"
+                >
+                  <Trash2 className="size-3.5" />
+                  <span>{isQuiz ? "Hapus Kuis" : "Hapus Tugas"}</span>
+                </button>
               )}
             </div>
           </div>
@@ -500,6 +621,157 @@ export default function AssignmentDetailPage({
               )}
             </div>
           )}
+
+          {/* Student Submission Status & Grades Section */}
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3">
+              <div>
+                <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                  <Users className="size-4 text-blue-600" />
+                  <span>Status Pengumpulan &amp; Nilai Siswa</span>
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Ringkasan progres pengumpulan dan capaian nilai siswa pada {isQuiz ? "kuis" : "tugas"} ini.
+                </p>
+              </div>
+              <Link
+                href={`/guru/assignments/${id}/submissions`}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-blue-50 px-3 py-1.5 text-xs font-bold text-blue-700 hover:bg-blue-100 transition"
+              >
+                <span>Buka Panel Submisi</span>
+                <ExternalLink className="size-3.5" />
+              </Link>
+            </div>
+
+            {/* Summary Counters */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="rounded-xl border border-slate-100 bg-slate-50/70 p-3">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                  Total Siswa
+                </span>
+                <p className="mt-1 text-lg font-extrabold text-slate-900">
+                  {submissionStats?.totalStudents ?? submissionItems.length}
+                </p>
+              </div>
+              <div className="rounded-xl border border-blue-100 bg-blue-50/50 p-3">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-blue-600">
+                  Diserahkan
+                </span>
+                <p className="mt-1 text-lg font-extrabold text-blue-700">
+                  {(submissionStats?.turnedInCount ?? 0) + (submissionStats?.gradedCount ?? 0) ||
+                    (assignment.turnedInCount ?? 0)}
+                </p>
+              </div>
+              <div className="rounded-xl border border-emerald-100 bg-emerald-50/50 p-3">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600">
+                  Sudah Dinilai
+                </span>
+                <p className="mt-1 text-lg font-extrabold text-emerald-700">
+                  {submissionStats?.gradedCount ?? assignment.gradedCount ?? 0}
+                </p>
+              </div>
+              <div className="rounded-xl border border-amber-100 bg-amber-50/50 p-3">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-amber-600">
+                  Belum Mengumpulkan
+                </span>
+                <p className="mt-1 text-lg font-extrabold text-amber-700">
+                  {submissionStats?.assignedCount ??
+                    Math.max(0, submissionItems.filter((s) => s.status === "assigned").length)}
+                </p>
+              </div>
+            </div>
+
+            {/* Student Submissions Table */}
+            {submissionItems.length === 0 ? (
+              <p className="py-4 text-center text-xs text-slate-400 italic">
+                Belum ada data daftar siswa atau pengumpulan untuk ditampilkan.
+              </p>
+            ) : (
+              <div className="overflow-x-auto rounded-xl border border-slate-100">
+                <table className="w-full text-left text-xs">
+                  <thead className="border-b border-slate-100 bg-slate-50/80 text-[10px] font-extrabold uppercase tracking-wider text-slate-500">
+                    <tr>
+                      <th className="px-3.5 py-2.5">Siswa</th>
+                      <th className="px-3.5 py-2.5">Status</th>
+                      <th className="px-3.5 py-2.5">Waktu Kumpul</th>
+                      <th className="px-3.5 py-2.5 text-right">Nilai / Hasil</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {submissionItems.map((item) => {
+                      const isGraded = item.status === "graded";
+                      const isTurnedIn = item.status === "turned_in";
+                      const isLate = item.status === "late";
+                      const displayScore = item.normalizedScore ?? item.score;
+
+                      return (
+                        <tr key={item.student._id} className="hover:bg-slate-50/60 transition">
+                          <td className="px-3.5 py-2.5">
+                            <p className="font-bold text-slate-900">{item.student.name}</p>
+                            <p className="text-[10px] font-mono text-slate-400">
+                              NISN: {item.student.nisn || "-"}
+                            </p>
+                          </td>
+                          <td className="px-3.5 py-2.5">
+                            {item.isPendingManual || item.gradingStatus === "pending_manual" ? (
+                              <span className="inline-flex rounded-md bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-800">
+                                Perlu Nilai Essay
+                              </span>
+                            ) : isGraded ? (
+                              <span className="inline-flex rounded-md bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
+                                Sudah Dinilai
+                              </span>
+                            ) : isLate ? (
+                              <span className="inline-flex rounded-md bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-800">
+                                Terlambat
+                              </span>
+                            ) : isTurnedIn ? (
+                              <span className="inline-flex rounded-md bg-blue-100 px-2 py-0.5 text-[10px] font-bold text-blue-800">
+                                Diserahkan
+                              </span>
+                            ) : (
+                              <span className="inline-flex rounded-md bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-500">
+                                Belum Mengumpulkan
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-3.5 py-2.5 text-slate-500">
+                            {item.submittedAt
+                              ? new Date(item.submittedAt).toLocaleDateString("id-ID", {
+                                  day: "numeric",
+                                  month: "short",
+                                  year: "numeric",
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                })
+                              : "-"}
+                          </td>
+                          <td className="px-3.5 py-2.5 text-right">
+                            {displayScore !== null && displayScore !== undefined ? (
+                              <div>
+                                <span className="font-extrabold text-emerald-700">
+                                  {displayScore} / {assignment.maxScore || 100}
+                                </span>
+                                {isQuiz &&
+                                  typeof item.rawScore === "number" &&
+                                  typeof item.maxRawScore === "number" && (
+                                    <p className="text-[10px] text-slate-400">
+                                      Mentah: {item.rawScore}/{item.maxRawScore}
+                                    </p>
+                                  )}
+                              </div>
+                            ) : (
+                              <span className="text-slate-400">-</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Right Column (4 cols): Kolom Komentar */}
@@ -507,17 +779,17 @@ export default function AssignmentDetailPage({
           <ThreadedComments
             comments={comments}
             currentUserId={assignment.currentUserId}
-            currentUserRole={assignment.currentUserRole || "guru"}
+            currentUserRole={userRole}
             apiEndpoint={`/api/guru/assignments/${id}/comments`}
             onCommentsUpdated={(updated) => setComments(updated)}
-            canComment={!["admin", "kurikulum", "kepsek"].includes(assignment.currentUserRole || "")}
+            canComment={canComment}
             title="Kolom Komentar"
           />
         </div>
       </div>
 
       {/* Floating Action Button at Bottom Right: Blue Circular Edit/Pencil */}
-      {!["admin", "kurikulum", "kepsek"].includes(assignment.currentUserRole || "") && (
+      {canManageContent && (
         <div className="fixed bottom-6 right-8 z-40">
           <Link
             href={`/guru/assignments/${id}/edit`}

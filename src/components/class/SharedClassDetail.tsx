@@ -22,9 +22,14 @@ import {
   Send,
   Users,
   Eye,
+  ExternalLink,
   CornerDownRight,
   Trash2,
   X,
+  CheckCircle2,
+  AlertTriangle,
+  UserCheck,
+  UserX,
 } from "lucide-react";
 import { validateComment } from "@/lib/profanity-filter";
 
@@ -124,6 +129,31 @@ interface ClassDetailData {
   };
   students: StudentInfo[];
   studentCount: number;
+  enrollmentMonitoring?: {
+    rombelId: string | null;
+    rombelName: string;
+    totalActiveRombelStudents: number;
+    enrolledCount: number;
+    missingCount: number;
+    completionPercentage: number;
+    enrollmentStatus: "Complete" | "Incomplete" | "No active students" | "Unassigned";
+    enrolledStudents: Array<{
+      _id: string;
+      name: string;
+      nis: string;
+      nisn: string;
+      email: string;
+      rombelName: string;
+    }>;
+    missingStudents: Array<{
+      _id: string;
+      name: string;
+      nis: string;
+      nisn: string;
+      email: string;
+      rombelName: string;
+    }>;
+  };
   assignments: AssignmentItem[];
   quizzes: QuizItem[];
   posts: PostItem[];
@@ -460,8 +490,10 @@ export function SharedClassDetail({
                   const isDone =
                     quiz.submissionStatus === "turned_in" || quiz.submissionStatus === "graded";
 
-                  // Entire container is clickable: routes to quiz detail (read-only for staff)
-                  const targetUrl = `/siswa/quiz/${quiz._id}`;
+                  // Route staff/admin/kepsek to the full Tugas/Kuis detail view, and students to the student quiz view
+                  const targetUrl = ["admin", "kepsek", "guru"].includes(userRole)
+                    ? `/guru/quizzes/${quiz._id}`
+                    : `/siswa/quiz/${quiz._id}`;
 
                   return (
                     <div
@@ -499,8 +531,8 @@ export function SharedClassDetail({
                           </div>
                         </div>
 
-                        {/* Status Badge */}
-                        <div className="shrink-0">
+                        {/* Status Badge & Detail Button */}
+                        <div className="shrink-0 flex flex-col sm:flex-row items-end sm:items-center gap-2">
                           <span
                             className={`rounded-xl px-3 py-1 text-xs font-black uppercase tracking-wider shadow-xs ${
                               isReadOnly
@@ -522,6 +554,14 @@ export function SharedClassDetail({
                               ? "Terlambat"
                               : "Belum dikerjakan"}
                           </span>
+                          <Link
+                            href={targetUrl}
+                            onClick={(e) => e.stopPropagation()}
+                            className="inline-flex items-center gap-1.5 rounded-xl bg-white px-3 py-1 text-xs font-bold text-blue-700 shadow-xs transition hover:bg-blue-50"
+                          >
+                            <span>Detail</span>
+                            <ExternalLink className="size-3" />
+                          </Link>
                         </div>
                       </div>
                     </div>
@@ -538,12 +578,10 @@ export function SharedClassDetail({
                       })
                     : "Tanpa batas waktu";
 
-                  const isDone =
-                    assignment.submissionStatus === "turned_in" ||
-                    assignment.submissionStatus === "graded";
-
-                  // Entire container is clickable:
-                  const targetUrl = `/siswa/assignments/${assignment._id}`;
+                  // Route staff/admin/kepsek to the full Tugas/Kuis detail view, and students to the student assignment view
+                  const targetUrl = ["admin", "kepsek", "guru"].includes(userRole)
+                    ? `/guru/assignments/${assignment._id}`
+                    : `/siswa/assignments/${assignment._id}`;
 
                   return (
                     <div
@@ -575,8 +613,8 @@ export function SharedClassDetail({
                           </div>
                         </div>
 
-                        {/* Status Badge */}
-                        <div className="shrink-0">
+                        {/* Status Badge & Detail Button */}
+                        <div className="shrink-0 flex flex-col sm:flex-row items-end sm:items-center gap-2">
                           <span
                             className={`rounded-xl px-3 py-1 text-xs font-black uppercase tracking-wider ${
                               isReadOnly
@@ -600,6 +638,14 @@ export function SharedClassDetail({
                               ? "Terlambat"
                               : "Belum dikerjakan"}
                           </span>
+                          <Link
+                            href={targetUrl}
+                            onClick={(e) => e.stopPropagation()}
+                            className="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 px-3 py-1 text-xs font-bold text-white shadow-xs transition hover:bg-blue-700"
+                          >
+                            <span>Detail</span>
+                            <ExternalLink className="size-3" />
+                          </Link>
                         </div>
                       </div>
                     </div>
@@ -656,19 +702,158 @@ export function SharedClassDetail({
 
       </div>
 
-      {/* DAFTAR SISWA Section (per user request section 2 & 3.E) */}
+      {/* KELENGKAPAN ENROLLMENT SISWA ROMBEL Section (Task 2.2 - 2.6) */}
       <section className="mt-8 space-y-4">
-        <div className="flex items-center justify-between border-b border-slate-200 pb-3">
-          <h2 className="font-[family-name:var(--font-display)] text-xl font-extrabold text-slate-900 flex items-center gap-2">
-            <Users className="size-5 text-blue-600" />
-            Daftar Siswa Terdaftar
-          </h2>
-          <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-700">
-            {students.length} Siswa
-          </span>
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 pb-3">
+          <div>
+            <h2 className="font-[family-name:var(--font-display)] text-xl font-extrabold text-slate-900 flex items-center gap-2">
+              <Users className="size-5 text-blue-600" />
+              Status Enrollment Siswa Rombel {course.rombel?.name || course.enrollmentMonitoring?.rombelName || ""}
+            </h2>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Perbandingan siswa aktif di Rombel dengan siswa yang terdaftar pada Kelas Mapel <strong>{course.name}</strong>
+            </p>
+          </div>
+          {course.enrollmentMonitoring ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-700">
+                Enrolled: {course.enrollmentMonitoring.enrolledCount} / {course.enrollmentMonitoring.totalActiveRombelStudents}
+              </span>
+              <span
+                className={`rounded-full px-3 py-1 text-xs font-bold ${
+                  course.enrollmentMonitoring.missingCount > 0
+                    ? "bg-amber-100 text-amber-800"
+                    : "bg-emerald-100 text-emerald-800"
+                }`}
+              >
+                Missing: {course.enrollmentMonitoring.missingCount}
+              </span>
+              <span
+                className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-extrabold ${
+                  course.enrollmentMonitoring.enrollmentStatus === "Complete"
+                    ? "bg-emerald-100 text-emerald-800"
+                    : course.enrollmentMonitoring.enrollmentStatus === "No active students"
+                    ? "bg-slate-100 text-slate-600"
+                    : "bg-amber-100 text-amber-800"
+                }`}
+              >
+                {course.enrollmentMonitoring.enrollmentStatus === "Complete" ? (
+                  <CheckCircle2 className="size-3.5 text-emerald-600" />
+                ) : (
+                  <AlertTriangle className="size-3.5 text-amber-600" />
+                )}
+                Status: {course.enrollmentMonitoring.enrollmentStatus} ({course.enrollmentMonitoring.completionPercentage}%)
+              </span>
+            </div>
+          ) : (
+            <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-700">
+              {students.length} Siswa
+            </span>
+          )}
         </div>
 
-        {students.length === 0 ? (
+        {course.enrollmentMonitoring ? (
+          <div className="grid gap-6 md:grid-cols-2">
+            {/* 1. Students Enrolled */}
+            <div className="overflow-hidden rounded-2xl border border-emerald-200 bg-white shadow-xs flex flex-col">
+              <div className="border-b border-emerald-100 bg-emerald-50/70 px-5 py-3.5 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <UserCheck className="size-4 text-emerald-700" />
+                  <h3 className="text-xs font-extrabold uppercase tracking-wider text-emerald-950">
+                    Students Enrolled (Sudah Terdaftar)
+                  </h3>
+                </div>
+                <span className="rounded-full bg-emerald-200/80 px-2.5 py-0.5 text-xs font-black text-emerald-900">
+                  {course.enrollmentMonitoring.enrolledStudents.length} Siswa
+                </span>
+              </div>
+              <div className="max-h-80 overflow-y-auto divide-y divide-slate-100">
+                {course.enrollmentMonitoring.enrolledStudents.length === 0 ? (
+                  <div className="p-8 text-center text-xs text-slate-400">
+                    Belum ada siswa aktif rombel ini yang terdaftar di Kelas Mapel ini.
+                  </div>
+                ) : (
+                  course.enrollmentMonitoring.enrolledStudents.map((st, idx) => (
+                    <div
+                      key={st._id || idx}
+                      className="flex items-center justify-between p-3.5 hover:bg-slate-50 transition"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-xs font-extrabold text-emerald-700">
+                          {st.name ? st.name.charAt(0).toUpperCase() : "S"}
+                        </div>
+                        <div>
+                          <p className="text-xs font-bold text-slate-900">{st.name}</p>
+                          <p className="text-[10px] text-slate-500">
+                            {st.nis && st.nis !== "-"
+                              ? `NIS: ${st.nis}`
+                              : st.nisn && st.nisn !== "-"
+                              ? `NISN: ${st.nisn}`
+                              : st.email}
+                          </p>
+                        </div>
+                      </div>
+                      <span className="rounded-md bg-emerald-50 border border-emerald-200 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
+                        {st.rombelName || course.rombel?.name || "-"}
+                      </span>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
+            {/* 2. Students Not Yet Enrolled (Missing) */}
+            <div className="overflow-hidden rounded-2xl border border-amber-200 bg-white shadow-xs flex flex-col">
+              <div className="border-b border-amber-100 bg-amber-50/70 px-5 py-3.5 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <UserX className="size-4 text-amber-700" />
+                  <h3 className="text-xs font-extrabold uppercase tracking-wider text-amber-950">
+                    Students Not Yet Enrolled (Belum Terdaftar)
+                  </h3>
+                </div>
+                <span className="rounded-full bg-amber-200/80 px-2.5 py-0.5 text-xs font-black text-amber-900">
+                  {course.enrollmentMonitoring.missingStudents.length} Siswa
+                </span>
+              </div>
+              <div className="max-h-80 overflow-y-auto divide-y divide-slate-100">
+                {course.enrollmentMonitoring.missingStudents.length === 0 ? (
+                  <div className="p-8 text-center">
+                    <CheckCircle2 className="mx-auto size-8 text-emerald-500 mb-2" />
+                    <p className="text-xs font-bold text-emerald-800">
+                      Seluruh siswa aktif pada rombel ini sudah terdaftar di Kelas Mapel ini.
+                    </p>
+                  </div>
+                ) : (
+                  course.enrollmentMonitoring.missingStudents.map((st, idx) => (
+                    <div
+                      key={st._id || idx}
+                      className="flex items-center justify-between p-3.5 hover:bg-amber-50/40 transition"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-amber-100 text-xs font-extrabold text-amber-800">
+                          {st.name ? st.name.charAt(0).toUpperCase() : "S"}
+                        </div>
+                        <div>
+                          <p className="text-xs font-bold text-slate-900">{st.name}</p>
+                          <p className="text-[10px] text-slate-500">
+                            {st.nis && st.nis !== "-"
+                              ? `NIS: ${st.nis}`
+                              : st.nisn && st.nisn !== "-"
+                              ? `NISN: ${st.nisn}`
+                              : st.email}
+                          </p>
+                        </div>
+                      </div>
+                      <span className="rounded-md bg-amber-50 border border-amber-200 px-2 py-0.5 text-[10px] font-bold text-amber-800">
+                        {st.rombelName || course.rombel?.name || "-"}
+                      </span>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        ) : students.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-8 text-center text-slate-400">
             Belum ada siswa terdaftar di kelas mapel ini.
           </div>

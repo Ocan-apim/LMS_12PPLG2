@@ -3,6 +3,10 @@ import { connectDB } from "@/lib/mongodb";
 import { requireRole } from "@/lib/session";
 import { CourseClass, Assignment, Submission, ClassPost, Material, Quiz, ClassModel, User } from "@/models";
 import { resolveSubmissionScoring } from "@/lib/quiz-scoring";
+import {
+  getActiveStudentsForRombelDetailed,
+  calculateCourseEnrollmentCompleteness,
+} from "@/lib/rombel-enrollment";
 
 type RouteContext = {
   params: Promise<{ id: string }>;
@@ -32,7 +36,7 @@ export async function GET(req: Request, context: RouteContext) {
       .populate("teacherId", "name email degree nip")
       .populate("subjectId", "name code category")
       .populate("classRombelId", "name grade")
-      .populate("studentIds", "name nisn email gender")
+      .populate("studentIds", "name nis nisn email gender")
       .lean();
 
     // 2. If not found by direct ID, check if id is a ClassModel (Rombel)
@@ -40,7 +44,7 @@ export async function GET(req: Request, context: RouteContext) {
       const rombel: any = await ClassModel.findById(id)
         .populate("homeroomTeacherId", "name email degree nip")
         .populate("departmentId", "name code")
-        .populate("studentIds", "name nisn email gender")
+        .populate("studentIds", "name nis nisn email gender")
         .lean();
 
       if (rombel) {
@@ -52,7 +56,7 @@ export async function GET(req: Request, context: RouteContext) {
         })
           .populate("teacherId", "name email degree nip")
           .populate("subjectId", "name code category")
-          .populate("studentIds", "name nisn email gender")
+          .populate("studentIds", "name nis nisn email gender")
           .lean();
 
         siblingClasses = foundCourses;
@@ -67,7 +71,7 @@ export async function GET(req: Request, context: RouteContext) {
             .populate("teacherId", "name email degree nip")
             .populate("subjectId", "name code category")
             .populate("classRombelId", "name grade")
-            .populate("studentIds", "name nisn email gender")
+            .populate("studentIds", "name nis nisn email gender")
             .lean();
         } else {
           // Rombel exists but has no CourseClass yet
@@ -118,7 +122,7 @@ export async function GET(req: Request, context: RouteContext) {
         .lean();
     }
 
-    // Verify membership: for student, session.id must be in studentIds OR in student's rombel
+    // Verify membership: for student, session.id must be in studentIds OR in student's rombel (if enrollmentMethod === "rombel")
     const rawStudentIds = Array.isArray(courseClass.studentIds)
       ? courseClass.studentIds.map((s: any) => (s && s._id ? String(s._id) : String(s)))
       : [];
@@ -132,7 +136,9 @@ export async function GET(req: Request, context: RouteContext) {
       ? courseClass.assignedRombelIds.map((r: any) => String(r._id || r))
       : [];
 
+    const isAutoRombelClass = (courseClass.enrollmentMethod || "rombel") === "rombel";
     const isMemberByRombel =
+      isAutoRombelClass &&
       Boolean(studentRombelId) &&
       (studentRombelId === classRombelIdStr || assignedRombelIdStrs.includes(studentRombelId));
 
@@ -143,8 +149,8 @@ export async function GET(req: Request, context: RouteContext) {
       );
     }
 
-    // Auto-heal enrollment if member by rombel
-    if (isStudent && !rawStudentIds.includes(session.id) && isMemberByRombel) {
+    // Auto-heal enrollment ONLY if student is accessing an automatic-rombel class
+    if (isStudent && isAutoRombelClass && !rawStudentIds.includes(session.id) && isMemberByRombel) {
       await CourseClass.findByIdAndUpdate(courseClass._id, {
         $addToSet: { studentIds: session.id },
       });
@@ -275,6 +281,7 @@ export async function GET(req: Request, context: RouteContext) {
       ? courseClass.studentIds.map((st: any) => ({
           _id: String(st._id || st),
           name: st.name || "Siswa",
+          nis: st.nis || "-",
           nisn: st.nisn || "-",
           email: st.email || "-",
           gender: st.gender || "-",
@@ -292,19 +299,34 @@ export async function GET(req: Request, context: RouteContext) {
         : "Guru Pengampu",
     }));
 
+    // TASK 2.3 - 2.6: Compute pure read-only Enrollment Completeness Monitoring for the assigned Rombel
+    const resolvedRombel = courseClass.classRombelId || rombelInfo;
+    const resolvedRombelId = resolvedRombel ? String(resolvedRombel._id || resolvedRombel) : null;
+    const resolvedRombelName = resolvedRombel?.name || "-";
+    const activeRombelStudents = resolvedRombelId
+      ? await getActiveStudentsForRombelDetailed(resolvedRombelId, resolvedRombelName)
+      : [];
+    const enrollmentMonitoring = calculateCourseEnrollmentCompleteness(
+      courseClass,
+      activeRombelStudents,
+      resolvedRombelName
+    );
+
     return NextResponse.json({
       success: true,
       data: {
         _id: String(courseClass._id),
         name: courseClass.name,
         code: courseClass.code,
+        enrollmentMethod: courseClass.enrollmentMethod || "rombel",
         bannerColor: courseClass.bannerColor || "blue",
         academicYear: courseClass.academicYear,
         teacher: courseClass.teacherId,
         subject: courseClass.subjectId,
-        rombel: courseClass.classRombelId || rombelInfo,
+        rombel: resolvedRombel,
         students: studentsList,
         studentCount: studentsList.length,
+        enrollmentMonitoring,
         assignments: enrichedAssignments,
         quizzes: enrichedQuizzes,
         posts,

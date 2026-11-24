@@ -185,9 +185,9 @@ export default function KepsekTeachersPage() {
                       <div className="grid gap-2.5">
                         {teacher.activities.map((act) => {
                           const isQuiz = act.activityType === "kuis";
-                          // Detail button routes directly to assignment detail or quiz detail in read-only mode
+                          // Detail button routes directly to the shared Guru assignment/quiz detail page
                           const detailUrl = isQuiz
-                            ? `/siswa/quiz/${act._id}`
+                            ? `/guru/quizzes/${act._id}`
                             : `/guru/assignments/${act._id}`;
 
                           return (

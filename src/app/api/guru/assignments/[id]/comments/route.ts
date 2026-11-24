@@ -48,7 +48,36 @@ async function findAssignmentOrQuizById(id: string, selectFields?: string) {
 
   const quizQuery = Quiz.findById(id);
   if (selectFields) quizQuery.select(selectFields);
-  return await quizQuery;
+  const quiz = await quizQuery;
+  if (quiz) {
+    // If a linked Assignment exists for this Quiz, return the linked Assignment if it holds comments, or sync
+    const linkedAssignment = await Assignment.findOne({
+      quizId: quiz._id,
+      isArchived: { $ne: true },
+    });
+    if (linkedAssignment) {
+      // Merge any comments that were saved directly on Quiz into linkedAssignment so both stay unified
+      if (Array.isArray(quiz.comments) && quiz.comments.length > 0) {
+        const existingIds = new Set(
+          (linkedAssignment.comments || []).map((c: { _id?: unknown }) =>
+            String(c._id)
+          )
+        );
+        let addedAny = false;
+        for (const qc of quiz.comments) {
+          if (qc._id && !existingIds.has(String(qc._id))) {
+            linkedAssignment.comments.push(qc);
+            addedAny = true;
+          }
+        }
+        if (addedAny) {
+          await linkedAssignment.save();
+        }
+      }
+      return linkedAssignment;
+    }
+  }
+  return quiz;
 }
 
 async function isStudentEnrolledInAssignmentClass(studentId: string, courseClassId: unknown): Promise<boolean> {

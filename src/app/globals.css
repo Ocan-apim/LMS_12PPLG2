@@ -2,26 +2,84 @@
 @source "..";
 
 :root {
-  --background: #f6f9ff;
-  --foreground: #20232d;
-  --muted: #69717f;
-  --border: #d9deeb;
+  color-scheme: light dark;
+
+  &:has(> head > meta[name="color-scheme"][content="dark"]) {
+    color-scheme: dark;
+  }
+  &:has(> head > meta[name="color-scheme"][content="light"]) {
+    color-scheme: light;
+  }
+
+  /* Light Mode Semantic Tokens */
+  --app-bg: #eef3f9;
+  --background: #eef3f9;
+  --foreground: #1e293b;
+  --muted: #64748b;
+  --border: #d5dfed;
   --surface: #ffffff;
-  --sidebar: #0d6ccf;
-  --sidebar-dark: #075bb4;
+  --surface-subtle: #f4f7fc;
+  --surface-gradient:
+    radial-gradient(circle at 100% 0%, rgba(13, 108, 207, 0.08) 0%, rgba(13, 108, 207, 0.02) 32%, transparent 65%),
+    linear-gradient(180deg, #ffffff 0%, #fcfdff 100%);
+  --surface-gradient-accent:
+    radial-gradient(circle at 0% 0%, rgba(13, 108, 207, 0.1) 0%, transparent 52%),
+    radial-gradient(circle at 100% 100%, rgba(13, 108, 207, 0.06) 0%, transparent 48%),
+    #ffffff;
+
+  /* Task 7: Darker Blue Sidebar (#164A80) Across All 5 Roles in Light & Dark Mode */
+  --sidebar: #164a80;
+  --sidebar-dark: #0f3863;
   --sidebar-fg: #eff6ff;
-  --primary: #0868cf;
+
+  --primary: #0d6ccf;
   --primary-hover: #075ab5;
-  --primary-soft: #e7f1ff;
-  --secondary: #6f56dc;
-  --secondary-soft: #eee9ff;
+  --primary-soft: #e6f0fd;
+  --secondary: #0d6ccf;
+  --secondary-soft: #e6f0fd;
   --accent: #009688;
   --accent-hover: #ea580c;
   --accent-soft: #d7fbf4;
   --success: #16a34a;
   --danger: #dc2626;
-  --shadow: 0 10px 32px rgba(15, 35, 80, 0.08);
-  --shadow-strong: 0 18px 48px rgba(15, 23, 42, 0.12);
+  --shadow: 0 10px 30px rgba(13, 72, 145, 0.07);
+  --shadow-strong: 0 18px 48px rgba(13, 72, 145, 0.13);
+}
+
+/* Task 6 & 9: Centralized Dark Mode Semantic Tokens */
+html.dark {
+  --app-bg: #0b1120;
+  --background: #0b1120;
+  --foreground: #f1f5f9;
+  --muted: #94a3b8;
+  --border: #24324d;
+  --surface: #131c31;
+  --surface-subtle: #1a2540;
+  --surface-gradient:
+    radial-gradient(circle at 100% 0%, rgba(59, 130, 246, 0.14) 0%, rgba(59, 130, 246, 0.04) 36%, transparent 68%),
+    linear-gradient(180deg, #131c31 0%, #10182b 100%);
+  --surface-gradient-accent:
+    radial-gradient(circle at 0% 0%, rgba(59, 130, 246, 0.16) 0%, transparent 55%),
+    radial-gradient(circle at 100% 100%, rgba(59, 130, 246, 0.1) 0%, transparent 50%),
+    #131c31;
+
+  /* Sidebar stays deep navy-blue (#164A80) in both Light Mode and Dark Mode */
+  --sidebar: #164a80;
+  --sidebar-dark: #0f3863;
+  --sidebar-fg: #eff6ff;
+
+  --primary: #3b82f6;
+  --primary-hover: #2563eb;
+  --primary-soft: rgba(59, 130, 246, 0.18);
+  --secondary: #3b82f6;
+  --secondary-soft: rgba(59, 130, 246, 0.18);
+  --accent: #14b8a6;
+  --accent-hover: #f97316;
+  --accent-soft: rgba(20, 184, 166, 0.18);
+  --success: #22c55e;
+  --danger: #ef4444;
+  --shadow: 0 12px 32px rgba(2, 6, 23, 0.45);
+  --shadow-strong: 0 20px 50px rgba(2, 6, 23, 0.65);
 }
 
 @theme inline {
@@ -33,11 +91,270 @@
 
 body {
   background:
-    radial-gradient(circle at 15% 20%, rgba(13, 108, 207, 0.08), transparent 28%),
-    radial-gradient(circle at 88% 78%, rgba(0, 150, 136, 0.08), transparent 30%),
-    var(--background);
+    radial-gradient(circle at 12% 16%, rgba(13, 108, 207, 0.08), transparent 32%),
+    radial-gradient(circle at 88% 82%, rgba(13, 108, 207, 0.06), transparent 34%),
+    var(--app-bg);
   color: var(--foreground);
   font-family: var(--font-body), system-ui, sans-serif;
+}
+
+/* Task 8: Public Landing Page (/) strictly excluded from Dark Mode */
+[data-landing-page="true"] {
+  color-scheme: light !important;
+  --app-bg: #f6f9ff;
+  --background: #f6f9ff;
+  --foreground: #20232d;
+  --muted: #69717f;
+  --border: #d9deeb;
+  --surface: #ffffff;
+  --primary: #0868cf;
+  --primary-hover: #075ab5;
+  --primary-soft: #e7f1ff;
+}
+
+/* Subtle Learnix Blue corner gradients on internal white content containers (Light Mode) */
+main :is(.bg-white, .bg-white\/95):not(input):not(select):not(textarea):not(button) {
+  background-image: var(--surface-gradient);
+}
+
+/* ============================================================================
+   Centralized Dark Mode Adaptation for Login & Internal LMS Pages (All 5 Roles)
+   Strictly excludes the public Landing Page ([data-landing-page="true"])
+   and preserves the #164A80 Sidebar ([data-sidebar="true"]).
+   ============================================================================ */
+html.dark body:not(:has([data-landing-page="true"])) {
+  background:
+    radial-gradient(circle at 12% 16%, rgba(59, 130, 246, 0.12), transparent 34%),
+    radial-gradient(circle at 88% 82%, rgba(30, 64, 175, 0.14), transparent 36%),
+    var(--app-bg);
+  color: var(--foreground);
+}
+
+/* Surfaces & Containers in Dark Mode */
+html.dark body:not(:has([data-landing-page="true"])) :is(
+  .bg-white,
+  .bg-white\/95,
+  .bg-white\/90,
+  .bg-\[\#fbfbfd\],
+  .bg-\[\#fffbff\],
+  .bg-\[\#fbf8ff\],
+  .bg-\[\#fbf9ff\]
+):not([data-sidebar="true"] *):not(.text-blue-700):not(.text-\[var\(--primary\)\]):not(.text-\[var\(--sidebar\)\]) {
+  background-color: var(--surface) !important;
+  background-image: var(--surface-gradient) !important;
+  color: var(--foreground);
+}
+
+html.dark body:not(:has([data-landing-page="true"])) :is(
+  .bg-slate-50,
+  .bg-slate-50\/50,
+  .bg-slate-50\/60,
+  .bg-slate-50\/70,
+  .bg-slate-50\/80,
+  .bg-slate-50\/40,
+  .bg-\[\#f4f6ff\],
+  .bg-\[\#f6f9ff\]
+):not([data-sidebar="true"] *) {
+  background-color: var(--surface-subtle) !important;
+}
+
+html.dark body:not(:has([data-landing-page="true"])) :is(
+  .bg-slate-100,
+  .bg-slate-200\/60
+):not([data-sidebar="true"] *) {
+  background-color: #1e293b !important;
+}
+
+/* Borders & Dividers in Dark Mode */
+html.dark body:not(:has([data-landing-page="true"])) :is(
+  .border-slate-100,
+  .border-slate-200,
+  .border-slate-200\/80,
+  .border-slate-300,
+  .border-\[\#e4e6ef\],
+  .border-\[\#d9deeb\],
+  .border-\[\#d9cfee\],
+  .border-\[\#ded4ff\]
+):not([data-sidebar="true"] *) {
+  border-color: var(--border) !important;
+}
+
+html.dark body:not(:has([data-landing-page="true"])) :is(
+  .divide-slate-100,
+  .divide-slate-200
+) > :not([hidden]) ~ :not([hidden]) {
+  border-color: var(--border) !important;
+}
+
+/* Typography Hierarchy in Dark Mode */
+html.dark body:not(:has([data-landing-page="true"])) :is(
+  .text-slate-900,
+  .text-slate-800,
+  .text-\[\#20232d\],
+  .text-\[\#141821\]
+):not([data-sidebar="true"] *) {
+  color: #f1f5f9 !important;
+}
+
+html.dark body:not(:has([data-landing-page="true"])) :is(
+  .text-slate-700,
+  .text-slate-600
+):not([data-sidebar="true"] *) {
+  color: #cbd5e1 !important;
+}
+
+html.dark body:not(:has([data-landing-page="true"])) :is(
+  .text-slate-500,
+  .text-slate-400
+):not([data-sidebar="true"] *) {
+  color: #94a3b8 !important;
+}
+
+/* Soft Status & Semantic Tints in Dark Mode */
+html.dark body:not(:has([data-landing-page="true"])) :is(
+  .bg-blue-50,
+  .bg-blue-50\/40,
+  .bg-blue-50\/50,
+  .bg-blue-50\/70,
+  .bg-blue-50\/80,
+  .bg-blue-50\/90,
+  .bg-\[\#e5f1ff\],
+  .bg-\[\#eee9ff\],
+  .bg-\[\#f4edff\]
+):not([data-sidebar="true"] *) {
+  background-color: rgba(59, 130, 246, 0.16) !important;
+}
+
+html.dark body:not(:has([data-landing-page="true"])) :is(
+  .text-blue-900,
+  .text-blue-950,
+  .text-blue-800,
+  .text-blue-700
+):not([data-sidebar="true"] *):not(.bg-white) {
+  color: #93c5fd !important;
+}
+
+html.dark body:not(:has([data-landing-page="true"])) :is(
+  .border-blue-100,
+  .border-blue-200,
+  .border-blue-300
+):not([data-sidebar="true"] *) {
+  border-color: rgba(59, 130, 246, 0.35) !important;
+}
+
+html.dark body:not(:has([data-landing-page="true"])) :is(
+  .bg-emerald-50,
+  .bg-emerald-50\/20,
+  .bg-emerald-50\/70,
+  .bg-emerald-100,
+  .bg-emerald-100\/60,
+  .bg-\[\#f4fbf8\],
+  .bg-\[\#e3f6f2\]
+):not([data-sidebar="true"] *) {
+  background-color: rgba(16, 185, 129, 0.16) !important;
+}
+
+html.dark body:not(:has([data-landing-page="true"])) :is(
+  .text-emerald-950,
+  .text-emerald-900,
+  .text-emerald-800,
+  .text-emerald-700,
+  .text-\[\#00796f\]
+):not([data-sidebar="true"] *) {
+  color: #6ee7b7 !important;
+}
+
+html.dark body:not(:has([data-landing-page="true"])) :is(
+  .border-emerald-100,
+  .border-emerald-200
+):not([data-sidebar="true"] *) {
+  border-color: rgba(16, 185, 129, 0.35) !important;
+}
+
+html.dark body:not(:has([data-landing-page="true"])) :is(
+  .bg-amber-50,
+  .bg-amber-50\/30,
+  .bg-amber-50\/60,
+  .bg-amber-50\/70,
+  .bg-amber-50\/80,
+  .bg-amber-100,
+  .bg-amber-100\/70
+):not([data-sidebar="true"] *) {
+  background-color: rgba(245, 158, 11, 0.16) !important;
+}
+
+html.dark body:not(:has([data-landing-page="true"])) :is(
+  .text-amber-950,
+  .text-amber-900,
+  .text-amber-800,
+  .text-amber-700
+):not([data-sidebar="true"] *) {
+  color: #fcd34d !important;
+}
+
+html.dark body:not(:has([data-landing-page="true"])) :is(
+  .border-amber-100,
+  .border-amber-200
+):not([data-sidebar="true"] *) {
+  border-color: rgba(245, 158, 11, 0.35) !important;
+}
+
+html.dark body:not(:has([data-landing-page="true"])) :is(
+  .bg-rose-50,
+  .bg-rose-50\/70,
+  .bg-rose-100,
+  .bg-red-50,
+  .bg-red-50\/60,
+  .bg-red-100
+):not([data-sidebar="true"] *) {
+  background-color: rgba(244, 63, 94, 0.16) !important;
+}
+
+html.dark body:not(:has([data-landing-page="true"])) :is(
+  .text-rose-700,
+  .text-rose-600,
+  .text-red-700,
+  .text-red-600
+):not([data-sidebar="true"] *) {
+  color: #fda4af !important;
+}
+
+html.dark body:not(:has([data-landing-page="true"])) :is(
+  .border-rose-100,
+  .border-rose-200,
+  .border-red-100,
+  .border-red-200
+):not([data-sidebar="true"] *) {
+  border-color: rgba(244, 63, 94, 0.35) !important;
+}
+
+/* Inputs, Selects, Textareas in Dark Mode */
+html.dark body:not(:has([data-landing-page="true"])) :is(
+  input:not([type="checkbox"]):not([type="radio"]),
+  select,
+  textarea
+):not([data-sidebar="true"] *) {
+  background-color: #0f172a !important;
+  background-image: none !important;
+  color: #f1f5f9 !important;
+  border-color: #283754 !important;
+}
+
+html.dark body:not(:has([data-landing-page="true"])) :is(
+  input::placeholder,
+  textarea::placeholder
+) {
+  color: #64748b !important;
+}
+
+/* Table row hover in Dark Mode */
+html.dark body:not(:has([data-landing-page="true"])) :is(
+  .hover\:bg-slate-50:hover,
+  .hover\:bg-slate-50\/80:hover,
+  .hover\:bg-slate-50\/50:hover,
+  .hover\:bg-slate-100:hover
+):not([data-sidebar="true"] *) {
+  background-color: #1e293b !important;
 }
 
 html {

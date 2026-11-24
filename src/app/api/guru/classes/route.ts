@@ -1,19 +1,10 @@
 import { NextResponse } from "next/server";
 import mongoose from "mongoose";
 import { connectDB } from "@/lib/mongodb";
-import {
-  getActiveStudentIdsForRombel,
-  syncRombelStudents,
-} from "@/lib/rombel-enrollment";
 import { requireRole } from "@/lib/session";
-import {
-  CourseClass,
-  ClassModel,
-  Assignment,
-  Notification,
-} from "@/models";
+import { CourseClass, ClassModel, Assignment, Subject, Quiz } from "@/models";
+import { getActiveStudentIdsForRombel, syncRombelStudents } from "@/lib/rombel-enrollment";
 
-// Helper to generate a 5-character unique class code (existing invitation code generator)
 function generateClassCode(): string {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   let code = "";
@@ -23,81 +14,97 @@ function generateClassCode(): string {
   return code;
 }
 
-export async function GET() {
-  const { session, error } = await requireRole(["guru", "admin"]);
+export async function GET(req: Request) {
+  const { session, error } = await requireRole(["guru", "admin", "kurikulum", "kepsek"]);
   if (error || !session) return error;
 
   try {
     await connectDB();
 
-    // First find active classes for this teacher to sync any rombel-assigned classes
-    const initialClasses = (await CourseClass.find({
-      teacherId: session.id,
+    const { searchParams } = new URL(req.url);
+    const search = searchParams.get("search") || "";
+    const academicYear = searchParams.get("academicYear") || "";
+
+    const query: Record<string, unknown> = {
       isActive: true,
-    })
-      .select("_id classRombelId")
-      .lean()) as Array<{
-      _id: mongoose.Types.ObjectId;
-      classRombelId?: mongoose.Types.ObjectId;
-    }>;
+    };
 
-    const distinctRombelIds = Array.from(
-      new Set(
-        initialClasses
-          .map((c) => (c.classRombelId ? String(c.classRombelId) : ""))
-          .filter(Boolean)
-      )
-    );
-
-    if (distinctRombelIds.length > 0) {
-      await Promise.all(
-        distinctRombelIds.map((rid) => syncRombelStudents(rid))
-      );
+    if (session.role === "guru") {
+      query.teacherId = session.id;
     }
 
-    const classes = await CourseClass.find({
-      teacherId: session.id,
-      isActive: true,
-    })
+    if (search) {
+      query.$or = [
+        { name: { $regex: search, $options: "i" } },
+        { code: { $regex: search, $options: "i" } },
+      ];
+    }
+
+    if (academicYear) {
+      query.academicYear = academicYear;
+    }
+
+    // Only sync rombel students for enrollmentMethod === "rombel" when requested by Guru
+    if (session.role === "guru") {
+      const preClasses = await CourseClass.find(query)
+        .select("classRombelId assignedRombelIds enrollmentMethod")
+        .lean();
+      const rombelIdsToSync = new Set<string>();
+      for (const pc of preClasses) {
+        if ((pc as any).enrollmentMethod === "rombel") {
+          if (pc.classRombelId) rombelIdsToSync.add(String(pc.classRombelId));
+          if (Array.isArray(pc.assignedRombelIds)) {
+            for (const rid of pc.assignedRombelIds) {
+              if (rid) rombelIdsToSync.add(String(rid));
+            }
+          }
+        }
+      }
+      if (rombelIdsToSync.size > 0) {
+        await Promise.all(Array.from(rombelIdsToSync).map((rid) => syncRombelStudents(rid)));
+      }
+    }
+
+    const classes = await CourseClass.find(query)
+      .populate("subjectId", "name code category")
       .populate("classRombelId", "name grade academicYear")
-      .populate("studentIds", "name nisn email")
+      .populate("assignedRombelIds", "name grade academicYear")
+      .populate("teacherId", "name nip")
       .sort({ createdAt: -1 })
       .lean();
 
-    // Enrich with assignment counts and sanitize credentials for rombel-assigned classes
+    // Enrich with assignment count, quiz count, and student count
     const enriched = await Promise.all(
-      classes.map(async (c) => {
-        const assignmentCount = await Assignment.countDocuments({
-          courseClassId: c._id,
-        });
-        const isRombelMethod = c.enrollmentMethod === "rombel";
-        const sanitized: Record<string, unknown> = {
-          ...c,
-          enrollmentMethod: isRombelMethod ? "rombel" : "invitation",
-          studentCount: Array.isArray(c.studentIds) ? c.studentIds.length : 0,
+      classes.map(async (cls) => {
+        const [assignmentCount, quizCount] = await Promise.all([
+          Assignment.countDocuments({
+            courseClassId: cls._id,
+            isArchived: { $ne: true },
+          }),
+          Quiz.countDocuments({
+            courseClassId: cls._id,
+          }),
+        ]);
+
+        const effectiveMethod =
+          (cls as any).enrollmentMethod || (cls.classRombelId ? "rombel" : "invitation");
+
+        return {
+          ...cls,
+          enrollmentMethod: effectiveMethod,
+          studentCount: Array.isArray(cls.studentIds) ? cls.studentIds.length : 0,
           assignmentCount,
+          quizCount,
         };
-        if (isRombelMethod) {
-          delete sanitized.password;
-          sanitized.code = "";
-        }
-        return sanitized;
       })
     );
 
-    return NextResponse.json(
-      { success: true, data: enriched },
-      {
-        headers: {
-          "Cache-Control":
-            "no-store, no-cache, must-revalidate, proxy-revalidate",
-          Pragma: "no-cache",
-          Expires: "0",
-        },
-      }
-    );
+    return NextResponse.json({
+      success: true,
+      data: enriched,
+    });
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Gagal memuat kelas";
+    const message = err instanceof Error ? err.message : "Gagal memuat daftar kelas";
     return NextResponse.json({ success: false, message }, { status: 500 });
   }
 }
@@ -112,266 +119,141 @@ export async function POST(req: Request) {
 
     const {
       name,
-      password,
-      description,
-      enrollmentMethod: rawEnrollmentMethod,
+      subjectId,
       classRombelId,
       assignedRombelIds,
-      bannerColor,
+      enrollmentMethod,
+      password,
+      description,
+      academicYear = "2026/2027 - Ganjil",
+      bannerColor = "blue",
     } = body;
 
-    if (!name || typeof name !== "string" || !name.trim()) {
+    if (!name || !name.trim()) {
       return NextResponse.json(
-        { success: false, message: "Judul Mapel / Kelas wajib diisi" },
+        { success: false, message: "Nama kelas wajib diisi" },
         { status: 400 }
       );
     }
 
-    // Validate against multiple-rombel assignment
+    // TASK 1: Selecting ONE rombel is strictly mandatory for every newly created Mapel Class
     if (Array.isArray(classRombelId)) {
       return NextResponse.json(
-        {
-          success: false,
-          message:
-            "Satu kelas mata pelajaran hanya dapat ditugaskan ke satu rombel.",
-        },
+        { success: false, message: "Setiap Kelas Mapel hanya boleh ditetapkan ke tepat 1 Rombel" },
         { status: 400 }
       );
     }
 
-    const normalizedAssignedList = Array.isArray(assignedRombelIds)
-      ? Array.from(
-          new Set(
-            assignedRombelIds
-              .filter((r: unknown) => r !== null && r !== undefined && String(r).trim() !== "")
-              .map((r: unknown) => String(r).trim())
-          )
-        )
-      : [];
-
-    if (normalizedAssignedList.length > 1) {
+    if (Array.isArray(assignedRombelIds) && assignedRombelIds.length > 1) {
       return NextResponse.json(
-        {
-          success: false,
-          message:
-            "Satu kelas mata pelajaran hanya dapat ditugaskan ke satu rombel.",
-        },
-        { status: 400 }
-      );
-    }
-
-    const explicitRombelId =
-      classRombelId !== undefined &&
-      classRombelId !== null &&
-      String(classRombelId).trim() !== ""
-        ? String(classRombelId).trim()
-        : "";
-
-    if (
-      explicitRombelId &&
-      normalizedAssignedList.length === 1 &&
-      normalizedAssignedList[0] !== explicitRombelId
-    ) {
-      return NextResponse.json(
-        {
-          success: false,
-          message:
-            "Satu kelas mata pelajaran hanya dapat ditugaskan ke satu rombel.",
-        },
+        { success: false, message: "Setiap Kelas Mapel hanya boleh memiliki 1 Rombel tujuan" },
         { status: 400 }
       );
     }
 
     const selectedRombelId =
-      explicitRombelId || normalizedAssignedList[0] || "";
+      typeof classRombelId === "string" && classRombelId.trim()
+        ? classRombelId.trim()
+        : Array.isArray(assignedRombelIds) && assignedRombelIds.length === 1 && typeof assignedRombelIds[0] === "string"
+        ? assignedRombelIds[0].trim()
+        : "";
 
-    // Determine enrollment method ('rombel' vs 'invitation')
-    let enrollmentMethod: "rombel" | "invitation";
-    if (rawEnrollmentMethod === "rombel") {
-      enrollmentMethod = "rombel";
-    } else if (rawEnrollmentMethod === "invitation") {
-      enrollmentMethod = "invitation";
-    } else if (selectedRombelId && (!password || !String(password).trim())) {
-      enrollmentMethod = "rombel";
-    } else {
-      enrollmentMethod = "invitation";
+    if (!selectedRombelId || !mongoose.Types.ObjectId.isValid(selectedRombelId)) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Wajib memilih 1 Rombel tujuan sebelum membuat Kelas Mapel",
+        },
+        { status: 400 }
+      );
     }
 
-    // Generate a unique code using the existing code generator
+    const rombelDoc = await ClassModel.findOne({
+      _id: selectedRombelId,
+      isActive: true,
+    });
+    if (!rombelDoc) {
+      return NextResponse.json(
+        { success: false, message: "Rombel yang dipilih tidak ditemukan atau tidak aktif" },
+        { status: 404 }
+      );
+    }
+
+    const method: "rombel" | "invitation" =
+      enrollmentMethod === "invitation" ? "invitation" : "rombel";
+
+    if (method === "invitation" && (!password || !String(password).trim())) {
+      return NextResponse.json(
+        { success: false, message: "Password kelas wajib diisi untuk metode Kode Undangan" },
+        { status: 400 }
+      );
+    }
+
+    // Generate unique 5-char invitation code so invitation credentials always remain functional
     let code = generateClassCode();
-    let existing = await CourseClass.findOne({ code });
-    while (existing) {
+    let exists = await CourseClass.findOne({ code });
+    let attempts = 0;
+    while (exists && attempts < 10) {
       code = generateClassCode();
-      existing = await CourseClass.findOne({ code });
+      exists = await CourseClass.findOne({ code });
+      attempts++;
     }
 
-    let primaryRombelId: mongoose.Types.ObjectId | undefined;
-    let rombelName = "";
-    let rombelAcademicYear = "2024/2025 - Genap";
-    let initialStudents: mongoose.Types.ObjectId[] = [];
-    let resolvedPassword = "";
+    const effectivePassword =
+      password && String(password).trim() ? String(password).trim() : code;
 
-    if (enrollmentMethod === "rombel") {
-      if (!selectedRombelId) {
-        return NextResponse.json(
-          {
-            success: false,
-            message: "Silakan pilih satu rombel untuk metode Assign ke Rombel",
-          },
-          { status: 400 }
-        );
-      }
+    // Auto-populate students from Rombel when method === "rombel";
+    // For method === "invitation", bind to the rombel while letting students enroll via code/password
+    const initialStudents =
+      method === "rombel" ? await getActiveStudentIdsForRombel(rombelDoc._id) : [];
 
-      if (!mongoose.Types.ObjectId.isValid(selectedRombelId)) {
-        return NextResponse.json(
-          {
-            success: false,
-            message: "Rombel yang dipilih tidak valid",
-          },
-          { status: 400 }
-        );
-      }
-
-      const rombelDoc = await ClassModel.findOne({
-        _id: selectedRombelId,
-        isActive: true,
-      });
-
-      if (!rombelDoc) {
-        return NextResponse.json(
-          {
-            success: false,
-            message: "Rombel yang dipilih tidak ditemukan atau tidak aktif",
-          },
-          { status: 404 }
-        );
-      }
-
-      primaryRombelId = rombelDoc._id;
-      rombelName = rombelDoc.name;
-      rombelAcademicYear = rombelDoc.academicYear || rombelAcademicYear;
-
-      // Automatically enroll all active students belonging to this single rombel
-      initialStudents = await getActiveStudentIdsForRombel(rombelDoc._id);
-    } else {
-      // Option B: Existing Kode Undangan method
-      if (!password || typeof password !== "string" || !password.trim()) {
-        return NextResponse.json(
-          { success: false, message: "Password kelas wajib diisi" },
-          { status: 400 }
-        );
-      }
-      resolvedPassword = password.trim();
-
-      // If legacy caller supplied a valid single rombel along with password and didn't specify 'invitation' explicitly,
-      // preserve backward compatibility; if explicit 'invitation' was selected, do not bind rombel.
-      if (rawEnrollmentMethod !== "invitation" && selectedRombelId) {
-        if (!mongoose.Types.ObjectId.isValid(selectedRombelId)) {
-          return NextResponse.json(
-            { success: false, message: "Rombel yang dipilih tidak valid" },
-            { status: 400 }
-          );
-        }
-        const rombelDoc = await ClassModel.findOne({
-          _id: selectedRombelId,
-          isActive: true,
-        });
-        if (!rombelDoc) {
-          return NextResponse.json(
-            {
-              success: false,
-              message: "Rombel yang dipilih tidak ditemukan atau tidak aktif",
-            },
-            { status: 404 }
-          );
-        }
-        primaryRombelId = rombelDoc._id;
-        rombelName = rombelDoc.name;
-        initialStudents = await getActiveStudentIdsForRombel(rombelDoc._id);
+    // Resolve default subject if not provided
+    let resolvedSubjectId = subjectId || undefined;
+    if (!resolvedSubjectId) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const anySubject: any = await Subject.findOne({ isActive: true }).lean();
+      if (anySubject) {
+        resolvedSubjectId = anySubject._id;
       }
     }
 
-    const newClass = await CourseClass.create({
+    const newCourseClass = await CourseClass.create({
       name: name.trim(),
-      description:
-        description && typeof description === "string" && description.trim()
-          ? description.trim()
-          : undefined,
-      enrollmentMethod,
       code,
-      password: resolvedPassword,
+      password: effectivePassword,
+      enrollmentMethod: method,
       teacherId: session.id,
-      classRombelId: primaryRombelId,
-      assignedRombelIds: primaryRombelId ? [primaryRombelId] : [],
-      academicYear: rombelAcademicYear,
-      bannerColor: bannerColor || "blue",
+      subjectId: resolvedSubjectId,
+      classRombelId: rombelDoc._id,
+      assignedRombelIds: [rombelDoc._id],
+      description: description?.trim() || "",
+      academicYear,
+      bannerColor,
       studentIds: initialStudents,
-      sharedFiles: [],
       isActive: true,
     });
 
-    if (primaryRombelId && initialStudents.length > 0) {
-      await ClassModel.findByIdAndUpdate(primaryRombelId, {
-        $addToSet: { studentIds: { $each: initialStudents } },
-      });
+    if (method === "rombel") {
+      await syncRombelStudents(rombelDoc._id);
     }
 
-    // Send Notification to all auto-enrolled students
-    if (initialStudents.length > 0) {
-      const rombelDisplay = rombelName || "Rombel";
-      const notifDocs = initialStudents.map((sid) => ({
-        recipientId: sid,
-        type: "general" as const,
-        title: "Kelas Baru",
-        message: `Anda telah ditambahkan ke kelas:\n${newClass.name}\n\nGuru: ${session.name}\nKelas: ${rombelDisplay}`,
-        link: `/siswa/courses/${newClass._id}`,
-        relatedEntityId: newClass._id,
-        relatedEntityType: "CourseClass" as const,
-        read: false,
-      }));
-      await Notification.insertMany(notifDocs);
-    }
-
-    const populated = (await CourseClass.findById(newClass._id)
+    const populated = await CourseClass.findById(newCourseClass._id)
+      .populate("subjectId", "name code category")
       .populate("classRombelId", "name grade academicYear")
-      .populate("studentIds", "name nisn email")
-      .lean()) as Record<string, unknown> | null;
-
-    const responseData: Record<string, unknown> = {
-      ...(populated || {}),
-      enrollmentMethod,
-      studentCount: Array.isArray(populated?.studentIds)
-        ? (populated.studentIds as unknown[]).length
-        : 0,
-    };
-
-    if (enrollmentMethod === "rombel") {
-      delete responseData.password;
-      responseData.code = "";
-    }
+      .populate("assignedRombelIds", "name grade academicYear")
+      .populate("teacherId", "name nip")
+      .lean();
 
     return NextResponse.json(
       {
         success: true,
-        message:
-          enrollmentMethod === "rombel"
-            ? `Kelas berhasil dibuat dan ditugaskan ke rombel ${rombelName}!`
-            : "Kelas berhasil dibuat!",
-        data: responseData,
+        message: "Kelas berhasil dibuat",
+        data: populated,
       },
-      {
-        status: 201,
-        headers: {
-          "Cache-Control":
-            "no-store, no-cache, must-revalidate, proxy-revalidate",
-          Pragma: "no-cache",
-          Expires: "0",
-        },
-      }
+      { status: 201 }
     );
   } catch (err: unknown) {
-    const message =
-      err instanceof Error ? err.message : "Gagal membuat kelas";
+    const message = err instanceof Error ? err.message : "Gagal membuat kelas baru";
     return NextResponse.json({ success: false, message }, { status: 500 });
   }
 }

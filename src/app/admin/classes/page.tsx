@@ -61,8 +61,21 @@ interface EnrolledStudentInfo {
   birthDate?: string;
 }
 
+interface LegacyCourseClassItem {
+  _id: string;
+  name: string;
+  code: string;
+  teacherName: string;
+  category: string;
+  studentCount: number;
+  academicYear: string;
+}
+
 export default function AdminClassesPage() {
   const [classes, setClasses] = useState<ClassItem[]>([]);
+  const [legacyCourseClasses, setLegacyCourseClasses] = useState<LegacyCourseClassItem[]>([]);
+  const [selectedRombelForLegacy, setSelectedRombelForLegacy] = useState<Record<string, string>>({});
+  const [assigningLegacyId, setAssigningLegacyId] = useState<string | null>(null);
   const [teachers, setTeachers] = useState<TeacherOption[]>([]);
   const [departments, setDepartments] = useState<DeptOption[]>([]);
   const [loading, setLoading] = useState(true);
@@ -135,7 +148,12 @@ export default function AdminClassesPage() {
         deptRes.json(),
       ]);
 
-      if (classJson.success) setClasses(classJson.data);
+      if (classJson.success) {
+        setClasses(classJson.data);
+        if (Array.isArray(classJson.legacyCourseClasses)) {
+          setLegacyCourseClasses(classJson.legacyCourseClasses);
+        }
+      }
       if (teacherJson.success) setTeachers(teacherJson.data);
       if (deptJson.success) setDepartments(deptJson.data);
     } catch (err) {
@@ -241,6 +259,38 @@ export default function AdminClassesPage() {
     }
   }
 
+  async function handleAssignLegacyRombel(legacyId: string, legacyName: string) {
+    const targetRombelId = selectedRombelForLegacy[legacyId];
+    if (!targetRombelId) {
+      alert("Silakan pilih Rombel tujuan terlebih dahulu.");
+      return;
+    }
+    const targetRombel = classes.find((c) => c._id === targetRombelId);
+    const confirmed = window.confirm(
+      `Tetapkan Kelas Mapel "${legacyName}" ke Rombel ${targetRombel?.name || "Terpilih"}?\n\nPenting: Penetapan rombel ini bersifat satu kali (permanen) dan tidak dapat diubah kembali.`
+    );
+    if (!confirmed) return;
+
+    try {
+      setAssigningLegacyId(legacyId);
+      const res = await fetch(`/api/guru/classes/${legacyId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ classRombelId: targetRombelId }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) {
+        alert(json.message || "Gagal menetapkan rombel");
+      } else {
+        await loadData();
+      }
+    } catch {
+      alert("Terjadi kesalahan saat menetapkan rombel");
+    } finally {
+      setAssigningLegacyId(null);
+    }
+  }
+
   // Calculate statistics
   const totalClasses = classes.length;
   const totalStudents = classes.reduce((sum, c) => sum + (c.studentCount || 0), 0);
@@ -297,6 +347,66 @@ export default function AdminClassesPage() {
           </div>
         </div>
       </div>
+
+      {/* TASK 3: Legacy Mapel Classes Without an Assigned Rombel */}
+      {legacyCourseClasses.length > 0 && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-5 shadow-xs space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+            <div>
+              <h2 className="text-sm font-extrabold text-amber-950 flex items-center gap-2">
+                <AlertCircle className="size-4 text-amber-600" />
+                Kelas Mapel Tanpa Rombel (Legacy — Belum Ditetapkan)
+              </h2>
+              <p className="text-xs text-amber-800 mt-0.5">
+                Ditemukan {legacyCourseClasses.length} Kelas Mapel yang dibuat sebelum aturan wajib Rombel. Pilih Rombel yang sesuai untuk penetapan satu kali (permanen).
+              </p>
+            </div>
+          </div>
+
+          <div className="grid gap-3 md:grid-cols-2">
+            {legacyCourseClasses.map((lc) => (
+              <div
+                key={lc._id}
+                className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-amber-200 bg-white p-4 shadow-xs"
+              >
+                <div className="min-w-0">
+                  <p className="text-sm font-bold text-slate-900 truncate">{lc.name}</p>
+                  <p className="text-xs text-slate-500">
+                    Guru: <strong>{lc.teacherName}</strong> &bull; {lc.studentCount} Siswa Terdaftar
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <select
+                    value={selectedRombelForLegacy[lc._id] || ""}
+                    onChange={(e) =>
+                      setSelectedRombelForLegacy((prev) => ({
+                        ...prev,
+                        [lc._id]: e.target.value,
+                      }))
+                    }
+                    className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-800 focus:border-blue-500 focus:outline-hidden"
+                  >
+                    <option value="">Pilih Rombel...</option>
+                    {classes.map((c) => (
+                      <option key={c._id} value={c._id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    disabled={assigningLegacyId === lc._id}
+                    onClick={() => handleAssignLegacyRombel(lc._id, lc.name)}
+                    className="rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-amber-700 transition disabled:opacity-50 cursor-pointer"
+                  >
+                    {assigningLegacyId === lc._id ? "Menyimpan..." : "Tetapkan"}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Search & Filters */}
       <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-xs md:flex-row md:items-center md:justify-between">

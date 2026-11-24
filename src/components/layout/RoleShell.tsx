@@ -46,7 +46,7 @@ export function RoleShell({
   }
 
   return (
-    <div className="flex min-h-screen bg-[#fbfbfd]">
+    <div className="flex min-h-screen bg-[var(--app-bg)] text-[var(--foreground)] transition-colors duration-200">
       {isPendingActivation && (
         <AccountActivationModal
           user={currentUser}

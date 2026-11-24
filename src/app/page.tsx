@@ -13,7 +13,11 @@ export default async function HomePage() {
   const session = await getSession();
 
   return (
-    <div className="min-h-screen bg-white">
+    <div
+      data-landing-page="true"
+      style={{ colorScheme: "light" }}
+      className="min-h-screen bg-white"
+    >
       <LandingNav session={session} />
       <LandingHero />
       <LandingFeatures />

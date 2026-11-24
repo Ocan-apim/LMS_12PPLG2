@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, GraduationCap } from "lucide-react";
 import { LoginForm } from "@/components/auth/LoginForm";
+import { ThemeToggle } from "@/components/theme/ThemeToggle";
 import { isRole } from "@/lib/roles";
 
 type PageProps = {
@@ -41,7 +42,10 @@ export default async function RoleLoginPage({ params }: PageProps) {
 
   return (
     <main className="flex min-h-screen flex-col">
-      <section className="flex flex-1 flex-col items-center justify-center px-6 py-16">
+      <div className="mx-auto flex w-full max-w-5xl justify-end px-6 pt-6">
+        <ThemeToggle showLabel />
+      </div>
+      <section className="flex flex-1 flex-col items-center justify-center px-6 py-10">
         <div className="w-full max-w-[430px] rounded-lg border border-[var(--border)] bg-white p-8 shadow-[var(--shadow-strong)]">
           <div className="flex flex-col items-center text-center">
             <div className="grid size-16 place-items-center rounded-xl bg-[var(--primary)] text-white shadow-[0_14px_30px_rgba(8,104,207,0.24)]">

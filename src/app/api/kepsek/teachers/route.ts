@@ -47,7 +47,7 @@ export async function GET(req: NextRequest) {
         courseClassId: { $in: classIds },
         isArchived: { $ne: true },
       })
-        .select("_id title type dueDate maxScore courseClassId createdAt")
+        .select("_id title type quizId dueDate maxScore courseClassId createdAt")
         .sort({ createdAt: -1 })
         .lean(),
       Quiz.find({
@@ -72,16 +72,21 @@ export async function GET(req: NextRequest) {
 
     // Map activities by teacher
     const teacherActivitiesMap = new Map<string, any[]>();
+    const linkedQuizIds = new Set<string>();
 
     for (const a of assignments) {
+      if (a.quizId) {
+        linkedQuizIds.add(String(a.quizId));
+      }
       const c = classInfoMap.get(String(a.courseClassId));
       if (c) {
         const tId = String(c.teacherId);
         if (!teacherActivitiesMap.has(tId)) teacherActivitiesMap.set(tId, []);
+        const isQuizAssignment = a.type === "kuis" || Boolean(a.quizId);
         teacherActivitiesMap.get(tId)!.push({
           _id: String(a._id),
           title: a.title,
-          activityType: "tugas",
+          activityType: isQuizAssignment ? "kuis" : "tugas",
           className: c.name,
           classId: String(c._id),
           dueDate: a.dueDate,
@@ -91,6 +96,9 @@ export async function GET(req: NextRequest) {
     }
 
     for (const q of quizzes) {
+      if (linkedQuizIds.has(String(q._id))) {
+        continue;
+      }
       const c = classInfoMap.get(String(q.courseClassId));
       if (c) {
         const tId = String(c.teacherId);

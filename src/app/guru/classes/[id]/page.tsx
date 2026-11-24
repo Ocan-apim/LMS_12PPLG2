@@ -18,6 +18,8 @@ import {
   Download,
   Trash2,
   Send,
+  Edit2,
+  Lock,
 } from "lucide-react";
 import { Button, Spinner } from "@/components/ui";
 
@@ -115,6 +117,37 @@ export default function GuruClassDetailPage({
   const [sortBy, setSortBy] = useState<"newest" | "oldest" | "title" | "title-desc">("newest");
   const [filterDropdownOpen, setFilterDropdownOpen] = useState(false);
   const [sortDropdownOpen, setSortDropdownOpen] = useState(false);
+
+  // Edit Mapel Class Name state (Task 1: Name remains editable, Rombel is immutable)
+  const [editingClassName, setEditingClassName] = useState(false);
+  const [classNameInput, setClassNameInput] = useState("");
+  const [savingClassName, setSavingClassName] = useState(false);
+
+  async function handleSaveClassName(e: React.FormEvent) {
+    e.preventDefault();
+    if (!courseClass || !classNameInput.trim()) return;
+    setSavingClassName(true);
+    try {
+      const res = await fetch(`/api/guru/classes/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: classNameInput.trim() }),
+      });
+      const json = await res.json();
+      if (res.ok && json.success) {
+        setCourseClass((prev) =>
+          prev ? { ...prev, name: classNameInput.trim() } : prev
+        );
+        setEditingClassName(false);
+      } else {
+        alert(json.message || "Gagal memperbarui nama kelas");
+      }
+    } catch {
+      alert("Terjadi kesalahan saat menyimpan nama kelas");
+    } finally {
+      setSavingClassName(false);
+    }
+  }
 
   useEffect(() => {
     async function fetchData() {
@@ -527,20 +560,73 @@ export default function GuruClassDetailPage({
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <div className="mb-2 flex flex-wrap items-center gap-2">
-              {courseClass.enrollmentMethod === "rombel" ? (
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-white/20 px-3 py-1 text-[11px] font-bold text-white backdrop-blur-xs">
-                  Assign ke Rombel:{" "}
-                  <strong>{courseClass.classRombelId?.name || "-"}</strong>
-                </span>
-              ) : (
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-white/20 px-3 py-1 text-[11px] font-bold text-white backdrop-blur-xs">
-                  Metode: Kode Undangan
-                </span>
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-white/20 px-3 py-1 text-[11px] font-bold text-white backdrop-blur-xs">
+                <Lock className="size-3" />
+                Rombel (Permanen):{" "}
+                <strong>{courseClass.classRombelId?.name || "Belum Ditetapkan"}</strong>
+              </span>
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-3 py-1 text-[11px] font-bold text-blue-100 backdrop-blur-xs">
+                {courseClass.enrollmentMethod === "rombel"
+                  ? "Metode: Otomatis Rombel"
+                  : "Metode: Kode Undangan"}
+              </span>
+              {courseClass.code && (
+                <button
+                  type="button"
+                  onClick={handleCopyCode}
+                  className="inline-flex items-center gap-1.5 rounded-full bg-white/20 hover:bg-white/30 px-3 py-1 text-[11px] font-bold text-white transition cursor-pointer"
+                  title="Salin Kode Kelas"
+                >
+                  <span>Kode: {courseClass.code}</span>
+                  {copiedCode ? <Check className="size-3" /> : <Copy className="size-3" />}
+                </button>
               )}
             </div>
-            <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-white">
-              {courseClass.name}
-            </h2>
+            {editingClassName ? (
+              <form onSubmit={handleSaveClassName} className="mt-2 flex flex-wrap items-center gap-2">
+                <input
+                  type="text"
+                  value={classNameInput}
+                  onChange={(e) => setClassNameInput(e.target.value)}
+                  className="rounded-xl border border-white/40 bg-white/95 px-3.5 py-2 text-base font-extrabold text-slate-900 focus:outline-none"
+                  placeholder="Nama Kelas Mapel"
+                  required
+                />
+                <button
+                  type="submit"
+                  disabled={savingClassName}
+                  className="rounded-xl bg-white px-4 py-2 text-xs font-extrabold text-blue-700 hover:bg-blue-50 transition cursor-pointer"
+                >
+                  {savingClassName ? "Menyimpan..." : "Simpan"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEditingClassName(false)}
+                  className="rounded-xl bg-white/20 px-3 py-2 text-xs font-bold text-white hover:bg-white/30 transition cursor-pointer"
+                >
+                  Batal
+                </button>
+              </form>
+            ) : (
+              <div className="flex items-center gap-2.5">
+                <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-white">
+                  {courseClass.name}
+                </h2>
+                {!courseClass.isReadOnly && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setClassNameInput(courseClass.name);
+                      setEditingClassName(true);
+                    }}
+                    className="rounded-xl bg-white/15 p-2 text-white hover:bg-white/25 transition cursor-pointer"
+                    title="Ubah Nama Kelas Mapel"
+                  >
+                    <Edit2 className="size-4" />
+                  </button>
+                )}
+              </div>
+            )}
             {courseClass.classRombelId?.name && (
               <p className="mt-1 text-xs text-blue-100 font-medium">
                 Rombel {courseClass.classRombelId.name} •{" "}

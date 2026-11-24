@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import { requireRole } from "@/lib/session";
-import { ClassModel, User } from "@/models";
+import { ClassModel, User, CourseClass } from "@/models";
 
 export async function GET(req: Request) {
   const { error } = await requireRole(["admin", "guru", "kurikulum", "kepsek"]);
@@ -26,18 +26,44 @@ export async function GET(req: Request) {
       query.name = { $regex: search, $options: "i" };
     }
 
-    const classes = await ClassModel.find(query)
-      .populate("homeroomTeacherId", "name email nip degree")
-      .populate("departmentId", "name code")
-      .sort({ grade: 1, name: 1 })
-      .lean();
+    const [classes, legacyCourseClasses] = await Promise.all([
+      ClassModel.find(query)
+        .populate("homeroomTeacherId", "name email nip degree")
+        .populate("departmentId", "name code")
+        .sort({ grade: 1, name: 1 })
+        .lean(),
+      CourseClass.find({
+        isActive: true,
+        $or: [{ classRombelId: null }, { classRombelId: { $exists: false } }],
+      })
+        .populate("teacherId", "name email nip degree")
+        .populate("subjectId", "name code category")
+        .sort({ createdAt: -1 })
+        .lean(),
+    ]);
 
     const formatted = classes.map((c) => ({
       ...c,
       studentCount: Array.isArray(c.studentIds) ? c.studentIds.length : 0,
     }));
 
-    return NextResponse.json({ success: true, data: formatted });
+    const formattedLegacy = legacyCourseClasses.map((lc: any) => ({
+      _id: String(lc._id),
+      name: lc.name,
+      code: lc.code || "-",
+      teacherName: lc.teacherId
+        ? `${lc.teacherId.name}${lc.teacherId.degree ? `, ${lc.teacherId.degree}` : ""}`
+        : "Guru Pengampu",
+      category: lc.subjectId?.category || "Kejuruan",
+      studentCount: Array.isArray(lc.studentIds) ? lc.studentIds.length : 0,
+      academicYear: lc.academicYear || "-",
+    }));
+
+    return NextResponse.json({
+      success: true,
+      data: formatted,
+      legacyCourseClasses: formattedLegacy,
+    });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Gagal memuat kelas";
     return NextResponse.json({ success: false, message }, { status: 500 });

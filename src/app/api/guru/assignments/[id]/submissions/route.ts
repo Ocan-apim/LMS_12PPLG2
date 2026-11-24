@@ -20,7 +20,7 @@ type RouteContext = {
 };
 
 export async function GET(_req: Request, context: RouteContext) {
-  const { session, error } = await requireRole(["guru", "admin"]);
+  const { session, error } = await requireRole(["guru", "admin", "kepsek"]);
   if (error || !session) return error;
 
   try {
@@ -36,7 +36,7 @@ export async function GET(_req: Request, context: RouteContext) {
 
     // Resolve either Assignment or standalone Quiz
     let assignment: any = await Assignment.findById(id)
-      .populate("courseClassId", "name code studentIds classRombelId")
+      .populate("courseClassId", "name code studentIds classRombelId teacherId")
       .populate("classId", "name grade studentIds")
       .populate("quizId");
 
@@ -45,14 +45,14 @@ export async function GET(_req: Request, context: RouteContext) {
     if (!assignment) {
       quizDoc = await Quiz.findById(id).populate(
         "courseClassId",
-        "name code studentIds classRombelId"
+        "name code studentIds classRombelId teacherId"
       );
       if (quizDoc) {
         const linkedAssignment = await Assignment.findOne({
           quizId: quizDoc._id,
           isArchived: { $ne: true },
         })
-          .populate("courseClassId", "name code studentIds classRombelId")
+          .populate("courseClassId", "name code studentIds classRombelId teacherId")
           .populate("classId", "name grade studentIds")
           .populate("quizId");
 
@@ -85,9 +85,19 @@ export async function GET(_req: Request, context: RouteContext) {
       );
     }
 
+    const assignTeacherId = String(
+      assignment.teacherId?._id || assignment.teacherId || ""
+    );
+    const classTeacherId = String(
+      assignment.courseClassId?.teacherId?._id ||
+        assignment.courseClassId?.teacherId ||
+        ""
+    );
+
     if (
       session.role === "guru" &&
-      String(assignment.teacherId) !== String(session.id)
+      assignTeacherId !== String(session.id) &&
+      classTeacherId !== String(session.id)
     ) {
       return NextResponse.json(
         {
@@ -312,6 +322,8 @@ export async function GET(_req: Request, context: RouteContext) {
             pendingManualCount,
           },
           items,
+          currentUserRole: session.role,
+          isReadOnly: session.role === "kepsek",
         },
       },
       {

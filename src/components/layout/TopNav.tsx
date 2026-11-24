@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Bell, Menu, Search, X, Users, GraduationCap, BookOpen, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { ThemeToggle } from "@/components/theme/ThemeToggle";
 import type { Role } from "@/types";
 
 type TopNavProps = {
@@ -301,7 +302,8 @@ export function TopNav({ userName, roleLabel, role, onMenuClick }: TopNavProps) 
         )}
       </div>
 
-      <div className="ml-auto flex items-center gap-3">
+      <div className="ml-auto flex items-center gap-2.5">
+        <ThemeToggle />
         {role === "siswa" ? (
           <Link
             href="/siswa/notifications"

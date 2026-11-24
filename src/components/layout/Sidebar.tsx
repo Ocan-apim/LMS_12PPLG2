@@ -95,16 +95,19 @@ export function Sidebar({ role, pathname, onNavigate }: SidebarProps) {
   }
 
   return (
-    <aside className="flex h-full w-[220px] shrink-0 flex-col border-r border-[#e4e6ef] bg-white text-[#141821]">
-      <div className="flex h-[62px] items-center gap-3 border-b border-slate-200 px-4">
-        <div className="grid size-9 place-items-center rounded-xl bg-blue-600 text-white shadow-sm">
+    <aside
+      data-sidebar="true"
+      className="flex h-full w-[220px] shrink-0 flex-col border-r border-white/10 bg-[var(--sidebar)] text-[var(--sidebar-fg)] shadow-[4px_0_24px_rgba(15,35,80,0.16)]"
+    >
+      <div className="flex h-[62px] items-center gap-3 border-b border-white/15 px-4">
+        <div className="grid size-9 place-items-center rounded-xl bg-white text-[var(--sidebar)] shadow-sm">
           <GraduationCap className="size-5" />
         </div>
         <div>
-          <h1 className="font-sans text-lg font-bold leading-5 text-slate-900">
+          <h1 className="font-sans text-lg font-bold leading-5 text-white">
             Learnix
           </h1>
-          <p className="text-[11px] font-medium text-slate-500">Portal Akademik</p>
+          <p className="text-[11px] font-medium text-blue-100/80">Portal Akademik</p>
         </div>
       </div>
 
@@ -126,23 +129,27 @@ export function Sidebar({ role, pathname, onNavigate }: SidebarProps) {
                   onClick={() => toggleMenu(item.label)}
                   className={`flex h-10 w-full items-center justify-between border-l-4 px-4 text-xs font-semibold transition duration-200 ${
                     isChildActive
-                      ? "border-blue-600 bg-blue-50/50 text-blue-700"
-                      : "border-transparent text-slate-700 hover:bg-slate-50 hover:text-slate-900"
+                      ? "border-white bg-white/15 text-white"
+                      : "border-transparent text-blue-50/90 hover:bg-white/10 hover:text-white"
                   }`}
                 >
                   <div className="flex items-center gap-3">
-                    <Icon className="size-4 shrink-0 text-blue-600" />
+                    <Icon
+                      className={`size-4 shrink-0 ${
+                        isChildActive ? "text-white" : "text-blue-200"
+                      }`}
+                    />
                     <span>{item.label}</span>
                   </div>
                   {isOpen ? (
-                    <ChevronDown className="size-3.5 text-slate-400" />
+                    <ChevronDown className="size-3.5 text-blue-200" />
                   ) : (
-                    <ChevronRight className="size-3.5 text-slate-400" />
+                    <ChevronRight className="size-3.5 text-blue-200" />
                   )}
                 </button>
 
                 {isOpen && (
-                  <div className="flex flex-col gap-0.5 py-1 bg-slate-50/60 border-l-2 border-slate-200 ml-5 pl-2 my-0.5 animate-in slide-in-from-top-1 duration-150">
+                  <div className="flex flex-col gap-0.5 py-1.5 bg-[var(--sidebar-dark)]/75 border-l-2 border-white/25 ml-5 mr-2 pl-2 pr-1.5 my-1 rounded-r-lg animate-in slide-in-from-top-1 duration-150">
                     {item.children.map((child) => {
                       const ChildIcon = iconMap[child.icon] || Users;
                       const active =
@@ -156,11 +163,15 @@ export function Sidebar({ role, pathname, onNavigate }: SidebarProps) {
                           onClick={onNavigate}
                           className={`flex h-8 items-center gap-2.5 rounded-md px-2.5 text-[11px] font-semibold transition duration-150 ${
                             active
-                              ? "bg-blue-600 text-white font-bold shadow-xs"
-                              : "text-slate-600 hover:bg-slate-200/60 hover:text-slate-900"
+                              ? "bg-white text-[var(--sidebar)] font-bold shadow-xs"
+                              : "text-blue-100/90 hover:bg-white/12 hover:text-white"
                           }`}
                         >
-                          <ChildIcon className="size-3.5 shrink-0" />
+                          <ChildIcon
+                            className={`size-3.5 shrink-0 ${
+                              active ? "text-[var(--sidebar)]" : "text-blue-200"
+                            }`}
+                          />
                           <span>{child.label}</span>
                         </Link>
                       );
@@ -182,23 +193,27 @@ export function Sidebar({ role, pathname, onNavigate }: SidebarProps) {
               onClick={onNavigate}
               className={`flex h-10 items-center gap-3 border-l-4 px-4 text-xs font-semibold transition duration-200 ${
                 active
-                  ? "border-blue-600 bg-blue-50 text-blue-600"
-                  : "border-transparent text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                  ? "border-white bg-white/18 text-white font-bold shadow-[inset_0_1px_0_rgba(255,255,255,0.15)]"
+                  : "border-transparent text-blue-50/90 hover:bg-white/10 hover:text-white"
               }`}
             >
-              <Icon className="size-4 shrink-0" />
+              <Icon
+                className={`size-4 shrink-0 ${
+                  active ? "text-white" : "text-blue-200"
+                }`}
+              />
               {item.label}
             </Link>
           );
         })}
       </nav>
 
-      <div className="border-t border-slate-200 p-3 space-y-1.5">
+      <div className="border-t border-white/15 p-3 space-y-1.5 bg-[var(--sidebar-dark)]/40">
         {role === "guru" && (
           <Link
             href="/guru/classes/new"
             onClick={onNavigate}
-            className="flex h-9 w-full items-center justify-center gap-1.5 rounded-lg bg-blue-600 px-3 text-xs font-semibold text-white shadow-sm hover:bg-blue-700 transition mb-2"
+            className="flex h-9 w-full items-center justify-center gap-1.5 rounded-lg bg-white px-3 text-xs font-bold text-[var(--sidebar)] shadow-sm hover:bg-blue-50 transition mb-2"
           >
             <span className="text-base font-bold leading-none">+</span>
             <span>Buat Kelas Baru</span>
@@ -208,9 +223,9 @@ export function Sidebar({ role, pathname, onNavigate }: SidebarProps) {
           <button
             type="button"
             onClick={() => alert("Pusat Bantuan Learnix: Silakan hubungi admin sekolah di admin@learnix.sch.id atau telepon (021) 888-9999")}
-            className="flex h-8 w-full items-center gap-3 px-2 rounded-lg text-left text-xs font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition"
+            className="flex h-8 w-full items-center gap-3 px-2 rounded-lg text-left text-xs font-medium text-blue-100/90 hover:bg-white/10 hover:text-white transition"
           >
-            <HelpCircle className="size-4 text-slate-500" />
+            <HelpCircle className="size-4 text-blue-200" />
             Bantuan
           </button>
         )}
@@ -218,9 +233,9 @@ export function Sidebar({ role, pathname, onNavigate }: SidebarProps) {
           <button
             type="button"
             onClick={handleLogout}
-            className="flex h-8 w-full items-center gap-3 px-2 rounded-lg text-left text-xs font-medium text-slate-600 hover:bg-red-50 hover:text-red-600 transition"
+            className="flex h-8 w-full items-center gap-3 px-2 rounded-lg text-left text-xs font-medium text-blue-100/90 hover:bg-rose-500/20 hover:text-white transition"
           >
-            <LogOut className="size-4 text-slate-500" />
+            <LogOut className="size-4 text-blue-200" />
             Logout
           </button>
         </div>

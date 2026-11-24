@@ -497,24 +497,18 @@ export default function SiswaQuizTakePage({ params }: PageProps) {
                     </p>
                     {result && (
                       <div className="mt-1.5 space-y-1 text-sm font-bold text-slate-800">
-                        <p>
-                          Skor Mentah:{" "}
-                          <span className="font-extrabold text-slate-900">
-                            {result.rawScore ?? result.score ?? 0}
-                          </span>{" "}
-                          / {result.maxRawScore ?? quiz.maxRawScore ?? quiz.totalPoints} Poin
-                        </p>
                         {result.isPendingManual || result.gradingStatus === "pending_manual" ? (
                           <p className="text-xs font-semibold text-amber-800">
-                            Nilai Sementara:{" "}
+                            Skor Akhir (Sementara):{" "}
                             <span className="font-extrabold">
                               {result.provisionalScore ?? 0}
                             </span>{" "}
-                            / 100 (Menunggu Penilaian Essay oleh Guru)
+                            / 100 (Menunggu Penilaian Essay oleh Guru) &bull; Benar:{" "}
+                            {result.correctCount} &bull; Salah: {result.incorrectCount}
                           </p>
                         ) : (
                           <p>
-                            Nilai Akhir:{" "}
+                            Skor Akhir:{" "}
                             <span className="text-[#00796f] font-extrabold">
                               {result.normalizedScore ?? result.score ?? 0}
                             </span>{" "}
@@ -830,8 +824,8 @@ export default function SiswaQuizTakePage({ params }: PageProps) {
               Evaluasi hasil pengerjaan kuis Anda untuk <strong>{quiz.title}</strong>
             </p>
 
-            {/* Score Metrics Grid: Benar, Salah, Skor Mentah, Nilai Akhir (0-100) */}
-            <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {/* Score Metrics Grid (Task 5: Only Benar, Salah, and Skor Akhir) */}
+            <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-3">
               {/* Benar */}
               <div className="rounded-xl border border-emerald-100 bg-[#f4fbf8] p-5 text-center">
                 <CheckCircle2 className="mx-auto size-6 text-[#00796f]" />
@@ -854,25 +848,13 @@ export default function SiswaQuizTakePage({ params }: PageProps) {
                 </p>
               </div>
 
-              {/* Skor Mentah (Raw Score) */}
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-5 text-center">
-                <BookOpen className="mx-auto size-6 text-slate-700" />
-                <p className="mt-2 text-[10px] font-extrabold uppercase tracking-wide text-slate-600">
-                  Skor Mentah (Raw Score)
-                </p>
-                <p className="mt-1 font-[family-name:var(--font-display)] text-2xl font-black text-slate-900">
-                  {result.rawScore ?? result.score ?? 0} /{" "}
-                  {result.maxRawScore ?? quiz.maxRawScore ?? quiz.totalPoints}
-                </p>
-              </div>
-
-              {/* Nilai Akhir (0-100) */}
+              {/* Skor Akhir */}
               <div className="rounded-xl border border-[#d9cfee] bg-[#fbf8ff] p-5 text-center">
                 <Award className="mx-auto size-6 text-[#674ce7]" />
                 <p className="mt-2 text-[10px] font-extrabold uppercase tracking-wide text-[#674ce7]">
                   {result.isPendingManual || result.gradingStatus === "pending_manual"
-                    ? "Nilai Sementara"
-                    : "Nilai Akhir (0-100)"}
+                    ? "Skor Akhir (Sementara)"
+                    : "Skor Akhir"}
                 </p>
                 {result.isPendingManual || result.gradingStatus === "pending_manual" ? (
                   <div>

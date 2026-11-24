@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ArrowLeft, ClipboardList, CircleHelp, GraduationCap, ShieldCheck } from "lucide-react";
+import { ThemeToggle } from "@/components/theme/ThemeToggle";
 
 const adminRoles = [
   {
@@ -35,9 +36,12 @@ export default function AdminRolePage() {
         <Link href="/" className="font-[family-name:var(--font-display)] text-lg font-extrabold text-[var(--primary)]">
           Learnix LMS
         </Link>
-        <Link href="#" aria-label="Pusat bantuan" className="text-[var(--muted)] hover:text-[var(--primary)]">
-          <CircleHelp className="size-5" />
-        </Link>
+        <div className="flex items-center gap-3">
+          <ThemeToggle showLabel />
+          <Link href="#" aria-label="Pusat bantuan" className="text-[var(--muted)] hover:text-[var(--primary)]">
+            <CircleHelp className="size-5" />
+          </Link>
+        </div>
       </header>
 
       <section className="mx-auto flex w-full max-w-5xl flex-1 flex-col items-center justify-center px-6 py-16">

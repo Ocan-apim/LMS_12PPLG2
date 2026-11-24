@@ -5,6 +5,7 @@ import {
   verifySessionToken,
 } from "@/lib/auth";
 import { ROLE_DASHBOARD, isRole } from "@/lib/roles";
+import type { Role } from "@/types";
 
 const PUBLIC_PATHS = ["/", "/login", "/forgot-password"];
 
@@ -28,6 +29,48 @@ function isAllowedBeforeActivationApi(pathname: string) {
     pathname === "/api/auth/activate" ||
     pathname.startsWith("/api/auth/forgot-password")
   );
+}
+
+/**
+ * Checks if an authenticated user with `userRole` is permitted to access
+ * a shared detail/monitoring route under another role's URL prefix.
+ */
+function isAuthorizedCrossRolePath(pathname: string, userRole: Role): boolean {
+  // Admin can inspect and manage Tugas, Kuis, Submissions, and Class detail pages
+  if (userRole === "admin") {
+    if (
+      /^\/guru\/(assignments|quizzes)\/(?!new(?:\/|$))[^/]+(?:\/(submissions|edit))?$/.test(
+        pathname
+      )
+    ) {
+      return true;
+    }
+    if (/^\/guru\/classes\/(?!new(?:\/|$))[^/]+$/.test(pathname)) {
+      return true;
+    }
+    if (/^\/siswa\/(assignments|quiz)\/[^/]+$/.test(pathname)) {
+      return true;
+    }
+  }
+
+  // Kepsek can inspect Tugas, Kuis, Submissions, and Class detail pages in read-only supervision mode
+  if (userRole === "kepsek") {
+    if (
+      /^\/guru\/(assignments|quizzes)\/(?!new(?:\/|$))[^/]+(?:\/submissions)?$/.test(
+        pathname
+      )
+    ) {
+      return true;
+    }
+    if (/^\/guru\/classes\/(?!new(?:\/|$))[^/]+$/.test(pathname)) {
+      return true;
+    }
+    if (/^\/siswa\/(assignments|quiz)\/[^/]+$/.test(pathname)) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 export async function proxy(request: NextRequest) {
@@ -74,6 +117,9 @@ export async function proxy(request: NextRequest) {
   for (const [role, prefix] of Object.entries(rolePrefixes)) {
     if (pathname.startsWith(prefix) && session.role !== role) {
       if (isRole(session.role)) {
+        if (isAuthorizedCrossRolePath(pathname, session.role)) {
+          break;
+        }
         return NextResponse.redirect(
           new URL(ROLE_DASHBOARD[session.role], request.url)
         );

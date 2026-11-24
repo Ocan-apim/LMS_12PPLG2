@@ -126,6 +126,7 @@ export default function GoogleClassroomSubmissionsPage({
 
   const [assignment, setAssignment] = useState<AssignmentInfo | null>(null);
   const [items, setItems] = useState<SubmissionData[]>([]);
+  const [isReadOnly, setIsReadOnly] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -150,6 +151,12 @@ export default function GoogleClassroomSubmissionsPage({
         if (json.success) {
           setAssignment(json.data.assignment);
           setItems(json.data.items || []);
+          setIsReadOnly(
+            Boolean(
+              json.data.isReadOnly ||
+                ["kepsek", "kurikulum"].includes(json.data.currentUserRole || "")
+            )
+          );
           if (json.data.items && json.data.items.length > 0) {
             setSelectedStudentId(json.data.items[0].student._id);
           }
@@ -947,61 +954,63 @@ export default function GoogleClassroomSubmissionsPage({
                                       </div>
                                     )}
 
-                                    <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
-                                      <span className="text-xs font-semibold text-foreground">
-                                        Beri Nilai Soal Ini:
-                                      </span>
-                                      <div className="flex items-center gap-1.5">
-                                        <button
-                                          type="button"
-                                          onClick={() => handleEssayScoreChange(q.id, 0, q.points)}
-                                          className="rounded px-2 py-1 text-[11px] font-medium border border-border hover:bg-muted text-muted-foreground transition-colors"
-                                        >
-                                          0
-                                        </button>
-                                        <button
-                                          type="button"
-                                          onClick={() =>
-                                            handleEssayScoreChange(
-                                              q.id,
-                                              Math.round(q.points / 2),
-                                              q.points
-                                            )
-                                          }
-                                          className="rounded px-2 py-1 text-[11px] font-medium border border-border hover:bg-muted text-muted-foreground transition-colors"
-                                        >
-                                          50%
-                                        </button>
-                                        <button
-                                          type="button"
-                                          onClick={() =>
-                                            handleEssayScoreChange(q.id, q.points, q.points)
-                                          }
-                                          className="rounded px-2 py-1 text-[11px] font-medium border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 dark:bg-blue-950/40 dark:text-blue-300 transition-colors"
-                                        >
-                                          Penuh ({q.points})
-                                        </button>
-                                        <div className="flex items-center gap-1 ml-1">
-                                          <input
-                                            type="number"
-                                            min="0"
-                                            max={q.points}
-                                            value={currentAwarded}
-                                            onChange={(e) =>
+                                    {!isReadOnly && (
+                                      <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                                        <span className="text-xs font-semibold text-foreground">
+                                          Beri Nilai Soal Ini:
+                                        </span>
+                                        <div className="flex items-center gap-1.5">
+                                          <button
+                                            type="button"
+                                            onClick={() => handleEssayScoreChange(q.id, 0, q.points)}
+                                            className="rounded px-2 py-1 text-[11px] font-medium border border-border hover:bg-muted text-muted-foreground transition-colors"
+                                          >
+                                            0
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() =>
                                               handleEssayScoreChange(
                                                 q.id,
-                                                Number(e.target.value),
+                                                Math.round(q.points / 2),
                                                 q.points
                                               )
                                             }
-                                            className="w-14 rounded-lg border border-border bg-background p-1 text-center font-bold text-xs text-foreground focus:border-blue-500 focus:outline-none"
-                                          />
-                                          <span className="text-xs text-muted-foreground">
-                                            / {q.points}
-                                          </span>
+                                            className="rounded px-2 py-1 text-[11px] font-medium border border-border hover:bg-muted text-muted-foreground transition-colors"
+                                          >
+                                            50%
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() =>
+                                              handleEssayScoreChange(q.id, q.points, q.points)
+                                            }
+                                            className="rounded px-2 py-1 text-[11px] font-medium border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 dark:bg-blue-950/40 dark:text-blue-300 transition-colors"
+                                          >
+                                            Penuh ({q.points})
+                                          </button>
+                                          <div className="flex items-center gap-1 ml-1">
+                                            <input
+                                              type="number"
+                                              min="0"
+                                              max={q.points}
+                                              value={currentAwarded}
+                                              onChange={(e) =>
+                                                handleEssayScoreChange(
+                                                  q.id,
+                                                  Number(e.target.value),
+                                                  q.points
+                                                )
+                                              }
+                                              className="w-14 rounded-lg border border-border bg-background p-1 text-center font-bold text-xs text-foreground focus:border-blue-500 focus:outline-none"
+                                            />
+                                            <span className="text-xs text-muted-foreground">
+                                              / {q.points}
+                                            </span>
+                                          </div>
                                         </div>
                                       </div>
-                                    </div>
+                                    )}
                                   </div>
                                 )}
                               </div>
@@ -1117,9 +1126,10 @@ export default function GoogleClassroomSubmissionsPage({
                       max={assignment.maxScore}
                       step="any"
                       value={currentScore}
+                      disabled={isReadOnly}
                       onChange={(e) => setCurrentScore(e.target.value)}
                       placeholder="0"
-                      className="w-20 rounded-lg border border-border bg-background p-1.5 text-center font-bold text-sm text-foreground focus:border-blue-500 focus:outline-none"
+                      className="w-20 rounded-lg border border-border bg-background p-1.5 text-center font-bold text-sm text-foreground focus:border-blue-500 focus:outline-none disabled:opacity-60"
                     />
                     <span className="text-xs font-bold text-muted-foreground">
                       / {assignment.maxScore}
@@ -1135,34 +1145,50 @@ export default function GoogleClassroomSubmissionsPage({
                   <textarea
                     rows={3}
                     value={currentFeedback}
+                    disabled={isReadOnly}
                     onChange={(e) => setCurrentFeedback(e.target.value)}
-                    placeholder="Tuliskan apresiasi atau saran perbaikan untuk siswa ini..."
-                    className="w-full rounded-xl border border-border bg-background p-2.5 text-xs text-foreground focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    placeholder={
+                      isReadOnly
+                        ? "Belum ada catatan feedback dari guru."
+                        : "Tuliskan apresiasi atau saran perbaikan untuk siswa ini..."
+                    }
+                    className="w-full rounded-xl border border-border bg-background p-2.5 text-xs text-foreground focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-60"
                   />
                 </div>
 
-                {/* Save Buttons */}
-                <div className="flex items-center gap-2 pt-1">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    disabled={savingGrade}
-                    onClick={() => handleSaveGrade(true)}
-                    className="flex-1 text-xs"
-                  >
-                    Draft
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    disabled={savingGrade}
-                    onClick={() => handleSaveGrade(false)}
-                    className="flex-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs shadow-xs"
-                  >
-                    {savingGrade ? "Menyimpan..." : "Kembalikan Nilai"}
-                  </Button>
-                </div>
+                {/* Save Buttons or Read-Only Notice */}
+                {isReadOnly ? (
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-center">
+                    <p className="text-xs font-bold text-amber-800">
+                      Mode Pratinjau (Baca-Saja)
+                    </p>
+                    <p className="mt-0.5 text-[11px] text-amber-700">
+                      Anda melihat hasil pengumpulan dan nilai siswa dalam mode supervisi. Perubahan nilai dinonaktifkan.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 pt-1">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={savingGrade}
+                      onClick={() => handleSaveGrade(true)}
+                      className="flex-1 text-xs"
+                    >
+                      Draft
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      disabled={savingGrade}
+                      onClick={() => handleSaveGrade(false)}
+                      className="flex-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs shadow-xs"
+                    >
+                      {savingGrade ? "Menyimpan..." : "Kembalikan Nilai"}
+                    </Button>
+                  </div>
+                )}
 
                 {saveNotification && (
                   <div className="flex items-center gap-1.5 rounded-lg bg-emerald-50 p-2 text-xs text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 animate-in fade-in">

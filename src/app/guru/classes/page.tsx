@@ -288,14 +288,13 @@ export default function GuruClassesPage() {
             >
               {/* Top Blue Header Banner with enrollment badge & 3-dots menu */}
               <div className="relative h-28 bg-[#0066FF] p-3">
-                <div className="flex items-start justify-between">
-                  {item.enrollmentMethod === "rombel" ? (
-                    <span className="inline-flex items-center gap-1 rounded-lg bg-white/20 px-2.5 py-1 text-[10px] font-bold text-white backdrop-blur-xs">
-                      Assign Rombel • {item.classRombelId?.name || "Terdaftar"}
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center gap-1 rounded-lg bg-white/20 px-2.5 py-1 text-[10px] font-bold text-white backdrop-blur-xs">
-                      Kode Undangan • {item.code}
+                <div className="flex items-start justify-between flex-wrap gap-1.5 pr-6">
+                  <span className="inline-flex items-center gap-1 rounded-lg bg-white/20 px-2.5 py-1 text-[10px] font-bold text-white backdrop-blur-xs">
+                    Rombel: {item.classRombelId?.name || "Belum Ditetapkan"}
+                  </span>
+                  {item.code && (
+                    <span className="inline-flex items-center gap-1 rounded-lg bg-white/15 px-2.5 py-1 text-[10px] font-bold text-white backdrop-blur-xs">
+                      Kode: {item.code}
                     </span>
                   )}
                 </div>
@@ -360,11 +359,7 @@ export default function GuruClassesPage() {
                     {item.name}
                   </Link>
                   <p className="text-xs text-slate-500 mt-0.5">
-                    {item.enrollmentMethod === "rombel"
-                      ? `Rombel: ${item.classRombelId?.name || "-"} • ${item.studentCount || 0} Siswa Terdaftar`
-                      : item.classRombelId?.name
-                        ? `Gedung D • Wali Kelas ${item.classRombelId.name}`
-                        : `Kode Undangan • ${item.studentCount || 0} Siswa Terdaftar`}
+                    Rombel (Permanen): <strong>{item.classRombelId?.name || "Belum Ditetapkan"}</strong> &bull; {item.studentCount || 0} Siswa Terdaftar
                   </p>
                 </div>
 
@@ -496,7 +491,7 @@ export default function GuruClassesPage() {
             </div>
 
             <p className="text-xs text-slate-500 leading-relaxed">
-              Kelas dan data terkait mungkin tidak dapat dipulihkan.
+              Kelas akan dinonaktifkan dari daftar kelas aktif, namun seluruh riwayat nilai, pengumpulan tugas, hasil kuis, dan diskusi tetap tersimpan secara aman.
             </p>
 
             <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">

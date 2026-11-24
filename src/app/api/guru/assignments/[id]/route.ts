@@ -40,8 +40,6 @@ export async function GET(_req: Request, context: RouteContext) {
   const { session, error } = await requireRole([
     "guru",
     "admin",
-    "siswa",
-    "kurikulum",
     "kepsek",
   ]);
   if (error || !session) return error;
@@ -59,7 +57,7 @@ export async function GET(_req: Request, context: RouteContext) {
     await ensureCommentIdsOnCollection(Assignment.collection, id);
 
     let assignment: any = await Assignment.findById(id)
-      .populate("courseClassId", "name code bannerColor studentIds teacherId")
+      .populate("courseClassId", "name code bannerColor studentIds teacherId classRombelId")
       .populate("classId", "name grade")
       .populate("teacherId", "name email degree")
       .populate("quizId");
@@ -69,7 +67,7 @@ export async function GET(_req: Request, context: RouteContext) {
     if (!assignment) {
       await ensureCommentIdsOnCollection(Quiz.collection, id);
       standaloneQuiz = await Quiz.findById(id)
-        .populate("courseClassId", "name code bannerColor studentIds teacherId")
+        .populate("courseClassId", "name code bannerColor studentIds teacherId classRombelId")
         .populate("teacherId", "name email degree");
 
       if (standaloneQuiz) {
@@ -77,7 +75,7 @@ export async function GET(_req: Request, context: RouteContext) {
           quizId: standaloneQuiz._id,
           isArchived: { $ne: true },
         })
-          .populate("courseClassId", "name code bannerColor studentIds teacherId")
+          .populate("courseClassId", "name code bannerColor studentIds teacherId classRombelId")
           .populate("classId", "name grade")
           .populate("teacherId", "name email degree")
           .populate("quizId");
@@ -154,10 +152,32 @@ export async function GET(_req: Request, context: RouteContext) {
     if (assignment) {
       const assignmentObj = assignment.toObject();
       const isQuiz = assignmentObj.type === "kuis" || Boolean(quizDoc);
+
+      // Merge comments from both Assignment and linked Quiz if both exist
+      const rawAssignComments = Array.isArray(assignmentObj.comments)
+        ? assignmentObj.comments
+        : [];
+      const rawQuizComments =
+        quizDoc && Array.isArray(quizDoc.comments) ? quizDoc.comments : [];
+      const seenCommentIds = new Set<string>();
+      const mergedComments = [...rawAssignComments, ...rawQuizComments]
+        .filter((c: any) => {
+          const cid = c?._id ? String(c._id) : `${c?.userId}-${c?.createdAt}-${c?.message}`;
+          if (seenCommentIds.has(cid)) return false;
+          seenCommentIds.add(cid);
+          return true;
+        })
+        .sort(
+          (a: any, b: any) =>
+            new Date(a.createdAt || 0).getTime() -
+            new Date(b.createdAt || 0).getTime()
+        );
+
       return NextResponse.json({
         success: true,
         data: {
           ...assignmentObj,
+          comments: mergedComments,
           type: isQuiz ? "kuis" : assignmentObj.type || "tugas",
           maxScore: isQuiz ? 100 : assignmentObj.maxScore || 100,
           maxRawScore:

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ArrowLeft, GraduationCap, ShieldCheck, UserRound } from "lucide-react";
+import { ThemeToggle } from "@/components/theme/ThemeToggle";
 
 const roles = [
   {
@@ -49,7 +50,10 @@ function AuthFooter() {
 export function LoginGateway() {
   return (
     <main className="flex min-h-screen flex-col">
-      <section className="mx-auto flex w-full max-w-5xl flex-1 flex-col items-center justify-center px-6 py-16">
+      <div className="mx-auto flex w-full max-w-5xl justify-end px-6 pt-6">
+        <ThemeToggle showLabel />
+      </div>
+      <section className="mx-auto flex w-full max-w-5xl flex-1 flex-col items-center justify-center px-6 py-10">
         <div className="flex flex-col items-center text-center">
           <div className="grid size-11 place-items-center rounded-lg bg-[var(--primary)] text-white shadow-[0_14px_30px_rgba(8,104,207,0.26)]">
             <GraduationCap className="size-5" />
