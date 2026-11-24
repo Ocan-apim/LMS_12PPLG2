@@ -29,6 +29,10 @@ interface ProfileUser {
   _id: string;
   name: string;
   email: string;
+  loginUsername?: string | null;
+  isActivated?: boolean;
+  mustChangePassword?: boolean;
+  activatedAt?: string | null;
   role: Role;
   isActive?: boolean;
   nis?: string | null;
@@ -70,6 +74,7 @@ interface ProfileUser {
 interface ProfilePermissions {
   canEditAccount: boolean;
   canEditEmail: boolean;
+  canEditUsername?: boolean;
   canEditIdentificationNumber: boolean;
   identificationField: "nisn" | "nip" | null;
   identificationLabel: string | null;
@@ -141,8 +146,9 @@ export function RoleProfileView({ role }: { role?: Role }) {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
-  // Account Form State (Email & Identification Number)
+  // Account Form State (Email, Username, & Identification Number)
   const [email, setEmail] = useState("");
+  const [loginUsername, setLoginUsername] = useState("");
   const [idNumber, setIdNumber] = useState("");
   const [nisNumber, setNisNumber] = useState("");
   const [savingAccount, setSavingAccount] = useState(false);
@@ -177,6 +183,7 @@ export function RoleProfileView({ role }: { role?: Role }) {
       const profileData: ProfileResponseData = json.data;
       setData(profileData);
       setEmail(profileData.user.email || "");
+      setLoginUsername(profileData.user.loginUsername || "");
       if (profileData.user.role === "siswa") {
         setIdNumber(profileData.user.nisn || profileData.user.nis || "");
         setNisNumber(profileData.user.nis || "");
@@ -209,6 +216,7 @@ export function RoleProfileView({ role }: { role?: Role }) {
         setData(profileData);
         setLoadError(null);
         setEmail(profileData.user.email || "");
+        setLoginUsername(profileData.user.loginUsername || "");
         if (profileData.user.role === "siswa") {
           setIdNumber(profileData.user.nisn || profileData.user.nis || "");
           setNisNumber(profileData.user.nis || "");
@@ -257,11 +265,14 @@ export function RoleProfileView({ role }: { role?: Role }) {
         payload.nis = nisNumber.trim();
       }
     } else if (data.user.role === "guru") {
-      if (!idNumber.trim()) {
-        setAccountMessage({ type: "error", text: "NIP tidak boleh kosong" });
+      if (!loginUsername.trim()) {
+        setAccountMessage({
+          type: "error",
+          text: "Username login tidak boleh kosong",
+        });
         return;
       }
-      payload.nip = idNumber.trim();
+      payload.loginUsername = loginUsername.trim();
     } else if (data.user.role === "admin" && idNumber.trim()) {
       payload.nip = idNumber.trim();
     }
@@ -480,6 +491,16 @@ export function RoleProfileView({ role }: { role?: Role }) {
                 </p>
               </div>
             )}
+            {(userRole === "guru" || userRole === "kurikulum") && (
+              <div className="rounded-xl border border-blue-200 bg-blue-50/60 px-3.5 py-2 text-right">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-blue-500">
+                  Username Login
+                </p>
+                <p className="font-mono text-xs font-extrabold text-blue-900">
+                  {user.loginUsername || "-"}
+                </p>
+              </div>
+            )}
             {userRole !== "siswa" && user.nip && (
               <div className="rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2 text-right">
                 <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
@@ -610,6 +631,20 @@ export function RoleProfileView({ role }: { role?: Role }) {
                   value={user.nip || "-"}
                 />
                 <ReadOnlyField
+                  icon={KeyRound}
+                  label="Username Login"
+                  value={user.loginUsername || "-"}
+                />
+                <ReadOnlyField
+                  icon={ShieldCheck}
+                  label="Status Aktivasi Akun"
+                  value={
+                    user.isActivated !== false && !user.mustChangePassword
+                      ? "Sudah Diaktivasi"
+                      : "Belum Diaktivasi"
+                  }
+                />
+                <ReadOnlyField
                   icon={Mail}
                   label="Email"
                   value={user.email}
@@ -686,6 +721,24 @@ export function RoleProfileView({ role }: { role?: Role }) {
                   label="NIP / ID Pegawai"
                   value={user.nip || "-"}
                 />
+                {userRole === "kurikulum" && (
+                  <>
+                    <ReadOnlyField
+                      icon={KeyRound}
+                      label="Username Login"
+                      value={user.loginUsername || "-"}
+                    />
+                    <ReadOnlyField
+                      icon={ShieldCheck}
+                      label="Status Aktivasi Akun"
+                      value={
+                        user.isActivated !== false && !user.mustChangePassword
+                          ? "Sudah Diaktivasi"
+                          : "Belum Diaktivasi"
+                      }
+                    />
+                  </>
+                )}
                 <ReadOnlyField
                   icon={Mail}
                   label="Email"
@@ -753,9 +806,10 @@ export function RoleProfileView({ role }: { role?: Role }) {
                     {userRole === "siswa"
                       ? " dan NISN/NIS"
                       : userRole === "guru"
-                        ? " dan NIP"
+                        ? " dan username login"
                         : ""}{" "}
-                    akun Anda.
+                    akun Anda. Biodata resmi (seperti Nama Lengkap dan NIP) hanya
+                    dapat dikelola oleh Admin.
                   </p>
                 </div>
 
@@ -833,19 +887,22 @@ export function RoleProfileView({ role }: { role?: Role }) {
                   {userRole === "guru" && (
                     <div>
                       <label className="mb-1.5 block text-xs font-bold text-slate-700">
-                        Nomor Induk Pegawai (NIP)
+                        Username Login
                       </label>
                       <div className="relative">
-                        <Hash className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+                        <UserIcon className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
                         <input
                           type="text"
-                          value={idNumber}
-                          onChange={(e) => setIdNumber(e.target.value)}
+                          value={loginUsername}
+                          onChange={(e) => setLoginUsername(e.target.value)}
                           required
-                          placeholder="Masukkan NIP"
+                          placeholder="Contoh: ahmad.fauzan"
                           className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-10 pr-3.5 font-mono text-xs font-semibold text-slate-900 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100"
                         />
                       </div>
+                      <p className="mt-1 text-[11px] text-slate-500">
+                        Digunakan sebagai identitas login Anda (harus unik pada peran Guru).
+                      </p>
                     </div>
                   )}
 

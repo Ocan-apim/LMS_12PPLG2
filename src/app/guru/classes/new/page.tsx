@@ -3,22 +3,38 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Plus, Check, Copy, ChevronRight } from "lucide-react";
+import {
+  Plus,
+  Check,
+  Copy,
+  ChevronRight,
+  Users,
+  KeyRound,
+  GraduationCap,
+  Loader2,
+  AlertCircle,
+} from "lucide-react";
 
 interface RombelOption {
   _id: string;
   name: string;
   grade: string;
+  studentCount?: number;
 }
+
+type EnrollmentMethodOption = "rombel" | "invitation";
 
 export default function BuatKelasMapelPage() {
   const router = useRouter();
 
   const [rombels, setRombels] = useState<RombelOption[]>([]);
+  const [loadingRombels, setLoadingRombels] = useState(true);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  const [enrollmentMethod, setEnrollmentMethod] =
+    useState<EnrollmentMethodOption>("rombel");
+  const [selectedRombelId, setSelectedRombelId] = useState("");
   const [password, setPassword] = useState("");
-  const [selectedRombelIds, setSelectedRombelIds] = useState<string[]>([]);
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -26,31 +42,36 @@ export default function BuatKelasMapelPage() {
   const [createdClass, setCreatedClass] = useState<{
     _id: string;
     name: string;
-    code: string;
-    password: string;
+    enrollmentMethod: EnrollmentMethodOption;
+    code?: string;
+    password?: string;
+    rombelName?: string;
+    studentCount?: number;
   } | null>(null);
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
+    let active = true;
     async function loadRombels() {
       try {
+        setLoadingRombels(true);
         const res = await fetch("/api/admin/classes");
         const json = await res.json();
-        if (json.success) {
+        if (!active) return;
+        if (json.success && Array.isArray(json.data)) {
           setRombels(json.data);
         }
       } catch (err) {
         console.error("Gagal memuat rombel:", err);
+      } finally {
+        if (active) setLoadingRombels(false);
       }
     }
     loadRombels();
+    return () => {
+      active = false;
+    };
   }, []);
-
-  function toggleRombel(id: string) {
-    setSelectedRombelIds((prev) =>
-      prev.includes(id) ? prev.filter((r) => r !== id) : [...prev, id]
-    );
-  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -60,34 +81,62 @@ export default function BuatKelasMapelPage() {
       setError("Nama kelas / mapel wajib diisi");
       return;
     }
-    if (!password.trim()) {
-      setError("Password kelas wajib diisi");
-      return;
+
+    if (enrollmentMethod === "rombel") {
+      if (!selectedRombelId) {
+        setError("Silakan pilih satu rombel tujuan");
+        return;
+      }
+    } else {
+      if (!password.trim()) {
+        setError("Password kelas wajib diisi untuk metode Kode Undangan");
+        return;
+      }
     }
 
     setSubmitting(true);
     try {
+      const payload =
+        enrollmentMethod === "rombel"
+          ? {
+              name: name.trim(),
+              description: description.trim() || undefined,
+              enrollmentMethod: "rombel" as const,
+              classRombelId: selectedRombelId,
+            }
+          : {
+              name: name.trim(),
+              description: description.trim() || undefined,
+              enrollmentMethod: "invitation" as const,
+              password: password.trim(),
+            };
+
       const res = await fetch("/api/guru/classes", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: name.trim(),
-          description: description.trim() || undefined,
-          password: password.trim(),
-          classRombelId: selectedRombelIds[0] || undefined,
-          assignedRombelIds: selectedRombelIds,
-        }),
+        body: JSON.stringify(payload),
       });
 
       const json = await res.json();
-      if (!json.success) {
+      if (!res.ok || !json.success) {
         setError(json.message || "Gagal membuat kelas");
       } else {
+        const classData = json.data;
+        const matchedRombel = rombels.find((r) => r._id === selectedRombelId);
         setCreatedClass({
-          _id: json.data._id,
-          name: json.data.name,
-          code: json.data.code,
-          password: json.data.password,
+          _id: classData._id,
+          name: classData.name,
+          enrollmentMethod,
+          code: classData.code,
+          password: password.trim(),
+          rombelName:
+            classData.classRombelId?.name || matchedRombel?.name || undefined,
+          studentCount:
+            typeof classData.studentCount === "number"
+              ? classData.studentCount
+              : Array.isArray(classData.studentIds)
+                ? classData.studentIds.length
+                : 0,
         });
       }
     } catch {
@@ -98,7 +147,7 @@ export default function BuatKelasMapelPage() {
   }
 
   function handleCopy() {
-    if (!createdClass) return;
+    if (!createdClass || createdClass.enrollmentMethod === "rombel") return;
     const text = `Kelas: ${createdClass.name}\nKode Kelas: ${createdClass.code}\nPassword: ${createdClass.password}`;
     navigator.clipboard.writeText(text);
     setCopied(true);
@@ -107,7 +156,7 @@ export default function BuatKelasMapelPage() {
 
   return (
     <div className="space-y-6 pb-20 max-w-5xl mx-auto">
-      {/* Breadcrumb matching Screenshot 2 Right */}
+      {/* Breadcrumb */}
       <div className="flex items-center gap-2 text-xs font-medium text-slate-400">
         <Link href="/guru" className="hover:text-blue-600 transition">
           Dashboard
@@ -117,27 +166,33 @@ export default function BuatKelasMapelPage() {
       </div>
 
       {error && (
-        <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-700">
-          {error}
+        <div className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-xs font-medium text-red-700">
+          <AlertCircle className="size-4 shrink-0 text-red-600" />
+          <span>{error}</span>
         </div>
       )}
 
       {!createdClass ? (
-        /* Giant Blue Gradient Card matching Screenshot 2 Right */
-        <div className="relative overflow-hidden rounded-3xl bg-linear-to-b from-blue-600 to-indigo-700 p-8 sm:p-14 text-white shadow-xl">
+        /* Blue Gradient Card */
+        <div className="relative overflow-hidden rounded-3xl bg-linear-to-b from-blue-600 to-indigo-700 p-6 sm:p-12 text-white shadow-xl">
           <div className="mx-auto max-w-lg text-center space-y-2">
             <h1 className="text-2xl sm:text-3xl font-extrabold text-white">
               Buat Kelas Mapel
             </h1>
-            <p className="text-sm text-blue-100/90 font-medium">
-              Kode Kelas akan digenerate oleh sistem
+            <p className="text-xs sm:text-sm text-blue-100/90 font-medium">
+              Pilih metode pendaftaran siswa melalui Assign ke Rombel atau Kode
+              Undangan
             </p>
           </div>
 
-          <form onSubmit={handleSubmit} className="mx-auto mt-8 max-w-md space-y-5">
+          <form
+            onSubmit={handleSubmit}
+            className="mx-auto mt-8 max-w-lg space-y-5"
+          >
+            {/* Nama Kelas / Mapel */}
             <div>
-              <label className="block text-sm font-semibold text-white mb-2 text-center">
-                Nama Kelas / Mapel
+              <label className="block text-sm font-semibold text-white mb-2">
+                Nama Kelas / Mapel <span className="text-amber-300">*</span>
               </label>
               <input
                 type="text"
@@ -149,8 +204,9 @@ export default function BuatKelasMapelPage() {
               />
             </div>
 
+            {/* Deskripsi Kelas (Opsional) */}
             <div>
-              <label className="block text-xs font-semibold text-blue-100 mb-1.5 text-center">
+              <label className="block text-xs font-semibold text-blue-100 mb-1.5">
                 Deskripsi Kelas (Opsional)
               </label>
               <input
@@ -162,67 +218,192 @@ export default function BuatKelasMapelPage() {
               />
             </div>
 
-            <div>
-              <label className="block text-sm font-semibold text-white mb-2 text-center">
-                Password Kelas
+            {/* Metode Pendaftaran Siswa */}
+            <div className="space-y-3 pt-1">
+              <label className="block text-sm font-bold text-white">
+                Metode Pendaftaran Siswa
               </label>
-              <input
-                type="text"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Buatlah password kelas"
-                required
-                className="w-full rounded-xl bg-white px-4 py-3 text-sm text-slate-800 placeholder-slate-400 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
-              />
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                {/* Option A: Assign ke Rombel */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEnrollmentMethod("rombel");
+                    setError("");
+                  }}
+                  className={`flex flex-col items-start rounded-2xl border p-4 text-left transition cursor-pointer ${
+                    enrollmentMethod === "rombel"
+                      ? "border-white bg-white text-blue-900 shadow-lg"
+                      : "border-white/25 bg-white/10 text-white hover:bg-white/15"
+                  }`}
+                >
+                  <div className="flex w-full items-center justify-between">
+                    <span
+                      className={`grid size-9 place-items-center rounded-xl ${
+                        enrollmentMethod === "rombel"
+                          ? "bg-blue-100 text-blue-700"
+                          : "bg-white/15 text-white"
+                      }`}
+                    >
+                      <Users className="size-4.5" />
+                    </span>
+                    <span
+                      className={`size-4 rounded-full border-2 flex items-center justify-center ${
+                        enrollmentMethod === "rombel"
+                          ? "border-blue-600 bg-blue-600"
+                          : "border-white/60"
+                      }`}
+                    >
+                      {enrollmentMethod === "rombel" && (
+                        <span className="size-1.5 rounded-full bg-white" />
+                      )}
+                    </span>
+                  </div>
+                  <span className="mt-3 text-sm font-extrabold">
+                    Assign ke Rombel
+                  </span>
+                  <span
+                    className={`mt-1 text-[11px] leading-relaxed ${
+                      enrollmentMethod === "rombel"
+                        ? "text-slate-600"
+                        : "text-blue-100/85"
+                    }`}
+                  >
+                    Daftarkan seluruh siswa aktif dari 1 rombel secara otomatis.
+                  </span>
+                </button>
+
+                {/* Option B: Kode Undangan */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEnrollmentMethod("invitation");
+                    setError("");
+                  }}
+                  className={`flex flex-col items-start rounded-2xl border p-4 text-left transition cursor-pointer ${
+                    enrollmentMethod === "invitation"
+                      ? "border-white bg-white text-blue-900 shadow-lg"
+                      : "border-white/25 bg-white/10 text-white hover:bg-white/15"
+                  }`}
+                >
+                  <div className="flex w-full items-center justify-between">
+                    <span
+                      className={`grid size-9 place-items-center rounded-xl ${
+                        enrollmentMethod === "invitation"
+                          ? "bg-blue-100 text-blue-700"
+                          : "bg-white/15 text-white"
+                      }`}
+                    >
+                      <KeyRound className="size-4.5" />
+                    </span>
+                    <span
+                      className={`size-4 rounded-full border-2 flex items-center justify-center ${
+                        enrollmentMethod === "invitation"
+                          ? "border-blue-600 bg-blue-600"
+                          : "border-white/60"
+                      }`}
+                    >
+                      {enrollmentMethod === "invitation" && (
+                        <span className="size-1.5 rounded-full bg-white" />
+                      )}
+                    </span>
+                  </div>
+                  <span className="mt-3 text-sm font-extrabold">
+                    Kode Undangan
+                  </span>
+                  <span
+                    className={`mt-1 text-[11px] leading-relaxed ${
+                      enrollmentMethod === "invitation"
+                        ? "text-slate-600"
+                        : "text-blue-100/85"
+                    }`}
+                  >
+                    Siswa bergabung manual menggunakan kode kelas &amp; password.
+                  </span>
+                </button>
+              </div>
             </div>
 
-            {/* Assign ke Kelas / Rombel selector */}
-            {rombels.length > 0 && (
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <label className="block text-xs font-bold text-white uppercase tracking-wider">
-                    Assign ke Kelas / Rombel
-                  </label>
-                  <span className="text-[11px] text-blue-200">
-                    {selectedRombelIds.length} dipilih
-                  </span>
-                </div>
-                <p className="text-[11px] text-blue-100/80">
-                  Siswa di rombel yang dipilih akan otomatis terdaftar dan menerima notifikasi kelas baru tanpa perlu memasukkan kode manual.
-                </p>
+            {/* Dynamic Fields Based on Selected Enrollment Method */}
+            {enrollmentMethod === "rombel" ? (
+              <div className="rounded-2xl border border-white/20 bg-white/10 p-4 space-y-2.5">
+                <label
+                  htmlFor="select-rombel"
+                  className="block text-xs font-bold uppercase tracking-wider text-white"
+                >
+                  Pilih Rombel Tujuan (1 Rombel){" "}
+                  <span className="text-amber-300">*</span>
+                </label>
 
-                <div className="max-h-48 overflow-y-auto space-y-1.5 rounded-2xl bg-white/10 p-3 border border-white/20">
-                  {rombels.map((r) => {
-                    const isChecked = selectedRombelIds.includes(r._id);
-                    return (
-                      <label
-                        key={r._id}
-                        className={`flex items-center gap-3 p-2 rounded-xl cursor-pointer text-xs transition ${
-                          isChecked ? "bg-white/20 font-bold text-white" : "text-blue-100 hover:bg-white/10"
-                        }`}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={isChecked}
-                          onChange={() => toggleRombel(r._id)}
-                          className="size-4 rounded text-blue-600 focus:ring-blue-500 bg-white"
-                        />
-                        <span className="flex-1">{r.name}</span>
-                        <span className="text-[10px] text-blue-200 font-normal">
-                          Tingkat {r.grade}
-                        </span>
-                      </label>
-                    );
-                  })}
-                </div>
+                {loadingRombels ? (
+                  <div className="flex items-center gap-2 rounded-xl bg-white/15 px-4 py-3 text-xs text-blue-100">
+                    <Loader2 className="size-4 animate-spin" />
+                    <span>Memuat daftar rombel aktif...</span>
+                  </div>
+                ) : rombels.length === 0 ? (
+                  <div className="rounded-xl border border-amber-300/40 bg-amber-500/20 p-3 text-xs text-amber-100">
+                    Belum ada rombel aktif yang tersedia di sistem. Silakan
+                    gunakan metode Kode Undangan atau hubungi Admin.
+                  </div>
+                ) : (
+                  <select
+                    id="select-rombel"
+                    value={selectedRombelId}
+                    onChange={(e) => setSelectedRombelId(e.target.value)}
+                    required
+                    className="w-full rounded-xl bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
+                  >
+                    <option value="">-- Pilih Satu Rombel --</option>
+                    {rombels.map((r) => (
+                      <option key={r._id} value={r._id}>
+                        {r.name} (Tingkat {r.grade}
+                        {typeof r.studentCount === "number"
+                          ? ` • ${r.studentCount} Siswa`
+                          : ""}
+                        )
+                      </option>
+                    ))}
+                  </select>
+                )}
+
+                <p className="text-[11px] text-blue-100/85 leading-relaxed">
+                  Seluruh siswa aktif yang terdaftar di rombel terpilih akan
+                  langsung mendapatkan akses ke kelas ini di menu{" "}
+                  <strong>Mata Pelajaran</strong> mereka tanpa memerlukan kode
+                  undangan atau password.
+                </p>
+              </div>
+            ) : (
+              <div className="rounded-2xl border border-white/20 bg-white/10 p-4 space-y-2.5">
+                <label className="block text-xs font-bold uppercase tracking-wider text-white">
+                  Password Kelas <span className="text-amber-300">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Buatlah password kelas"
+                  required
+                  className="w-full rounded-xl bg-white px-4 py-3 text-sm text-slate-800 placeholder-slate-400 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
+                />
+                <p className="text-[11px] text-blue-100/85 leading-relaxed">
+                  Kode Kelas 5 karakter akan di-generate otomatis oleh sistem.
+                  Anda dapat membagikan Kode Kelas dan Password ini kepada siswa
+                  untuk bergabung melalui menu <strong>Join Kelas Baru</strong>.
+                </p>
               </div>
             )}
 
             <div className="pt-2 flex justify-center">
               <button
                 type="submit"
-                disabled={submitting}
-                className="flex items-center gap-2 rounded-xl bg-white px-8 py-3 text-sm font-bold text-blue-600 shadow-md hover:bg-blue-50 transition disabled:opacity-50"
+                disabled={
+                  submitting ||
+                  (enrollmentMethod === "rombel" &&
+                    (loadingRombels || rombels.length === 0))
+                }
+                className="flex items-center gap-2 rounded-xl bg-white px-8 py-3 text-sm font-bold text-blue-600 shadow-md hover:bg-blue-50 transition disabled:opacity-50 cursor-pointer"
               >
                 <Plus className="size-4 text-blue-600" />
                 <span>{submitting ? "Memproses..." : "Buat Kelas"}</span>
@@ -236,47 +417,109 @@ export default function BuatKelasMapelPage() {
           <div className="mx-auto flex size-12 items-center justify-center rounded-full bg-green-100 text-green-600">
             <Check className="size-6" />
           </div>
-          <h2 className="text-xl font-bold text-slate-900">Kelas Berhasil Dibuat!</h2>
-          <p className="text-xs text-slate-500">
-            Bagikan kode kelas dan password berikut kepada siswa Anda.
-          </p>
+          <h2 className="text-xl font-bold text-slate-900">
+            Kelas Berhasil Dibuat!
+          </h2>
 
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 space-y-2 text-left text-xs">
-            <p>
-              <span className="text-slate-500">Nama Kelas:</span>{" "}
-              <strong className="text-slate-900">{createdClass.name}</strong>
-            </p>
-            <p>
-              <span className="text-slate-500">Kode Kelas:</span>{" "}
-              <strong className="font-mono text-blue-600 text-sm">
-                {createdClass.code}
-              </strong>
-            </p>
-            <p>
-              <span className="text-slate-500">Password:</span>{" "}
-              <strong className="font-mono text-slate-900">
-                {createdClass.password}
-              </strong>
-            </p>
-          </div>
+          {createdClass.enrollmentMethod === "rombel" ? (
+            <>
+              <p className="text-xs text-slate-500">
+                Seluruh siswa aktif pada rombel terpilih telah otomatis
+                terdaftar ke kelas ini.
+              </p>
 
-          <div className="flex gap-2 justify-center pt-2">
-            <button
-              type="button"
-              onClick={handleCopy}
-              className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-            >
-              {copied ? <Check className="size-3.5 text-green-600" /> : <Copy className="size-3.5" />}
-              <span>{copied ? "Tersalin!" : "Salin Kode"}</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => router.push(`/guru/classes/${createdClass._id}`)}
-              className="rounded-xl bg-blue-600 px-5 py-2 text-xs font-semibold text-white hover:bg-blue-700"
-            >
-              Buka Kelas
-            </button>
-          </div>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 space-y-2.5 text-left text-xs">
+                <p className="flex items-center justify-between">
+                  <span className="text-slate-500">Nama Kelas:</span>
+                  <strong className="text-slate-900">
+                    {createdClass.name}
+                  </strong>
+                </p>
+                <p className="flex items-center justify-between">
+                  <span className="text-slate-500">Metode Pendaftaran:</span>
+                  <span className="inline-flex items-center gap-1 rounded-md bg-blue-50 px-2 py-0.5 text-[11px] font-bold text-blue-700 border border-blue-200">
+                    <GraduationCap className="size-3" />
+                    Assign ke Rombel
+                  </span>
+                </p>
+                <p className="flex items-center justify-between">
+                  <span className="text-slate-500">Rombel Terdaftar:</span>
+                  <strong className="text-slate-900">
+                    {createdClass.rombelName || "-"}
+                  </strong>
+                </p>
+                <p className="flex items-center justify-between">
+                  <span className="text-slate-500">Siswa Terdaftar:</span>
+                  <strong className="text-emerald-700">
+                    {createdClass.studentCount ?? 0} Siswa Aktif
+                  </strong>
+                </p>
+              </div>
+
+              <div className="flex justify-center pt-2">
+                <button
+                  type="button"
+                  onClick={() =>
+                    router.push(`/guru/classes/${createdClass._id}`)
+                  }
+                  className="rounded-xl bg-blue-600 px-6 py-2.5 text-xs font-bold text-white hover:bg-blue-700 transition cursor-pointer"
+                >
+                  Buka Kelas
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <p className="text-xs text-slate-500">
+                Bagikan kode kelas dan password berikut kepada siswa Anda.
+              </p>
+
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 space-y-2 text-left text-xs">
+                <p>
+                  <span className="text-slate-500">Nama Kelas:</span>{" "}
+                  <strong className="text-slate-900">
+                    {createdClass.name}
+                  </strong>
+                </p>
+                <p>
+                  <span className="text-slate-500">Kode Kelas:</span>{" "}
+                  <strong className="font-mono text-blue-600 text-sm">
+                    {createdClass.code}
+                  </strong>
+                </p>
+                <p>
+                  <span className="text-slate-500">Password:</span>{" "}
+                  <strong className="font-mono text-slate-900">
+                    {createdClass.password}
+                  </strong>
+                </p>
+              </div>
+
+              <div className="flex gap-2 justify-center pt-2">
+                <button
+                  type="button"
+                  onClick={handleCopy}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer"
+                >
+                  {copied ? (
+                    <Check className="size-3.5 text-green-600" />
+                  ) : (
+                    <Copy className="size-3.5" />
+                  )}
+                  <span>{copied ? "Tersalin!" : "Salin Kode"}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    router.push(`/guru/classes/${createdClass._id}`)
+                  }
+                  className="rounded-xl bg-blue-600 px-5 py-2 text-xs font-semibold text-white hover:bg-blue-700 cursor-pointer"
+                >
+                  Buka Kelas
+                </button>
+              </div>
+            </>
+          )}
         </div>
       )}
     </div>

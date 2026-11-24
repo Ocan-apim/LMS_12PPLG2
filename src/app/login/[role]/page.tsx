@@ -53,7 +53,9 @@ export default async function RoleLoginPage({ params }: PageProps) {
             <p className="mt-2 max-w-[290px] text-sm leading-5 text-[var(--muted)]">
               {role === "siswa"
                 ? "Masuk menggunakan Nomor Induk Siswa (NIS) dan password akun Anda."
-                : "Akses portal Learnix Academy untuk memulai sesi pembelajaran Anda hari ini."}
+                : role === "guru" || role === "kurikulum"
+                  ? "Masuk menggunakan Username dan password akun Learnix Anda."
+                  : "Akses portal Learnix Academy untuk memulai sesi pembelajaran Anda hari ini."}
             </p>
           </div>
 

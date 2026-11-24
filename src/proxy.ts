@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { COOKIE_NAME, verifySessionToken } from "@/lib/auth";
+import {
+  COOKIE_NAME,
+  requiresAccountActivation,
+  verifySessionToken,
+} from "@/lib/auth";
 import { ROLE_DASHBOARD, isRole } from "@/lib/roles";
 
 const PUBLIC_PATHS = ["/", "/login", "/forgot-password"];
@@ -16,6 +20,16 @@ function isPublicPath(pathname: string) {
   );
 }
 
+function isAllowedBeforeActivationApi(pathname: string) {
+  return (
+    pathname === "/api/auth/login" ||
+    pathname === "/api/auth/logout" ||
+    pathname === "/api/auth/me" ||
+    pathname === "/api/auth/activate" ||
+    pathname.startsWith("/api/auth/forgot-password")
+  );
+}
+
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
@@ -24,7 +38,10 @@ export async function proxy(request: NextRequest) {
   const token = request.cookies.get(COOKIE_NAME)?.value;
   const session = token ? await verifySessionToken(token) : null;
 
-  if ((pathname.startsWith("/login") || pathname.startsWith("/forgot-password")) && session) {
+  if (
+    (pathname.startsWith("/login") || pathname.startsWith("/forgot-password")) &&
+    session
+  ) {
     return NextResponse.redirect(
       new URL(ROLE_DASHBOARD[session.role], request.url)
     );
@@ -61,6 +78,30 @@ export async function proxy(request: NextRequest) {
           new URL(ROLE_DASHBOARD[session.role], request.url)
         );
       }
+    }
+  }
+
+  // Enforce mandatory first-login activation for Guru and Kurikulum
+  if (requiresAccountActivation(session)) {
+    if (pathname.startsWith("/api/")) {
+      if (!isAllowedBeforeActivationApi(pathname)) {
+        return NextResponse.json(
+          {
+            success: false,
+            code: "ACTIVATION_REQUIRED",
+            requiresActivation: true,
+            message:
+              "Akun Anda belum diaktivasi. Silakan selesaikan aktivasi akun terlebih dahulu.",
+          },
+          { status: 403 }
+        );
+      }
+      return NextResponse.next();
+    }
+
+    const roleRoot = ROLE_DASHBOARD[session.role];
+    if (roleRoot && pathname !== roleRoot) {
+      return NextResponse.redirect(new URL(roleRoot, request.url));
     }
   }
 

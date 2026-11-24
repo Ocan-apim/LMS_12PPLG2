@@ -4,7 +4,7 @@ import { requireRole } from "@/lib/session";
 import { ClassModel, User } from "@/models";
 
 export async function GET(req: Request) {
-  const { error } = await requireRole("admin");
+  const { error } = await requireRole(["admin", "guru", "kurikulum", "kepsek"]);
   if (error) return error;
 
   try {

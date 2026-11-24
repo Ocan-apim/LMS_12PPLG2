@@ -103,6 +103,9 @@ async function runSeed() {
     {
       name: "Dra. Siti Rahayu, M.Pd.",
       email: "kurikulum@sekolah.sch.id",
+      loginUsername: "kurikulum",
+      isActivated: true,
+      mustChangePassword: false,
       password: defaultPassword,
       role: "kurikulum",
       nip: "19750512 200003 2 001",
@@ -125,6 +128,9 @@ async function runSeed() {
     {
       name: "Budi Pratama, S.Pd.",
       email: "budi.pratama@sekolah.sch.id",
+      loginUsername: "budi.pratama",
+      isActivated: true,
+      mustChangePassword: false,
       password: defaultPassword,
       role: "guru",
       nip: "19820512 200501 1 003",
@@ -139,6 +145,9 @@ async function runSeed() {
     {
       name: "Siti Lestari, M.Pd.",
       email: "siti.lestari@sekolah.sch.id",
+      loginUsername: "siti.lestari",
+      isActivated: true,
+      mustChangePassword: false,
       password: defaultPassword,
       role: "guru",
       nip: "19850920 200801 2 004",
@@ -153,6 +162,9 @@ async function runSeed() {
     {
       name: "Agus Wijaya, S.T.",
       email: "agus.wijaya@sekolah.sch.id",
+      loginUsername: "agus.wijaya",
+      isActivated: true,
+      mustChangePassword: false,
       password: defaultPassword,
       role: "guru",
       nip: "19870311 201001 1 005",
@@ -167,6 +179,9 @@ async function runSeed() {
     {
       name: "Dra. Rina Sulistiawati, M.Pd.",
       email: "rina.s@sekolah.sch.id",
+      loginUsername: "rina.s",
+      isActivated: true,
+      mustChangePassword: false,
       password: defaultPassword,
       role: "guru",
       nip: "19820512 200501 2 003",
@@ -181,6 +196,9 @@ async function runSeed() {
     {
       name: "Budi Santoso, M.Kom.",
       email: "budi.santoso@sekolah.sch.id",
+      loginUsername: "budi.santoso",
+      isActivated: true,
+      mustChangePassword: false,
       password: defaultPassword,
       role: "guru",
       nip: "19800415 200604 1 007",

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
+import { syncSingleStudentRombelEnrollment } from "@/lib/rombel-enrollment";
 import { requireRole } from "@/lib/session";
 import { CourseClass, Assignment, Submission, User } from "@/models";
 
@@ -10,8 +11,14 @@ export async function GET() {
   try {
     await connectDB();
 
-    const studentUser: any = await User.findById(session.id).select("classId").lean();
+    const studentUser: any = await User.findById(session.id)
+      .select("classId isActive")
+      .lean();
     const studentRombelId = studentUser?.classId;
+
+    if (studentRombelId && studentUser?.isActive !== false) {
+      await syncSingleStudentRombelEnrollment(session.id, studentRombelId);
+    }
 
     const classQuery: Record<string, unknown> = {
       isActive: true,

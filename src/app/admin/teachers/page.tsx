@@ -27,6 +27,9 @@ interface TeacherItem {
   _id: string;
   name: string;
   email: string;
+  loginUsername?: string;
+  isActivated?: boolean;
+  mustChangePassword?: boolean;
   nip?: string;
   degree?: string;
   lastEducation?: string;
@@ -181,6 +184,7 @@ export default function AdminTeachersPage() {
   // Manage Password Modal State
   const [managePasswordTeacher, setManagePasswordTeacher] = useState<TeacherItem | null>(null);
   const [newPassword, setNewPassword] = useState("");
+  const [requireActivationOnReset, setRequireActivationOnReset] = useState(true);
   const [savingPassword, setSavingPassword] = useState(false);
   const [passwordError, setPasswordError] = useState("");
   const [passwordSuccess, setPasswordSuccess] = useState("");
@@ -219,13 +223,17 @@ export default function AdminTeachersPage() {
       const res = await fetch(`/api/admin/teachers/${managePasswordTeacher._id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ password: newPassword.trim() }),
+        body: JSON.stringify({
+          password: newPassword.trim(),
+          requireActivation: requireActivationOnReset,
+        }),
       });
       const json = await res.json();
       if (!json.success) {
         setPasswordError(json.message || "Gagal memperbarui password");
       } else {
         setPasswordSuccess(`Password akun ${managePasswordTeacher.name} berhasil diperbarui!`);
+        loadData();
         setTimeout(() => {
           setManagePasswordTeacher(null);
           setNewPassword("");
@@ -437,6 +445,9 @@ export default function AdminTeachersPage() {
                           {t.degree ? `, ${t.degree}` : ""}
                         </div>
                         <div className="text-xs text-slate-400">{t.email}</div>
+                        <div className="mt-0.5 text-[11px] font-mono text-blue-600">
+                          Username: {t.loginUsername || "-"}
+                        </div>
                       </div>
                     </div>
                   </td>
@@ -460,13 +471,24 @@ export default function AdminTeachersPage() {
                     </div>
                   </td>
                   <td className="py-4 px-6">
-                    {t.isHomeroomTeacher && t.homeroomClassId ? (
-                      <span className="inline-flex rounded-md bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700 border border-emerald-200">
-                        Wali {t.homeroomClassId.name}
-                      </span>
-                    ) : (
-                      <span className="text-xs text-slate-400">Guru Pengajar</span>
-                    )}
+                    <div className="flex flex-col items-start gap-1">
+                      {t.isActivated === false || t.mustChangePassword === true ? (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-0.5 text-[11px] font-semibold text-amber-700 border border-amber-200">
+                          <AlertCircle className="size-3" /> Belum Diaktivasi
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-700 border border-emerald-200">
+                          <CheckCircle2 className="size-3" /> Sudah Diaktivasi
+                        </span>
+                      )}
+                      {t.isHomeroomTeacher && t.homeroomClassId ? (
+                        <span className="inline-flex rounded-md bg-blue-50 px-2 py-0.5 text-[11px] font-semibold text-blue-700 border border-blue-200">
+                          Wali {t.homeroomClassId.name}
+                        </span>
+                      ) : (
+                        <span className="text-[11px] text-slate-400">Guru Pengajar</span>
+                      )}
+                    </div>
                   </td>
                   <td className="py-4 px-6 text-right">
                     <div className="flex items-center justify-end gap-1">
@@ -812,6 +834,23 @@ export default function AdminTeachersPage() {
                     className="w-full rounded-lg border border-slate-300 bg-slate-100 px-3 py-2 text-sm text-slate-500 cursor-not-allowed focus:outline-hidden"
                   />
                 </div>
+
+                <div className="sm:col-span-2">
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-semibold text-slate-700">
+                      Username Login Akun
+                    </label>
+                    <span className="text-[10px] text-slate-400 font-medium">
+                      (Terpisah dari Nama Resmi)
+                    </span>
+                  </div>
+                  <input
+                    type="text"
+                    value={editingTeacher.loginUsername || "-"}
+                    disabled
+                    className="w-full rounded-lg border border-slate-200 bg-slate-100 px-3 py-2 font-mono text-xs text-slate-600 cursor-not-allowed"
+                  />
+                </div>
               </div>
 
               {/* Subject Selection - Max 2 */}
@@ -976,9 +1015,21 @@ export default function AdminTeachersPage() {
                   className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-800 placeholder-slate-400 focus:border-blue-500 focus:outline-hidden"
                 />
                 <p className="mt-1 text-[11px] text-slate-400">
-                  Password ini dapat langsung digunakan oleh guru bersangkutan untuk login dengan NIP atau Email.
+                  Password ini dapat digunakan oleh guru bersangkutan untuk login.
                 </p>
               </div>
+
+              <label className="flex items-start gap-2.5 rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-700 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={requireActivationOnReset}
+                  onChange={(e) => setRequireActivationOnReset(e.target.checked)}
+                  className="mt-0.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                />
+                <span>
+                  Wajibkan aktivasi ulang / ganti password saat guru login pertama kali dengan password baru ini
+                </span>
+              </label>
 
               <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
                 <Button

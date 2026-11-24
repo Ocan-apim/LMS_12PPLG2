@@ -1,9 +1,12 @@
 import mongoose, { Schema, models, model } from "mongoose";
 
+export type EnrollmentMethod = "rombel" | "invitation";
+
 export interface ICourseClass {
   name: string; // e.g. "Basis Data", "Pemrograman Web"
   code: string; // e.g. "QRV26", "87GH2"
-  password: string; // e.g. "basisdata123"
+  password?: string; // e.g. "basisdata123" (required for invitation method, empty for rombel method)
+  enrollmentMethod?: EnrollmentMethod;
   teacherId: mongoose.Types.ObjectId;
   description?: string;
   classRombelId?: mongoose.Types.ObjectId; // e.g. 10 PPLG 1
@@ -28,7 +31,12 @@ const CourseClassSchema = new Schema<ICourseClass>(
   {
     name: { type: String, required: true, trim: true },
     code: { type: String, required: true, unique: true, uppercase: true, trim: true },
-    password: { type: String, required: true, trim: true },
+    password: { type: String, default: "", trim: true },
+    enrollmentMethod: {
+      type: String,
+      enum: ["rombel", "invitation"],
+      default: "invitation",
+    },
     teacherId: { type: Schema.Types.ObjectId, ref: "User", required: true },
     description: { type: String, trim: true },
     classRombelId: { type: Schema.Types.ObjectId, ref: "Class" },

@@ -31,6 +31,10 @@ export interface IUser {
   phone?: string;
   tahunBergabung?: string;
   joinYear?: number;
+  loginUsername?: string;
+  isActivated?: boolean;
+  mustChangePassword?: boolean;
+  activatedAt?: Date | null;
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -81,9 +85,23 @@ const UserSchema = new Schema<IUser>(
     phone: { type: String, trim: true },
     tahunBergabung: { type: String, trim: true },
     joinYear: { type: Number },
+    loginUsername: { type: String, trim: true, lowercase: true },
+    isActivated: { type: Boolean, default: true },
+    mustChangePassword: { type: Boolean, default: false },
+    activatedAt: { type: Date },
     isActive: { type: Boolean, default: true },
   },
   { timestamps: true }
+);
+
+UserSchema.index(
+  { role: 1, loginUsername: 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      loginUsername: { $type: "string" },
+    },
+  }
 );
 
 export const User = models.User || model<IUser>("User", UserSchema);

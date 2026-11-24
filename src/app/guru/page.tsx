@@ -4,14 +4,11 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
   Plus,
-  GraduationCap,
   Users,
-  CheckCircle2,
   Clock,
   ArrowRight,
-  BookOpen,
 } from "lucide-react";
-import { Button, Spinner, Badge } from "@/components/ui";
+import { Spinner } from "@/components/ui";
 
 interface DashboardData {
   teacherName: string;
@@ -19,6 +16,8 @@ interface DashboardData {
     _id: string;
     name: string;
     code: string;
+    enrollmentMethod?: "rombel" | "invitation";
+    rombelName?: string | null;
     grade: string;
     walasName?: string;
     location?: string;
@@ -66,7 +65,27 @@ export default function GuruDashboardPage() {
   }
 
   useEffect(() => {
-    loadDashboard();
+    let active = true;
+    (async () => {
+      try {
+        const res = await fetch("/api/guru/dashboard");
+        const json = await res.json();
+        if (!active) return;
+        if (json.success) {
+          setData(json.data);
+        } else {
+          setError(json.message || "Gagal memuat dashboard");
+        }
+      } catch {
+        if (active)
+          setError("Terjadi kesalahan jaringan saat memuat dashboard");
+      } finally {
+        if (active) setLoading(false);
+      }
+    })();
+    return () => {
+      active = false;
+    };
   }, []);
 
   if (loading) {
@@ -176,9 +195,15 @@ export default function GuruDashboardPage() {
                       <h4 className="font-bold text-slate-900 text-sm group-hover:text-blue-600 transition">
                         {c.name || c.grade}
                       </h4>
-                      <span className="rounded-md bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-700">
-                        {c.code}
-                      </span>
+                      {c.enrollmentMethod === "rombel" ? (
+                        <span className="rounded-md bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700 border border-emerald-200">
+                          Rombel: {c.rombelName || c.grade}
+                        </span>
+                      ) : (
+                        <span className="rounded-md bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-700">
+                          {c.code}
+                        </span>
+                      )}
                     </div>
                     <p className="text-xs text-slate-400 mt-0.5">
                       Gedung D • {c.walasName || c.grade}

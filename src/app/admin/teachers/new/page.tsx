@@ -42,6 +42,7 @@ export default function TambahGuruBaruPage() {
   const [degree, setDegree] = useState("");
   const [nip, setNip] = useState("");
   const [email, setEmail] = useState("");
+  const [loginUsername, setLoginUsername] = useState("");
   const [password, setPassword] = useState("password123");
   const [lastEducation, setLastEducation] = useState("S1 / Sarjana");
   const [selectedSubjects, setSelectedSubjects] = useState<string[]>([]);
@@ -105,6 +106,7 @@ export default function TambahGuruBaruPage() {
           degree: degree.trim() || undefined,
           nip: nip.trim() || undefined,
           email: email.trim().toLowerCase(),
+          loginUsername: loginUsername.trim() || undefined,
           password: password.trim() || "guru12345",
           lastEducation,
           subjects: selectedSubjects,
@@ -247,17 +249,37 @@ export default function TambahGuruBaruPage() {
                 </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Password Awal Akun
-                </label>
-                <input
-                  type="text"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full rounded-lg border border-slate-200 px-3.5 py-2.5 text-sm text-slate-800 font-mono focus:border-blue-500 focus:outline-hidden"
-                />
-                <p className="mt-1 text-[11px] text-slate-400">Guru dapat mengubah password saat pertama kali login.</p>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Username Login Awal (Opsional)
+                  </label>
+                  <input
+                    type="text"
+                    value={loginUsername}
+                    onChange={(e) => setLoginUsername(e.target.value)}
+                    placeholder="Contoh: rina.sulistiawati"
+                    className="w-full rounded-lg border border-slate-200 px-3.5 py-2.5 font-mono text-sm text-slate-800 placeholder-slate-400 focus:border-blue-500 focus:outline-hidden"
+                  />
+                  <p className="mt-1 text-[11px] text-slate-400">
+                    Otomatis dibuat jika dikosongkan. Dapat diubah guru saat aktivasi pertama.
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Password Awal Akun
+                  </label>
+                  <input
+                    type="text"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="w-full rounded-lg border border-slate-200 px-3.5 py-2.5 text-sm text-slate-800 font-mono focus:border-blue-500 focus:outline-hidden"
+                  />
+                  <p className="mt-1 text-[11px] text-slate-400">
+                    Akun baru berstatus Belum Diaktivasi dan wajib ganti password saat login pertama.
+                  </p>
+                </div>
               </div>
             </div>
           </div>

@@ -51,10 +51,6 @@ export async function POST(req: Request) {
           await ClassModel.findByIdAndUpdate(oldClassId, {
             $pull: { studentIds: studentId },
           });
-          await CourseClass.updateMany(
-            { $or: [{ classRombelId: oldClassId }, { assignedRombelIds: oldClassId }] },
-            { $pull: { studentIds: studentId } }
-          );
         }
         await User.findByIdAndUpdate(studentId, {
           classId: targetClassId,
@@ -64,10 +60,18 @@ export async function POST(req: Request) {
         await ClassModel.findByIdAndUpdate(targetClassId, {
           $addToSet: { studentIds: studentId },
         });
-        await CourseClass.updateMany(
-          { $or: [{ classRombelId: targetClassId }, { assignedRombelIds: targetClassId }] },
-          { $addToSet: { studentIds: studentId } }
-        );
+        if (student.isActive !== false) {
+          await CourseClass.updateMany(
+            {
+              isActive: true,
+              $or: [
+                { classRombelId: targetClassId },
+                { assignedRombelIds: targetClassId },
+              ],
+            },
+            { $addToSet: { studentIds: studentId } }
+          );
+        }
       }
     }
 

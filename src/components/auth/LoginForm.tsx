@@ -16,6 +16,7 @@ export function LoginForm({ role }: LoginFormProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const isSiswa = role === "siswa";
+  const isUsernameRole = role === "guru" || role === "kurikulum";
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -28,20 +29,20 @@ export function LoginForm({ role }: LoginFormProps) {
     setLoading(true);
 
     try {
+      const trimmedIdentifier = identifier.trim();
       const payload: Record<string, string | undefined> = {
-        identifier: identifier.trim(),
+        identifier: trimmedIdentifier,
         password,
         role,
       };
 
       if (isSiswa) {
-        payload.nis = identifier.trim();
-      } else if (role === "guru") {
-        payload.identifier = identifier.trim();
-        payload.nip = identifier.trim();
-        payload.email = identifier.trim();
+        payload.nis = trimmedIdentifier;
+      } else if (isUsernameRole) {
+        payload.username = trimmedIdentifier;
+        payload.identifier = trimmedIdentifier;
       } else {
-        payload.email = identifier.trim();
+        payload.email = trimmedIdentifier;
       }
 
       const response = await fetch("/api/auth/login", {
@@ -74,17 +75,19 @@ export function LoginForm({ role }: LoginFormProps) {
       <label className="relative block">
         <UserRound className="pointer-events-none absolute left-4 top-1/2 size-4 -translate-y-1/2 text-slate-500" />
         <input
-          type={isSiswa || role === "guru" ? "text" : "email"}
+          type={isSiswa || isUsernameRole || !role ? "text" : "email"}
           required
-          autoComplete={isSiswa ? "username" : role === "guru" ? "username" : "email"}
+          autoComplete={isSiswa || isUsernameRole ? "username" : "email"}
           value={identifier}
           onChange={(event) => setIdentifier(event.target.value)}
           placeholder={
             isSiswa
               ? "Nomor Induk Siswa (NIS)"
               : role === "guru"
-              ? "NIP atau Email Guru"
-              : "Username atau Email"
+                ? "Username Guru"
+                : role === "kurikulum"
+                  ? "Username Kurikulum"
+                  : "Email atau Username"
           }
           className="h-14 w-full rounded-[5px] border border-[var(--border)] bg-[#f4f6ff] pl-11 pr-4 text-sm outline-none transition placeholder:text-slate-500 focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary-soft)]"
         />
@@ -93,6 +96,12 @@ export function LoginForm({ role }: LoginFormProps) {
       {isSiswa && (
         <p className="text-[11px] text-slate-500 px-1 -mt-2">
           Masukkan Nomor Induk Siswa (NIS) resmi Anda.
+        </p>
+      )}
+
+      {isUsernameRole && (
+        <p className="text-[11px] text-slate-500 px-1 -mt-2">
+          Masukkan username akun Anda (atau kredensial awal untuk login pertama).
         </p>
       )}
 
@@ -109,11 +118,17 @@ export function LoginForm({ role }: LoginFormProps) {
         />
         <button
           type="button"
-          aria-label={showPassword ? "Sembunyikan password" : "Tampilkan password"}
+          aria-label={
+            showPassword ? "Sembunyikan password" : "Tampilkan password"
+          }
           onClick={() => setShowPassword((value) => !value)}
           className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 transition hover:text-[var(--primary)]"
         >
-          {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+          {showPassword ? (
+            <EyeOff className="size-4" />
+          ) : (
+            <Eye className="size-4" />
+          )}
         </button>
       </label>
 

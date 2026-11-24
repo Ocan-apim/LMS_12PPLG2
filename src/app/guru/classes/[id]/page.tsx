@@ -18,7 +18,6 @@ import {
   Download,
   Trash2,
   Send,
-  Upload,
 } from "lucide-react";
 import { Button, Spinner } from "@/components/ui";
 
@@ -49,6 +48,7 @@ interface CourseClassDetail {
   name: string;
   code: string;
   password?: string;
+  enrollmentMethod?: "rombel" | "invitation";
   bannerColor?: string;
   classRombelId?: {
     _id: string;
@@ -70,6 +70,7 @@ interface ClassPostItem {
   refId?: string;
   attachments?: SharedFile[];
   comments?: Array<{
+    userName?: string;
     senderName: string;
     senderRole: string;
     message: string;
@@ -525,12 +526,25 @@ export default function GuruClassDetailPage({
       <div className="relative overflow-visible rounded-3xl bg-blue-600 p-8 sm:p-10 text-white shadow-sm">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
+            <div className="mb-2 flex flex-wrap items-center gap-2">
+              {courseClass.enrollmentMethod === "rombel" ? (
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-white/20 px-3 py-1 text-[11px] font-bold text-white backdrop-blur-xs">
+                  Assign ke Rombel:{" "}
+                  <strong>{courseClass.classRombelId?.name || "-"}</strong>
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-white/20 px-3 py-1 text-[11px] font-bold text-white backdrop-blur-xs">
+                  Metode: Kode Undangan
+                </span>
+              )}
+            </div>
             <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-white">
               {courseClass.name}
             </h2>
             {courseClass.classRombelId?.name && (
               <p className="mt-1 text-xs text-blue-100 font-medium">
-                {courseClass.classRombelId.name} • Tahun Ajaran 2026/2027
+                Rombel {courseClass.classRombelId.name} •{" "}
+                {studentsList.length} Siswa Terdaftar
               </p>
             )}
           </div>
@@ -798,7 +812,7 @@ export default function GuruClassDetailPage({
                             >
                               <div className="flex items-center justify-between">
                                 <span className="font-bold">
-                                  {(c as any).userName || c.senderName || "Pengguna"}
+                                  {c.userName || c.senderName || "Pengguna"}
                                 </span>
                                 <span
                                   className={`text-[10px] ${
@@ -948,33 +962,53 @@ export default function GuruClassDetailPage({
         </div>
       </div>
 
-      {/* Floating Bottom-Right Action Widget matching Screenshot 1 Right & User Request */}
+      {/* Floating Bottom-Right Action Widget */}
       <div className="fixed bottom-6 right-8 z-40 flex items-center gap-3">
-        {/* Class Code & Password Card */}
-        <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white/95 px-4 py-2.5 shadow-lg backdrop-blur-md">
-          <div>
-            <div className="flex items-center gap-1.5">
-              <span className="text-xs font-semibold text-slate-800">
-                Kode Kelas: <strong className="font-mono">{courseClass.code}</strong>
-              </span>
-              <button
-                type="button"
-                onClick={handleCopyCode}
-                title="Salin Kode Kelas"
-                className="text-slate-400 hover:text-slate-700 transition"
-              >
-                {copiedCode ? (
-                  <Check className="size-3.5 text-green-600" />
-                ) : (
-                  <Copy className="size-3.5" />
-                )}
-              </button>
+        {courseClass.enrollmentMethod === "rombel" ? (
+          /* Rombel Enrollment Summary Card (No Invitation Credentials Shown) */
+          <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white/95 px-4 py-2.5 shadow-lg backdrop-blur-md">
+            <div>
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs font-semibold text-slate-800">
+                  Rombel:{" "}
+                  <strong className="text-blue-700">
+                    {courseClass.classRombelId?.name || "-"}
+                  </strong>
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-500 mt-0.5">
+                {studentsList.length} Siswa Terdaftar Otomatis
+              </p>
             </div>
-            <p className="text-[11px] text-slate-500 font-mono mt-0.5">
-              Password: {courseClass.password || "12WkucIs20"}
-            </p>
           </div>
-        </div>
+        ) : (
+          /* Class Code & Password Card for Invitation-Code Classes */
+          <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white/95 px-4 py-2.5 shadow-lg backdrop-blur-md">
+            <div>
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs font-semibold text-slate-800">
+                  Kode Kelas:{" "}
+                  <strong className="font-mono">{courseClass.code}</strong>
+                </span>
+                <button
+                  type="button"
+                  onClick={handleCopyCode}
+                  title="Salin Kode Kelas"
+                  className="text-slate-400 hover:text-slate-700 transition"
+                >
+                  {copiedCode ? (
+                    <Check className="size-3.5 text-green-600" />
+                  ) : (
+                    <Copy className="size-3.5" />
+                  )}
+                </button>
+              </div>
+              <p className="text-[11px] text-slate-500 font-mono mt-0.5">
+                Password: {courseClass.password || "12WkucIs20"}
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* Speed-dial floating action menu for learning content */}
         {!courseClass.isReadOnly && (

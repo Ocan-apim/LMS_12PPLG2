@@ -12,12 +12,32 @@ function getSecret() {
   return new TextEncoder().encode(secret);
 }
 
+export function isActivationRole(role?: string | null): boolean {
+  return role === "guru" || role === "kurikulum";
+}
+
+export function requiresAccountActivation(
+  user?: {
+    role?: string | null;
+    isActivated?: boolean | null;
+    mustChangePassword?: boolean | null;
+  } | null
+): boolean {
+  if (!user || !isActivationRole(user.role)) {
+    return false;
+  }
+  return user.isActivated === false || user.mustChangePassword === true;
+}
+
 export async function createSessionToken(user: SessionUser) {
   return new SignJWT({
     id: user.id,
     name: user.name,
     email: user.email,
     role: user.role,
+    loginUsername: user.loginUsername,
+    isActivated: user.isActivated !== false,
+    mustChangePassword: Boolean(user.mustChangePassword),
     nis: user.nis,
     nisn: user.nisn,
     nip: user.nip,
@@ -47,6 +67,16 @@ export async function verifySessionToken(
       name: payload.name,
       email: payload.email,
       role: payload.role as Role,
+      loginUsername:
+        typeof payload.loginUsername === "string"
+          ? payload.loginUsername
+          : undefined,
+      isActivated:
+        typeof payload.isActivated === "boolean" ? payload.isActivated : true,
+      mustChangePassword:
+        typeof payload.mustChangePassword === "boolean"
+          ? payload.mustChangePassword
+          : false,
       nis: typeof payload.nis === "string" ? payload.nis : undefined,
       nisn: typeof payload.nisn === "string" ? payload.nisn : undefined,
       nip: typeof payload.nip === "string" ? payload.nip : undefined,

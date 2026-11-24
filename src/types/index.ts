@@ -27,6 +27,9 @@ export type SessionUser = {
   name: string;
   email: string;
   role: Role;
+  loginUsername?: string;
+  isActivated?: boolean;
+  mustChangePassword?: boolean;
   nis?: string;
   nisn?: string;
   nip?: string;
@@ -84,6 +87,10 @@ export interface ITeacherData {
   _id: string;
   name: string;
   email: string;
+  loginUsername?: string;
+  isActivated?: boolean;
+  mustChangePassword?: boolean;
+  activatedAt?: string | null;
   nip?: string;
   degree?: string;
   lastEducation?: string;

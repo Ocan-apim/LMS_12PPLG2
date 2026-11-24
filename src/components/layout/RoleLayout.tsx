@@ -1,7 +1,8 @@
 import type { ReactNode } from "react";
 import { redirect } from "next/navigation";
-import { getSession } from "@/lib/auth";
+import { requiresAccountActivation } from "@/lib/auth";
 import { ROLE_DASHBOARD } from "@/lib/roles";
+import { requireSession } from "@/lib/session";
 import { RoleShell } from "@/components/layout/RoleShell";
 import type { Role } from "@/types";
 
@@ -11,8 +12,12 @@ type RoleLayoutProps = {
   children: ReactNode;
 };
 
-export async function RoleLayout({ role, allowedRoles, children }: RoleLayoutProps) {
-  const session = await getSession();
+export async function RoleLayout({
+  role,
+  allowedRoles,
+  children,
+}: RoleLayoutProps) {
+  const { session } = await requireSession({ allowUnactivated: true });
 
   if (!session) {
     redirect("/login");
@@ -23,5 +28,15 @@ export async function RoleLayout({ role, allowedRoles, children }: RoleLayoutPro
     redirect(ROLE_DASHBOARD[session.role]);
   }
 
-  return <RoleShell role={session.role} user={session}>{children}</RoleShell>;
+  const requiresActivation = requiresAccountActivation(session);
+
+  return (
+    <RoleShell
+      role={session.role}
+      user={session}
+      requiresActivation={requiresActivation}
+    >
+      {requiresActivation ? null : children}
+    </RoleShell>
+  );
 }

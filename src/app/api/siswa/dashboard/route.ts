@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import mongoose from "mongoose";
 import { connectDB } from "@/lib/mongodb";
+import { syncSingleStudentRombelEnrollment } from "@/lib/rombel-enrollment";
 import { requireRole } from "@/lib/session";
 import {
   CourseClass,
@@ -30,6 +31,10 @@ export async function GET() {
       .lean();
 
     const studentRombelId = studentUser?.classId?._id || studentUser?.classId || null;
+
+    if (studentRombelId && studentUser?.isActive !== false) {
+      await syncSingleStudentRombelEnrollment(session.id, studentRombelId);
+    }
 
     const studentInfo = {
       _id: String(studentUser?._id || session.id),

@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
+import { syncRombelStudents } from "@/lib/rombel-enrollment";
 import { requireRole } from "@/lib/session";
-import { CourseClass, Assignment, Submission, User } from "@/models";
+import { CourseClass, Assignment, Submission } from "@/models";
 
 export async function GET() {
   const { session, error } = await requireRole(["guru", "admin"]);
@@ -9,6 +10,24 @@ export async function GET() {
 
   try {
     await connectDB();
+
+    // Sync any rombel-assigned classes owned by this teacher
+    const prelimClasses = await CourseClass.find({
+      teacherId: session.id,
+      isActive: true,
+    })
+      .select("classRombelId")
+      .lean();
+    const rombelIds = Array.from(
+      new Set(
+        prelimClasses
+          .map((c) => (c.classRombelId ? String(c.classRombelId) : ""))
+          .filter(Boolean)
+      )
+    );
+    if (rombelIds.length > 0) {
+      await Promise.all(rombelIds.map((rid) => syncRombelStudents(rid)));
+    }
 
     // 1. Classes created by teacher
     const classes = await CourseClass.find({
@@ -20,7 +39,9 @@ export async function GET() {
         select: "name grade homeroomTeacherId",
         populate: { path: "homeroomTeacherId", select: "name" },
       })
-      .select("_id name code studentIds classRombelId bannerColor")
+      .select(
+        "_id name code enrollmentMethod studentIds classRombelId bannerColor"
+      )
       .lean();
 
     const activeClasses = classes.map((c) => {
@@ -29,11 +50,14 @@ export async function GET() {
         grade?: string;
         homeroomTeacherId?: { name?: string };
       } | null;
+      const isRombelMethod = c.enrollmentMethod === "rombel";
 
       return {
         _id: c._id,
         name: c.name,
-        code: c.code,
+        code: isRombelMethod ? "" : c.code,
+        enrollmentMethod: isRombelMethod ? "rombel" : "invitation",
+        rombelName: rombel?.name || null,
         grade: rombel?.name || "10 PPLG 1",
         walasName: rombel?.homeroomTeacherId?.name || "Wali Kelas",
         location: "Gedung D",

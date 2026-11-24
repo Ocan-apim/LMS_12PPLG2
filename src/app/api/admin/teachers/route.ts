@@ -1,5 +1,10 @@
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
+import {
+  generateInitialUsername,
+  isUsernameAvailableForRole,
+  validateUsername,
+} from "@/lib/activation";
 import { connectDB } from "@/lib/mongodb";
 import { requireRole } from "@/lib/session";
 import { User, ClassModel, Subject } from "@/models";
@@ -43,13 +48,16 @@ export async function GET(req: Request) {
         { name: { $regex: search, $options: "i" } },
         { nip: { $regex: search, $options: "i" } },
         { email: { $regex: search, $options: "i" } },
+        { loginUsername: { $regex: search, $options: "i" } },
       ];
     }
 
     const sortOption: Record<string, 1 | -1> =
-      sort === "nip" ? { nip: 1 } :
-      sort === "name_desc" ? { name: -1 } :
-      { name: 1 };
+      sort === "nip"
+        ? { nip: 1 }
+        : sort === "name_desc"
+          ? { name: -1 }
+          : { name: 1 };
 
     const [teachers, activeClasses] = await Promise.all([
       User.find(query)
@@ -63,7 +71,10 @@ export async function GET(req: Request) {
         .lean(),
     ]);
 
-    const walasClassMap = new Map<string, { _id: string; name: string; grade: string }>();
+    const walasClassMap = new Map<
+      string,
+      { _id: string; name: string; grade: string }
+    >();
     for (const c of activeClasses as any[]) {
       if (c.homeroomTeacherId) {
         walasClassMap.set(String(c.homeroomTeacherId), {
@@ -75,7 +86,8 @@ export async function GET(req: Request) {
     }
 
     let formattedTeachers = (teachers as any[]).map((t) => {
-      const assignedClass = walasClassMap.get(String(t._id)) || t.homeroomClassId;
+      const assignedClass =
+        walasClassMap.get(String(t._id)) || t.homeroomClassId;
       return {
         ...t,
         isHomeroomTeacher: Boolean(assignedClass),
@@ -89,7 +101,8 @@ export async function GET(req: Request) {
 
     return NextResponse.json({ success: true, data: formattedTeachers });
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Gagal memuat data guru";
+    const message =
+      err instanceof Error ? err.message : "Gagal memuat data guru";
     return NextResponse.json({ success: false, message }, { status: 500 });
   }
 }
@@ -106,6 +119,8 @@ export async function POST(req: Request) {
       name,
       nip,
       email,
+      loginUsername,
+      username,
       password,
       degree,
       lastEducation,
@@ -127,12 +142,17 @@ export async function POST(req: Request) {
 
     if (Array.isArray(subjects) && subjects.length > 2) {
       return NextResponse.json(
-        { success: false, message: "Guru hanya dapat mengajar maksimal 2 mata pelajaran." },
+        {
+          success: false,
+          message: "Guru hanya dapat mengajar maksimal 2 mata pelajaran.",
+        },
         { status: 400 }
       );
     }
 
-    const existingEmail = await User.findOne({ email: email.toLowerCase().trim() });
+    const existingEmail = await User.findOne({
+      email: email.toLowerCase().trim(),
+    });
     if (existingEmail) {
       return NextResponse.json(
         { success: false, message: `Email ${email} sudah digunakan` },
@@ -150,18 +170,60 @@ export async function POST(req: Request) {
       }
     }
 
+    let resolvedUsername: string;
+    const rawRequestedUsername =
+      loginUsername !== undefined ? loginUsername : username;
+
+    if (
+      typeof rawRequestedUsername === "string" &&
+      rawRequestedUsername.trim().length > 0
+    ) {
+      const validation = validateUsername(rawRequestedUsername);
+      if (!validation.valid) {
+        return NextResponse.json(
+          { success: false, message: validation.message },
+          { status: 400 }
+        );
+      }
+      const available = await isUsernameAvailableForRole(
+        validation.username,
+        "guru"
+      );
+      if (!available) {
+        return NextResponse.json(
+          {
+            success: false,
+            message: "Username sudah digunakan oleh akun Guru lain",
+          },
+          { status: 400 }
+        );
+      }
+      resolvedUsername = validation.username;
+    } else {
+      resolvedUsername = await generateInitialUsername({
+        email: email.toLowerCase().trim(),
+        name: name.trim(),
+        nip: nip ? nip.trim() : undefined,
+        role: "guru",
+      });
+    }
+
     const hashedPassword = await bcrypt.hash(password || "password123", 10);
     const parsedJoinDate = joinDate ? new Date(joinDate) : new Date();
     const parsedTahunBergabung = tahunBergabung
       ? String(tahunBergabung).trim()
       : parsedJoinDate.getFullYear().toString();
-    const parsedJoinYear = parseInt(parsedTahunBergabung, 10) || parsedJoinDate.getFullYear();
+    const parsedJoinYear =
+      parseInt(parsedTahunBergabung, 10) || parsedJoinDate.getFullYear();
 
     if (isHomeroomTeacher && homeroomClassId) {
       const targetClass = await ClassModel.findById(homeroomClassId);
       if (targetClass && targetClass.homeroomTeacherId) {
         return NextResponse.json(
-          { success: false, message: `Kelas ${targetClass.name} sudah memiliki wali kelas` },
+          {
+            success: false,
+            message: `Kelas ${targetClass.name} sudah memiliki wali kelas`,
+          },
           { status: 400 }
         );
       }
@@ -172,6 +234,10 @@ export async function POST(req: Request) {
       email: email.toLowerCase().trim(),
       password: hashedPassword,
       role: "guru",
+      loginUsername: resolvedUsername,
+      isActivated: false,
+      mustChangePassword: true,
+      activatedAt: null,
       nip: nip ? nip.trim() : undefined,
       degree: degree ? degree.trim() : undefined,
       lastEducation: lastEducation || "S1 / Sarjana",
@@ -181,19 +247,18 @@ export async function POST(req: Request) {
       tahunBergabung: parsedTahunBergabung,
       joinYear: parsedJoinYear,
       isHomeroomTeacher: Boolean(isHomeroomTeacher),
-      homeroomClassId: isHomeroomTeacher && homeroomClassId ? homeroomClassId : undefined,
+      homeroomClassId:
+        isHomeroomTeacher && homeroomClassId ? homeroomClassId : undefined,
       phone,
       isActive: true,
     });
 
-    // If teacher is assigned as homeroom teacher, update that class
     if (isHomeroomTeacher && homeroomClassId) {
       await ClassModel.findByIdAndUpdate(homeroomClassId, {
         homeroomTeacherId: teacher._id,
       });
     }
 
-    // Link teacher to subjects
     if (Array.isArray(subjects) && subjects.length > 0) {
       await Subject.updateMany(
         { _id: { $in: subjects } },
@@ -206,9 +271,22 @@ export async function POST(req: Request) {
       .populate("homeroomClassId", "name grade")
       .select("-password");
 
-    return NextResponse.json({ success: true, data: populated }, { status: 201 });
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Gagal menambahkan data guru";
+    return NextResponse.json(
+      { success: true, data: populated },
+      { status: 201 }
+    );
+  } catch (err: any) {
+    if (err && err.code === 11000) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Email, NIP, atau username sudah digunakan",
+        },
+        { status: 400 }
+      );
+    }
+    const message =
+      err instanceof Error ? err.message : "Gagal menambahkan data guru";
     return NextResponse.json({ success: false, message }, { status: 500 });
   }
 }

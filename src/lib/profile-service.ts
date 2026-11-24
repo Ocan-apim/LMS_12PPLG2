@@ -1,5 +1,10 @@
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
+import { createSessionToken, setSessionCookie } from "@/lib/auth";
+import {
+  isUsernameAvailableForRole,
+  validateUsername,
+} from "@/lib/activation";
 import { connectDB } from "@/lib/mongodb";
 import type { SessionUser } from "@/types";
 import {
@@ -31,7 +36,8 @@ const ALLOWED_FIELDS_BY_ROLE: Record<string, Set<string>> = {
   ]),
   guru: new Set([
     "email",
-    "nip",
+    "loginUsername",
+    "username",
     "currentPassword",
     "password",
     "newPassword",
@@ -66,7 +72,8 @@ export async function handleGetProfile(req: Request, session: SessionUser) {
       return NextResponse.json(
         {
           success: false,
-          message: "Akses ditolak: Anda hanya dapat melihat profil Anda sendiri.",
+          message:
+            "Akses ditolak: Anda hanya dapat melihat profil Anda sendiri.",
         },
         { status: 403 }
       );
@@ -94,11 +101,10 @@ export async function handleGetProfile(req: Request, session: SessionUser) {
     const permissions = {
       canEditAccount: !isReadOnly,
       canEditEmail: !isReadOnly,
-      canEditIdentificationNumber: role === "siswa" || role === "guru",
-      identificationField:
-        role === "siswa" ? "nisn" : role === "guru" ? "nip" : null,
-      identificationLabel:
-        role === "siswa" ? "NISN" : role === "guru" ? "NIP" : null,
+      canEditUsername: role === "guru",
+      canEditIdentificationNumber: role === "siswa",
+      identificationField: role === "siswa" ? "nisn" : null,
+      identificationLabel: role === "siswa" ? "NISN" : null,
       canEditPassword: !isReadOnly,
       isReadOnly,
     };
@@ -196,8 +202,9 @@ export async function handleGetProfile(req: Request, session: SessionUser) {
         (a: any) => a.type !== "kuis" && !a.quizId
       ).length;
       const totalQuizzesCount =
-        allAssignments.filter((a: any) => a.type === "kuis" || Boolean(a.quizId))
-          .length + standaloneQuizzes.length;
+        allAssignments.filter(
+          (a: any) => a.type === "kuis" || Boolean(a.quizId)
+        ).length + standaloneQuizzes.length;
 
       return NextResponse.json({
         success: true,
@@ -237,34 +244,37 @@ export async function handleGetProfile(req: Request, session: SessionUser) {
         .lean();
 
       const courseIds = courses.map((c) => c._id);
-      const [totalMaterials, totalAssignments, totalQuizzes] = await Promise.all([
-        Material.countDocuments({
-          courseClassId: { $in: courseIds },
-          isPublished: true,
-        }),
-        Assignment.countDocuments({
-          teacherId: session.id,
-          isArchived: { $ne: true },
-        }),
-        Quiz.countDocuments({
-          teacherId: session.id,
-          isPublished: true,
-        }),
-      ]);
+      const [totalMaterials, totalAssignments, totalQuizzes] =
+        await Promise.all([
+          Material.countDocuments({
+            courseClassId: { $in: courseIds },
+            isPublished: true,
+          }),
+          Assignment.countDocuments({
+            teacherId: session.id,
+            isArchived: { $ne: true },
+          }),
+          Quiz.countDocuments({
+            teacherId: session.id,
+            isPublished: true,
+          }),
+        ]);
 
       const uniqueStudents = new Set<string>();
       courses.forEach((c) => {
         if (Array.isArray(c.studentIds)) {
-          c.studentIds.forEach((sid: unknown) => uniqueStudents.add(String(sid)));
+          c.studentIds.forEach((sid: unknown) =>
+            uniqueStudents.add(String(sid))
+          );
         }
       });
 
       const derivedSubjects = Array.from(
         new Set([
-          ...(Array.isArray(user.subjects) ? user.subjects.filter(Boolean) : []),
-          ...courses
-            .map((c) => c.subjectId?.name || c.name)
-            .filter(Boolean),
+          ...(Array.isArray(user.subjects)
+            ? user.subjects.filter(Boolean)
+            : []),
+          ...courses.map((c) => c.subjectId?.name || c.name).filter(Boolean),
         ])
       );
 
@@ -289,7 +299,9 @@ export async function handleGetProfile(req: Request, session: SessionUser) {
             code: c.code,
             subjectName: c.subjectId?.name || c.name,
             rombelName: c.classRombelId?.name || null,
-            studentsCount: Array.isArray(c.studentIds) ? c.studentIds.length : 0,
+            studentsCount: Array.isArray(c.studentIds)
+              ? c.studentIds.length
+              : 0,
           })),
         },
       });
@@ -391,7 +403,8 @@ export async function handleUpdateProfile(req: Request, session: SessionUser) {
         return NextResponse.json(
           {
             success: false,
-            message: "Akses ditolak: Tidak dapat mengubah profil pengguna lain.",
+            message:
+              "Akses ditolak: Tidak dapat mengubah profil pengguna lain.",
           },
           { status: 403 }
         );
@@ -404,7 +417,10 @@ export async function handleUpdateProfile(req: Request, session: SessionUser) {
 
     if (bodyKeys.length === 0) {
       return NextResponse.json(
-        { success: false, message: "Tidak ada data yang dikirim untuk diperbarui" },
+        {
+          success: false,
+          message: "Tidak ada data yang dikirim untuk diperbarui",
+        },
         { status: 400 }
       );
     }
@@ -431,6 +447,7 @@ export async function handleUpdateProfile(req: Request, session: SessionUser) {
     }
 
     let hasChanges = false;
+    let usernameChanged = false;
 
     // 4. Validate and update Email
     if (body.email !== undefined) {
@@ -465,7 +482,51 @@ export async function handleUpdateProfile(req: Request, session: SessionUser) {
       }
     }
 
-    // 5. Validate and update Identification Number (Siswa: nisn/nis, Guru/Admin: nip)
+    // 5. Validate and update Username for Guru (role-scoped uniqueness)
+    if (session.role === "guru") {
+      const rawUsername =
+        body.loginUsername !== undefined ? body.loginUsername : body.username;
+      if (rawUsername !== undefined) {
+        const validation = validateUsername(rawUsername);
+        if (!validation.valid) {
+          return NextResponse.json(
+            { success: false, message: validation.message },
+            { status: 400 }
+          );
+        }
+
+        if (
+          validation.username !== (user.loginUsername || "").toLowerCase()
+        ) {
+          const isAvailable = await isUsernameAvailableForRole(
+            validation.username,
+            "guru",
+            String(user._id)
+          );
+          if (!isAvailable) {
+            return NextResponse.json(
+              {
+                success: false,
+                message:
+                  "Username sudah digunakan pada peran ini. Silakan pilih username lain.",
+              },
+              { status: 400 }
+            );
+          }
+
+          user.loginUsername = validation.username;
+          if (!user.activatedAt) {
+            user.activatedAt = new Date();
+          }
+          user.isActivated = true;
+          user.mustChangePassword = false;
+          hasChanges = true;
+          usernameChanged = true;
+        }
+      }
+    }
+
+    // 6. Validate and update Identification Number (Siswa: nisn/nis, Admin: nip)
     if (session.role === "siswa") {
       if (body.nisn !== undefined) {
         const normalizedNisn = String(body.nisn).trim();
@@ -543,7 +604,7 @@ export async function handleUpdateProfile(req: Request, session: SessionUser) {
       }
     }
 
-    if (session.role === "guru" || session.role === "admin") {
+    if (session.role === "admin") {
       if (body.nip !== undefined) {
         const normalizedNip = String(body.nip).trim();
         if (!normalizedNip || !ID_NUMBER_REGEX.test(normalizedNip)) {
@@ -581,13 +642,13 @@ export async function handleUpdateProfile(req: Request, session: SessionUser) {
       }
     }
 
-    // 6. Optional Photo URL update
+    // 7. Optional Photo URL update
     if (body.photoUrl !== undefined && typeof body.photoUrl === "string") {
       user.photoUrl = body.photoUrl.trim();
       hasChanges = true;
     }
 
-    // 7. Validate and update Password
+    // 8. Validate and update Password
     const rawNewPassword =
       body.newPassword !== undefined ? body.newPassword : body.password;
     const isPasswordUpdateRequested =
@@ -626,7 +687,10 @@ export async function handleUpdateProfile(req: Request, session: SessionUser) {
         );
       }
 
-      if (body.confirmPassword !== undefined && newPasswordStr !== confirmPasswordStr) {
+      if (
+        body.confirmPassword !== undefined &&
+        newPasswordStr !== confirmPasswordStr
+      ) {
         return NextResponse.json(
           {
             success: false,
@@ -658,6 +722,21 @@ export async function handleUpdateProfile(req: Request, session: SessionUser) {
       await user.save();
     }
 
+    if (usernameChanged) {
+      const updatedSession: SessionUser = {
+        id: String(user._id),
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        loginUsername: user.loginUsername,
+        isActivated: user.isActivated !== false,
+        mustChangePassword: Boolean(user.mustChangePassword),
+        nip: user.nip,
+      };
+      const token = await createSessionToken(updatedSession);
+      await setSessionCookie(token);
+    }
+
     const updatedUser = await User.findById(session.id)
       .select("-password")
       .populate("classId", "name grade academicYear")
@@ -676,7 +755,7 @@ export async function handleUpdateProfile(req: Request, session: SessionUser) {
         {
           success: false,
           message:
-            "Email atau nomor induk sudah terdaftar pada akun pengguna lain",
+            "Email, username, atau nomor induk sudah terdaftar pada akun pengguna lain",
         },
         { status: 400 }
       );

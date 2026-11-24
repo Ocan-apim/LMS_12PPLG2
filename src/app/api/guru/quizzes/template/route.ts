@@ -1,8 +1,12 @@
 import { NextResponse } from "next/server";
 import { readFile } from "fs/promises";
 import path from "path";
+import { requireRole } from "@/lib/session";
 
 export async function GET() {
+  const { error } = await requireRole(["guru", "admin"]);
+  if (error) return error;
+
   try {
     const filePath = path.join(
       process.cwd(),

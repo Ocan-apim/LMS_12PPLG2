@@ -22,6 +22,9 @@ interface UserItem {
   _id: string;
   name: string;
   email: string;
+  loginUsername?: string;
+  isActivated?: boolean;
+  mustChangePassword?: boolean;
   role: "admin" | "guru" | "kurikulum" | "kepsek" | "siswa";
   nip?: string;
   nisn?: string;
@@ -63,12 +66,14 @@ export default function AdminUsersPage() {
   const [formData, setFormData] = useState({
     name: "",
     email: "",
+    loginUsername: "",
     password: "",
     role: "guru" as "admin" | "guru" | "kurikulum" | "kepsek" | "siswa",
     nip: "",
     nisn: "",
     phone: "",
     isActive: true,
+    requireActivation: true,
   });
 
   async function loadData() {
@@ -101,12 +106,14 @@ export default function AdminUsersPage() {
     setFormData({
       name: "",
       email: "",
+      loginUsername: "",
       password: "password123",
       role: "guru",
       nip: "",
       nisn: "",
       phone: "",
       isActive: true,
+      requireActivation: true,
     });
     setFormError("");
     setIsModalOpen(true);
@@ -117,12 +124,14 @@ export default function AdminUsersPage() {
     setFormData({
       name: u.name,
       email: u.email,
+      loginUsername: u.loginUsername || "",
       password: "",
       role: u.role,
       nip: u.nip || "",
       nisn: u.nisn || "",
       phone: u.phone || "",
       isActive: u.isActive,
+      requireActivation: true,
     });
     setFormError("");
     setIsModalOpen(true);
@@ -304,7 +313,12 @@ export default function AdminUsersPage() {
                 <tr key={u._id} className="hover:bg-slate-50/80 transition">
                   <td className="py-4 px-6">
                     <div className="font-mono text-xs font-semibold text-slate-900">{u.email}</div>
-                    <div className="text-[11px] text-slate-400">{u.name}</div>
+                    <div className="text-[11px] text-slate-500 font-medium">{u.name}</div>
+                    {(u.role === "guru" || u.role === "kurikulum") && (
+                      <div className="mt-0.5 text-[11px] font-mono text-blue-600">
+                        Username: {u.loginUsername || "-"}
+                      </div>
+                    )}
                   </td>
                   <td className="py-4 px-6">
                     <div className="flex items-center gap-2">
@@ -339,15 +353,28 @@ export default function AdminUsersPage() {
                       (u.createdAt ? new Date(u.createdAt).getFullYear().toString() : "-")}
                   </td>
                   <td className="py-4 px-6">
-                    {u.isActive ? (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-700 border border-emerald-200">
-                        <CheckCircle2 className="size-3" /> Aktif
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-rose-50 px-2.5 py-0.5 text-xs font-semibold text-rose-700 border border-rose-200">
-                        <XCircle className="size-3" /> Nonaktif
-                      </span>
-                    )}
+                    <div className="flex flex-col items-start gap-1">
+                      {u.isActive ? (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-700 border border-emerald-200">
+                          <CheckCircle2 className="size-3" /> Aktif
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-rose-50 px-2.5 py-0.5 text-xs font-semibold text-rose-700 border border-rose-200">
+                          <XCircle className="size-3" /> Nonaktif
+                        </span>
+                      )}
+                      {(u.role === "guru" || u.role === "kurikulum") && (
+                        u.isActivated === false || u.mustChangePassword === true ? (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-0.5 text-[11px] font-semibold text-amber-700 border border-amber-200">
+                            <AlertCircle className="size-3" /> Belum Diaktivasi
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-0.5 text-[11px] font-semibold text-blue-700 border border-blue-200">
+                            <CheckCircle2 className="size-3" /> Sudah Diaktivasi
+                          </span>
+                        )
+                      )}
+                    </div>
                   </td>
                   <td className="py-4 px-6 text-right">
                     <div className="flex items-center justify-end gap-1">
@@ -456,7 +483,10 @@ export default function AdminUsersPage() {
                 </div>
               </div>
 
-              {formData.role === "admin" && (
+              {(formData.role === "admin" ||
+                formData.role === "guru" ||
+                formData.role === "kurikulum" ||
+                formData.role === "kepsek") && (
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">
                     NIP (Nomor Induk Pegawai)
@@ -467,6 +497,33 @@ export default function AdminUsersPage() {
                     onChange={(e) => setFormData({ ...formData, nip: e.target.value })}
                     placeholder="Contoh: 198503152010011002"
                     className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-800 focus:border-blue-500 focus:outline-hidden"
+                  />
+                </div>
+              )}
+
+              {(formData.role === "guru" || formData.role === "kurikulum") && (
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-semibold text-slate-700">
+                      Username Login {editingUser ? "" : "Awal (Opsional)"}
+                    </label>
+                    {editingUser && (
+                      <span className="text-[10px] text-slate-400 font-medium">
+                        (Terpisah dari Nama Resmi)
+                      </span>
+                    )}
+                  </div>
+                  <input
+                    type="text"
+                    value={formData.loginUsername || ""}
+                    disabled={Boolean(editingUser)}
+                    onChange={(e) => setFormData({ ...formData, loginUsername: e.target.value })}
+                    placeholder="Contoh: ahmad.fauzan (otomatis dibuat jika kosong)"
+                    className={`w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-mono focus:outline-hidden ${
+                      editingUser
+                        ? "bg-slate-100 text-slate-500 cursor-not-allowed"
+                        : "text-slate-800 focus:border-blue-500"
+                    }`}
                   />
                 </div>
               )}

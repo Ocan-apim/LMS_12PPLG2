@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
+import { syncSingleStudentRombelEnrollment } from "@/lib/rombel-enrollment";
 import { requireRole } from "@/lib/session";
 import { User, ClassModel } from "@/models";
 
@@ -110,6 +111,10 @@ export async function PUT(req: Request, context: RouteContext) {
       .populate("classId", "name grade")
       .populate("departmentId", "name code")
       .select("-password");
+
+    if (newClassId && isActive !== false) {
+      await syncSingleStudentRombelEnrollment(id, newClassId);
+    }
 
     return NextResponse.json({ success: true, data: updated });
   } catch (err: unknown) {

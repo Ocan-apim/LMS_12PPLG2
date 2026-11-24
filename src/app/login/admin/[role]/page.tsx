@@ -35,7 +35,9 @@ export default async function AdminLoginPage({ params }: PageProps) {
               Selamat Datang Kembali
             </h1>
             <p className="mt-2 max-w-[290px] text-sm leading-5 text-[var(--muted)]">
-              Akses portal Learnix Academy untuk memulai sesi pembelajaran Anda hari ini.
+              {loginRole === "kurikulum"
+                ? "Masuk menggunakan Username dan password akun Kurikulum Anda."
+                : "Akses portal Learnix Academy untuk memulai sesi pembelajaran Anda hari ini."}
             </p>
           </div>
 

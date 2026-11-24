@@ -36,6 +36,7 @@ export async function POST(req: NextRequest) {
       user = await User.findOne({
         role: { $in: ["guru", "kurikulum", "kepsek"] },
         $or: [
+          { loginUsername: cleanId.toLowerCase() },
           { nip: cleanId },
           { email: cleanId.toLowerCase() },
         ],

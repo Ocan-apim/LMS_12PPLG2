@@ -12,14 +12,14 @@ export async function POST(req: Request) {
     const body = await req.json();
     const { code, password } = body;
 
-    if (!code || !code.trim()) {
+    if (!code || typeof code !== "string" || !code.trim()) {
       return NextResponse.json(
         { success: false, message: "Kode kelas wajib diisi" },
         { status: 400 }
       );
     }
 
-    if (!password || !password.trim()) {
+    if (!password || typeof password !== "string" || !password.trim()) {
       return NextResponse.json(
         { success: false, message: "Password kelas wajib diisi" },
         { status: 400 }
@@ -34,9 +34,12 @@ export async function POST(req: Request) {
       isActive: true,
     });
 
-    if (!courseClass) {
+    if (!courseClass || courseClass.enrollmentMethod === "rombel") {
       return NextResponse.json(
-        { success: false, message: "Kelas dengan kode tersebut tidak ditemukan" },
+        {
+          success: false,
+          message: "Kelas dengan kode tersebut tidak ditemukan",
+        },
         { status: 404 }
       );
     }
@@ -56,24 +59,33 @@ export async function POST(req: Request) {
       .includes(studentIdStr);
 
     if (isAlreadyMember) {
+      const safeData = courseClass.toObject() as unknown as Record<
+        string,
+        unknown
+      >;
+      delete safeData.password;
       return NextResponse.json({
         success: true,
         message: "Anda sudah terdaftar di kelas ini",
-        data: courseClass,
+        data: safeData,
       });
     }
 
-    // Add student to class
-    courseClass.studentIds.push(studentIdStr);
-    await courseClass.save();
+    // Add student atomically using $addToSet to prevent duplicate enrollments
+    const updatedClass = await CourseClass.findByIdAndUpdate(
+      courseClass._id,
+      { $addToSet: { studentIds: studentIdStr } },
+      { new: true }
+    ).select("-password");
 
     return NextResponse.json({
       success: true,
       message: `Berhasil bergabung ke kelas ${courseClass.name}!`,
-      data: courseClass,
+      data: updatedClass,
     });
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Gagal bergabung ke kelas";
+    const message =
+      err instanceof Error ? err.message : "Gagal bergabung ke kelas";
     return NextResponse.json({ success: false, message }, { status: 500 });
   }
 }

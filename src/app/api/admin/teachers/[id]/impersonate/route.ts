@@ -17,7 +17,11 @@ export async function POST(_req: Request, context: RouteContext) {
     const { id } = await context.params;
     await connectDB();
 
-    const teacher = await User.findOne({ _id: id, role: "guru", isActive: true });
+    const teacher = await User.findOne({
+      _id: id,
+      role: "guru",
+      isActive: true,
+    });
     if (!teacher) {
       return NextResponse.json(
         { success: false, message: "Akun guru tidak ditemukan atau nonaktif" },
@@ -30,6 +34,9 @@ export async function POST(_req: Request, context: RouteContext) {
       name: teacher.name,
       email: teacher.email,
       role: "guru",
+      loginUsername: teacher.loginUsername,
+      isActivated: teacher.isActivated !== false,
+      mustChangePassword: Boolean(teacher.mustChangePassword),
       nip: teacher.nip,
     };
 
@@ -42,7 +49,8 @@ export async function POST(_req: Request, context: RouteContext) {
       redirectTo: "/guru",
     });
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Gagal melakukan impersonasi guru";
+    const message =
+      err instanceof Error ? err.message : "Gagal melakukan impersonasi guru";
     return NextResponse.json({ success: false, message }, { status: 500 });
   }
 }

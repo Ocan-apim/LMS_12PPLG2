@@ -18,6 +18,7 @@ interface CourseClassItem {
   name: string;
   code: string;
   password?: string;
+  enrollmentMethod?: "rombel" | "invitation";
   bannerColor?: string;
   classRombelId?: {
     _id: string;
@@ -70,7 +71,35 @@ export default function GuruClassesPage() {
   }
 
   useEffect(() => {
-    loadData();
+    let active = true;
+    (async () => {
+      try {
+        const [classRes, subRes] = await Promise.all([
+          fetch("/api/guru/classes"),
+          fetch("/api/guru/submissions"),
+        ]);
+        const classJson = await classRes.json();
+        const subJson = await subRes.json();
+        if (!active) return;
+
+        if (classJson.success) {
+          setClasses(classJson.data);
+        } else {
+          setError(classJson.message || "Gagal memuat kelas");
+        }
+
+        if (subJson.success) {
+          setRecentSubmissions(subJson.data.slice(0, 3));
+        }
+      } catch {
+        if (active) setError("Terjadi kesalahan jaringan saat memuat kelas");
+      } finally {
+        if (active) setLoading(false);
+      }
+    })();
+    return () => {
+      active = false;
+    };
   }, []);
 
   const [sortBy, setSortBy] = useState<"name-asc" | "name-desc" | "students" | "assignments">("name-asc");
@@ -257,21 +286,32 @@ export default function GuruClassesPage() {
               key={item._id}
               className="group relative overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs transition hover:border-blue-400 hover:shadow-md"
             >
-              {/* Top Blue Header Banner with 3-dots menu */}
+              {/* Top Blue Header Banner with enrollment badge & 3-dots menu */}
               <div className="relative h-28 bg-[#0066FF] p-3">
+                <div className="flex items-start justify-between">
+                  {item.enrollmentMethod === "rombel" ? (
+                    <span className="inline-flex items-center gap-1 rounded-lg bg-white/20 px-2.5 py-1 text-[10px] font-bold text-white backdrop-blur-xs">
+                      Assign Rombel • {item.classRombelId?.name || "Terdaftar"}
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 rounded-lg bg-white/20 px-2.5 py-1 text-[10px] font-bold text-white backdrop-blur-xs">
+                      Kode Undangan • {item.code}
+                    </span>
+                  )}
+                </div>
                 <div className="relative">
                   <button
                     type="button"
                     onClick={() =>
                       setCardMenuOpenId((prev) => (prev === item._id ? null : item._id))
                     }
-                    className="absolute right-0 top-0 text-white/80 hover:text-white p-1 rounded-md hover:bg-white/10 transition"
+                    className="absolute right-0 -top-6 text-white/80 hover:text-white p-1 rounded-md hover:bg-white/10 transition"
                   >
                     <MoreVertical className="size-4" />
                   </button>
 
                   {cardMenuOpenId === item._id && (
-                    <div className="absolute right-0 top-6 w-40 rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl z-50 text-xs text-slate-800 animate-in fade-in">
+                    <div className="absolute right-0 top-0 w-40 rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl z-50 text-xs text-slate-800 animate-in fade-in">
                       <Link
                         href={`/guru/classes/${item._id}`}
                         className="block px-3 py-1.5 rounded-lg hover:bg-slate-50 font-medium text-slate-700"
@@ -284,13 +324,15 @@ export default function GuruClassesPage() {
                       >
                         Buat Tugas
                       </Link>
-                      <button
-                        type="button"
-                        onClick={() => handleCopyClassCode(item._id, item.code)}
-                        className="w-full text-left px-3 py-1.5 rounded-lg hover:bg-slate-50 font-medium text-slate-700"
-                      >
-                        {copiedCodeId === item._id ? "Kode Tersalin!" : "Salin Kode Kelas"}
-                      </button>
+                      {item.enrollmentMethod !== "rombel" && item.code && (
+                        <button
+                          type="button"
+                          onClick={() => handleCopyClassCode(item._id, item.code)}
+                          className="w-full text-left px-3 py-1.5 rounded-lg hover:bg-slate-50 font-medium text-slate-700"
+                        >
+                          {copiedCodeId === item._id ? "Kode Tersalin!" : "Salin Kode Kelas"}
+                        </button>
+                      )}
                       <div className="border-t border-slate-100 my-1"></div>
                       <button
                         type="button"
@@ -317,8 +359,12 @@ export default function GuruClassesPage() {
                   >
                     {item.name}
                   </Link>
-                  <p className="text-xs text-slate-400 mt-0.5">
-                    Gedung D • {item.classRombelId?.name ? `Wali Kelas ${item.classRombelId.name}` : "(Nama walas)"}
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    {item.enrollmentMethod === "rombel"
+                      ? `Rombel: ${item.classRombelId?.name || "-"} • ${item.studentCount || 0} Siswa Terdaftar`
+                      : item.classRombelId?.name
+                        ? `Gedung D • Wali Kelas ${item.classRombelId.name}`
+                        : `Kode Undangan • ${item.studentCount || 0} Siswa Terdaftar`}
                   </p>
                 </div>
 

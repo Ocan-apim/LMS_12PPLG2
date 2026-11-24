@@ -19,6 +19,9 @@ interface CurriculumUser {
   _id: string;
   name: string;
   email: string;
+  loginUsername?: string;
+  isActivated?: boolean;
+  mustChangePassword?: boolean;
   nip?: string;
   phone?: string;
   tahunBergabung?: string;
@@ -42,11 +45,13 @@ export default function AdminCurriculumPage() {
   const [formData, setFormData] = useState({
     name: "",
     email: "",
+    loginUsername: "",
     password: "password123",
     nip: "",
     phone: "",
     tahunBergabung: new Date().getFullYear().toString(),
     isActive: true,
+    requireActivation: true,
   });
 
   // Delete modal
@@ -82,11 +87,13 @@ export default function AdminCurriculumPage() {
     setFormData({
       name: "",
       email: "",
+      loginUsername: "",
       password: "password123",
       nip: "",
       phone: "",
       tahunBergabung: new Date().getFullYear().toString(),
       isActive: true,
+      requireActivation: true,
     });
     setFormError("");
     setIsModalOpen(true);
@@ -97,6 +104,7 @@ export default function AdminCurriculumPage() {
     setFormData({
       name: staff.name,
       email: staff.email,
+      loginUsername: staff.loginUsername || "",
       password: "",
       nip: staff.nip || "",
       phone: staff.phone || "",
@@ -105,6 +113,7 @@ export default function AdminCurriculumPage() {
         (staff.joinDate ? new Date(staff.joinDate).getFullYear().toString() : "") ||
         (staff.createdAt ? new Date(staff.createdAt).getFullYear().toString() : ""),
       isActive: staff.isActive,
+      requireActivation: true,
     });
     setFormError("");
     setIsModalOpen(true);
@@ -128,6 +137,7 @@ export default function AdminCurriculumPage() {
         };
         if (formData.password.trim()) {
           payload.password = formData.password.trim();
+          payload.requireActivation = formData.requireActivation;
         }
 
         const res = await fetch(`/api/admin/users/${editingStaff._id}`, {
@@ -318,6 +328,9 @@ export default function AdminCurriculumPage() {
                       <div>
                         <div className="font-semibold text-slate-900">{staff.name}</div>
                         <div className="text-xs text-slate-400">Tim Kurikulum</div>
+                        <div className="mt-0.5 text-[11px] font-mono text-blue-600">
+                          Username: {staff.loginUsername || "-"}
+                        </div>
                       </div>
                     </div>
                   </td>
@@ -329,15 +342,26 @@ export default function AdminCurriculumPage() {
                       (staff.createdAt ? new Date(staff.createdAt).getFullYear() : "-")}
                   </td>
                   <td className="py-4 px-6">
-                    {staff.isActive ? (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-700 border border-emerald-200">
-                        <CheckCircle2 className="size-3" /> Aktif
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-rose-50 px-2.5 py-0.5 text-xs font-semibold text-rose-700 border border-rose-200">
-                        <XCircle className="size-3" /> Nonaktif
-                      </span>
-                    )}
+                    <div className="flex flex-col items-start gap-1">
+                      {staff.isActive ? (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-700 border border-emerald-200">
+                          <CheckCircle2 className="size-3" /> Aktif
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-rose-50 px-2.5 py-0.5 text-xs font-semibold text-rose-700 border border-rose-200">
+                          <XCircle className="size-3" /> Nonaktif
+                        </span>
+                      )}
+                      {staff.isActivated === false || staff.mustChangePassword === true ? (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-0.5 text-[11px] font-semibold text-amber-700 border border-amber-200">
+                          <AlertCircle className="size-3" /> Belum Diaktivasi
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-0.5 text-[11px] font-semibold text-blue-700 border border-blue-200">
+                          <CheckCircle2 className="size-3" /> Sudah Diaktivasi
+                        </span>
+                      )}
+                    </div>
                   </td>
                   <td className="py-4 px-6 text-right">
                     <div className="flex items-center justify-end gap-1">
@@ -428,6 +452,31 @@ export default function AdminCurriculumPage() {
               </div>
 
               <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-semibold text-slate-700">
+                    Username Login {editingStaff ? "" : "Awal (Opsional)"}
+                  </label>
+                  {editingStaff && (
+                    <span className="text-[10px] text-slate-400 font-medium">
+                      (Terpisah dari Nama Resmi)
+                    </span>
+                  )}
+                </div>
+                <input
+                  type="text"
+                  value={formData.loginUsername}
+                  disabled={Boolean(editingStaff)}
+                  onChange={(e) => setFormData({ ...formData, loginUsername: e.target.value })}
+                  placeholder="Contoh: kurikulum01 (otomatis dibuat jika kosong)"
+                  className={`w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-mono focus:outline-hidden ${
+                    editingStaff
+                      ? "bg-slate-100 text-slate-500 cursor-not-allowed"
+                      : "text-slate-800 focus:border-blue-500"
+                  }`}
+                />
+              </div>
+
+              <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
                   Password Akun {editingStaff && "(Kosongkan jika tidak ingin diubah)"}
                 </label>
@@ -438,6 +487,19 @@ export default function AdminCurriculumPage() {
                   placeholder={editingStaff ? "Biarkan kosong untuk password lama" : "password123"}
                   className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-mono text-slate-800 focus:border-blue-500 focus:outline-hidden"
                 />
+                {editingStaff && formData.password.trim().length > 0 && (
+                  <label className="mt-2 flex items-center gap-2 text-xs text-slate-600 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={formData.requireActivation}
+                      onChange={(e) =>
+                        setFormData({ ...formData, requireActivation: e.target.checked })
+                      }
+                      className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                    />
+                    <span>Wajibkan aktivasi ulang / ganti password saat login berikutnya</span>
+                  </label>
+                )}
               </div>
 
               <div className="grid grid-cols-2 gap-3">
