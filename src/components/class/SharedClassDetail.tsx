@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -21,15 +21,14 @@ import {
   HelpCircle,
   Send,
   Users,
-  Eye,
   ExternalLink,
   CornerDownRight,
   Trash2,
-  X,
   CheckCircle2,
   AlertTriangle,
   UserCheck,
   UserX,
+  Reply,
 } from "lucide-react";
 import { validateComment } from "@/lib/profanity-filter";
 
@@ -77,6 +76,17 @@ interface QuizItem {
   createdAt?: string;
 }
 
+interface PostCommentItem {
+  _id?: string;
+  userId: string;
+  userName: string;
+  userRole?: string;
+  message: string;
+  parentId?: string | null;
+  isDeleted?: boolean;
+  createdAt: string;
+}
+
 interface PostItem {
   _id: string;
   type: "announcement" | "assignment" | "quiz";
@@ -86,16 +96,7 @@ interface PostItem {
     name: string;
     degree?: string;
   };
-  comments?: Array<{
-    _id?: string;
-    userId: string;
-    userName: string;
-    userRole?: string;
-    message: string;
-    parentId?: string | null;
-    isDeleted?: boolean;
-    createdAt: string;
-  }>;
+  comments?: PostCommentItem[];
   createdAt: string;
 }
 
@@ -173,11 +174,12 @@ interface ClassDetailData {
 
 interface SharedClassDetailProps {
   classId: string;
-  mode?: "student" | "readonly";
+  mode?: "student" | "readonly" | "admin";
   role?: "siswa" | "admin" | "kurikulum" | "kepsek" | "guru";
   backHref?: string;
   backLabel?: string;
   onCourseChange?: (courseId: string) => void;
+  onCourseDeleted?: () => void;
 }
 
 export function SharedClassDetail({
@@ -187,6 +189,7 @@ export function SharedClassDetail({
   backHref,
   backLabel,
   onCourseChange,
+  onCourseDeleted,
 }: SharedClassDetailProps) {
   const router = useRouter();
   const [activeCourseId, setActiveCourseId] = useState<string | null>(null);
@@ -194,6 +197,31 @@ export function SharedClassDetail({
   const [loading, setLoading] = useState(true);
   const [errorStatus, setErrorStatus] = useState<number | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // Classroom Discussion / Comment states (Task 6)
+  const [commentText, setCommentText] = useState("");
+  const [submittingComment, setSubmittingComment] = useState(false);
+  const [commentError, setCommentError] = useState<string | null>(null);
+  const [replyingTo, setReplyingTo] = useState<{
+    id: string;
+    parentId: string;
+    postId: string;
+    authorName: string;
+  } | null>(null);
+  const [replyText, setReplyText] = useState("");
+  const [submittingReply, setSubmittingReply] = useState(false);
+  const [replyError, setReplyError] = useState<string | null>(null);
+  const [deletingCommentId, setDeletingCommentId] = useState<string | null>(null);
+
+  // Admin Content & Classroom Deletion states (Task 4 & Task 6)
+  const [deleteClassModalOpen, setDeleteClassModalOpen] = useState(false);
+  const [deletingClass, setDeletingClass] = useState(false);
+  const [deleteItemTarget, setDeleteItemTarget] = useState<{
+    type: "assignment" | "quiz" | "material";
+    id: string;
+    title: string;
+  } | null>(null);
+  const [deletingItem, setDeletingItem] = useState(false);
 
   const fetchClassDetail = async (targetCourseId?: string) => {
     try {
@@ -224,7 +252,9 @@ export function SharedClassDetail({
   };
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchClassDetail();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [classId]);
 
   const handleSelectSibling = (courseId: string) => {
@@ -235,8 +265,11 @@ export function SharedClassDetail({
     }
   };
 
-  const isReadOnly = mode === "readonly" || course?.isReadOnly === true;
   const userRole = role || course?.currentUserRole || "siswa";
+  // TASK 6: Mode Pratinjau Staf (Baca-Saja) applies ONLY to Kurikulum and Kepsek (NOT Admin!)
+  const isReadOnly =
+    mode === "readonly" || ["kurikulum", "kepsek"].includes(userRole);
+  const isAdmin = userRole === "admin";
 
   // Determine back navigation based on role/props
   const defaultBackHref =
@@ -258,6 +291,164 @@ export function SharedClassDetail({
       : userRole === "kepsek"
       ? "Monitor Guru"
       : "Mata Pelajaran");
+
+  const handleAddClassComment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!course || !commentText.trim() || submittingComment || isReadOnly) return;
+    setCommentError(null);
+
+    const validation = validateComment(commentText);
+    if (!validation.isValid) {
+      setCommentError(
+        validation.message ||
+          "Komentar tidak dapat dikirim karena mengandung kata yang tidak pantas."
+      );
+      return;
+    }
+
+    setSubmittingComment(true);
+    try {
+      const res = await fetch(`/api/guru/classes/${course._id}/posts`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "comment",
+          postId: "general",
+          message: commentText.trim(),
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) {
+        setCommentError(json.message || "Gagal mengirim komentar");
+        return;
+      }
+      setCommentText("");
+      await fetchClassDetail(activeCourseId || course._id);
+    } catch {
+      setCommentError("Terjadi kesalahan koneksi saat mengirim komentar");
+    } finally {
+      setSubmittingComment(false);
+    }
+  };
+
+  const handleSendReply = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!course || !replyingTo || !replyText.trim() || submittingReply || isReadOnly) {
+      return;
+    }
+    setReplyError(null);
+
+    const validation = validateComment(replyText);
+    if (!validation.isValid) {
+      setReplyError(
+        validation.message ||
+          "Balasan tidak dapat dikirim karena mengandung kata yang tidak pantas."
+      );
+      return;
+    }
+
+    setSubmittingReply(true);
+    try {
+      const res = await fetch(`/api/guru/classes/${course._id}/posts`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "comment",
+          postId: replyingTo.postId || "general",
+          parentId: replyingTo.parentId,
+          message: replyText.trim(),
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) {
+        setReplyError(json.message || "Gagal mengirim balasan");
+        return;
+      }
+      setReplyText("");
+      setReplyingTo(null);
+      await fetchClassDetail(activeCourseId || course._id);
+    } catch {
+      setReplyError("Terjadi kesalahan koneksi saat mengirim balasan");
+    } finally {
+      setSubmittingReply(false);
+    }
+  };
+
+  const handleDeleteComment = async (commentId?: string) => {
+    if (!course || !commentId || deletingCommentId || isReadOnly) return;
+    setDeletingCommentId(commentId);
+    try {
+      const res = await fetch(
+        `/api/guru/classes/${course._id}/posts?commentId=${encodeURIComponent(commentId)}`,
+        { method: "DELETE" }
+      );
+      const json = await res.json();
+      if (res.ok && json.success) {
+        await fetchClassDetail(activeCourseId || course._id);
+      } else {
+        alert(json.message || "Gagal menghapus komentar");
+      }
+    } catch {
+      alert("Terjadi kesalahan koneksi saat menghapus komentar");
+    } finally {
+      setDeletingCommentId(null);
+    }
+  };
+
+  const handleConfirmDeleteMapelClass = async () => {
+    if (!course || deletingClass) return;
+    setDeletingClass(true);
+    try {
+      const res = await fetch(`/api/guru/classes/${course._id}`, {
+        method: "DELETE",
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) {
+        alert(json.message || "Gagal menghapus Kelas Mapel");
+        return;
+      }
+      setDeleteClassModalOpen(false);
+      if (onCourseDeleted) {
+        onCourseDeleted();
+      } else {
+        router.push(defaultBackHref);
+      }
+    } catch {
+      alert("Terjadi kesalahan koneksi saat menghapus Kelas Mapel");
+    } finally {
+      setDeletingClass(false);
+    }
+  };
+
+  const handleConfirmDeleteItem = async () => {
+    if (!course || !deleteItemTarget || deletingItem) return;
+    setDeletingItem(true);
+    try {
+      let endpoint = "";
+      if (deleteItemTarget.type === "assignment") {
+        endpoint = `/api/guru/assignments/${deleteItemTarget.id}`;
+      } else if (deleteItemTarget.type === "quiz") {
+        endpoint = `/api/guru/quizzes/${deleteItemTarget.id}`;
+      } else {
+        endpoint = `/api/guru/classes/${course._id}/materials?materialId=${encodeURIComponent(
+          deleteItemTarget.id
+        )}`;
+      }
+
+      const res = await fetch(endpoint, { method: "DELETE" });
+      const json = await res.json();
+      if (!res.ok || !json.success) {
+        alert(json.message || "Gagal menghapus item kelas");
+        return;
+      }
+      setDeleteItemTarget(null);
+      await fetchClassDetail(activeCourseId || course._id);
+    } catch {
+      alert("Terjadi kesalahan koneksi saat menghapus item kelas");
+    } finally {
+      setDeletingItem(false);
+    }
+  };
 
   if (loading && !course) {
     return (
@@ -325,7 +516,7 @@ export function SharedClassDetail({
     ? `${course.teacher.name}${course.teacher.degree ? `, ${course.teacher.degree}` : ""}`
     : "Guru Pengampu";
 
-  // Aggregate all comments from class posts for the dedicated Right Panel
+  // Aggregate all comments from class posts
   const allComments = (course.posts || [])
     .flatMap((post) =>
       (post.comments || []).map((c) => ({
@@ -350,10 +541,12 @@ export function SharedClassDetail({
 
   const currentUserId = course.currentUserId;
   const canDeleteComment = (c: { userId: string; isDeleted?: boolean }) => {
-    if (c.isDeleted) return false;
+    if (isReadOnly || c.isDeleted) return false;
     if (userRole === "admin") return true;
     if (userRole === "guru") return true;
-    if (userRole === "siswa" && currentUserId && String(c.userId) === String(currentUserId)) return true;
+    if (userRole === "siswa" && currentUserId && String(c.userId) === String(currentUserId)) {
+      return true;
+    }
     return false;
   };
 
@@ -364,7 +557,10 @@ export function SharedClassDetail({
     <div className="animate-fade-up space-y-6 pb-12">
       {/* Navigation Breadcrumb */}
       <div className="flex items-center gap-2 text-xs font-semibold text-slate-500">
-        <Link href={defaultBackHref} className="hover:text-[#0066FF] flex items-center gap-1 transition">
+        <Link
+          href={defaultBackHref}
+          className="hover:text-[#0066FF] flex items-center gap-1 transition"
+        >
           <ChevronLeft className="size-4" />
           {defaultBackLabel}
         </Link>
@@ -375,14 +571,16 @@ export function SharedClassDetail({
         </span>
       </div>
 
-      {/* Staff Read-Only Notice Banner */}
+      {/* Staff Read-Only Notice Banner (ONLY for Kurikulum & Kepsek, NOT Admin) */}
       {isReadOnly && (
         <div className="rounded-2xl border border-blue-200 bg-blue-50/90 p-4 text-center shadow-xs">
           <p className="text-xs font-bold text-blue-900 uppercase tracking-wide">
             Mode Pratinjau Staf (Baca-Saja)
           </p>
           <p className="mt-0.5 text-xs text-blue-700">
-            Anda memantau aktivitas kelas mapel ini secara menyeluruh (Tugas, Ulangan Harian, Komentar, dan Daftar Siswa). Seluruh aksi mutasi, pengunggahan jawaban, dan komentar dinonaktifkan.
+            Anda memantau aktivitas kelas mapel ini secara menyeluruh (Tugas, Ulangan Harian,
+            Komentar, dan Daftar Siswa). Seluruh aksi mutasi, pengunggahan jawaban, dan komentar
+            dinonaktifkan.
           </p>
         </div>
       )}
@@ -427,23 +625,38 @@ export function SharedClassDetail({
       {/* Hero Banner Header matching Figma PWPB banner */}
       <div className="relative min-h-[160px] overflow-hidden rounded-2xl bg-gradient-to-r from-[#20103f] via-[#4d32a8] to-[#6d4ee9] p-8 text-white shadow-sm flex flex-col justify-end">
         <div className="absolute right-[-40px] top-[-40px] size-48 rounded-full bg-white/10 blur-2xl" />
-        <div className="flex flex-wrap items-center gap-2 mb-2">
-          <span className="rounded bg-white/20 backdrop-blur-xs px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wider text-white">
-            {course.subject?.category || "Kejuruan"}
-          </span>
-          {course.rombel?.name && (
-            <span className="rounded bg-white/20 backdrop-blur-xs px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wider text-white">
-              {course.rombel.name}
-            </span>
+        <div className="relative flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <div className="flex flex-wrap items-center gap-2 mb-2">
+              <span className="rounded bg-white/20 backdrop-blur-xs px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wider text-white">
+                {course.subject?.category || "Kejuruan"}
+              </span>
+              {course.rombel?.name && (
+                <span className="rounded bg-white/20 backdrop-blur-xs px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wider text-white">
+                  {course.rombel.name}
+                </span>
+              )}
+            </div>
+            <h1 className="font-[family-name:var(--font-display)] text-3xl font-extrabold tracking-[-0.02em]">
+              {course.name}
+            </h1>
+            <p className="mt-1 text-sm font-medium text-purple-100 flex items-center gap-2">
+              <GraduationCap className="size-4" />
+              {teacherName}
+            </p>
+          </div>
+
+          {isAdmin && (
+            <button
+              type="button"
+              onClick={() => setDeleteClassModalOpen(true)}
+              className="inline-flex items-center gap-1.5 self-start sm:self-end rounded-xl bg-rose-500/90 hover:bg-rose-600 px-3.5 py-2 text-xs font-bold text-white shadow-xs transition cursor-pointer"
+            >
+              <Trash2 className="size-3.5" />
+              <span>Hapus Kelas Mapel</span>
+            </button>
           )}
         </div>
-        <h1 className="font-[family-name:var(--font-display)] text-3xl font-extrabold tracking-[-0.02em]">
-          {course.name}
-        </h1>
-        <p className="mt-1 text-sm font-medium text-purple-100 flex items-center gap-2">
-          <GraduationCap className="size-4" />
-          {teacherName}
-        </p>
       </div>
 
       {/* Aktivitas Kelas */}
@@ -470,14 +683,16 @@ export function SharedClassDetail({
             {course.assignments.length === 0 && (course.quizzes || []).length === 0 ? (
               <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-10 text-center text-slate-500 shadow-xs">
                 <FileText className="mx-auto size-10 text-slate-300 mb-2" />
-                <p className="text-sm font-bold text-slate-700">Belum ada aktivitas di kelas ini.</p>
+                <p className="text-sm font-bold text-slate-700">
+                  Belum ada aktivitas di kelas ini.
+                </p>
                 <p className="text-xs text-slate-400 mt-1">
                   Guru pengampu belum mempublikasikan tugas atau kuis untuk kelas ini.
                 </p>
               </div>
             ) : (
               <>
-                {/* 1. QUIZ / ULANGAN HARIAN (Blue Container per rule #9) */}
+                {/* 1. QUIZ / ULANGAN HARIAN (Blue Container) */}
                 {(course.quizzes || []).map((quiz) => {
                   const dueText = quiz.dueDate
                     ? new Date(quiz.dueDate).toLocaleDateString("id-ID", {
@@ -488,10 +703,13 @@ export function SharedClassDetail({
                     : "Tanpa batas waktu";
 
                   const isDone =
-                    quiz.submissionStatus === "turned_in" || quiz.submissionStatus === "graded";
+                    quiz.submissionStatus === "turned_in" ||
+                    quiz.submissionStatus === "graded";
 
-                  // Route staff/admin/kepsek to the full Tugas/Kuis detail view, and students to the student quiz view
-                  const targetUrl = ["admin", "kepsek", "guru"].includes(userRole)
+                  const isStaffOrTeacher = ["admin", "kurikulum", "kepsek", "guru"].includes(
+                    userRole
+                  );
+                  const targetUrl = isStaffOrTeacher
                     ? `/guru/quizzes/${quiz._id}`
                     : `/siswa/quiz/${quiz._id}`;
 
@@ -513,7 +731,8 @@ export function SharedClassDetail({
                               </span>
                               <span className="text-[11px] text-blue-100 flex items-center gap-1">
                                 <Clock className="size-3" />
-                                {Math.round((quiz.durationSeconds || 60) / 60)} Menit &bull; {quiz.totalQuestions || 0} Soal
+                                {Math.round((quiz.durationSeconds || 60) / 60)} Menit &bull;{" "}
+                                {quiz.totalQuestions || 0} Soal
                               </span>
                             </div>
                             <h3 className="mt-1 text-base font-extrabold text-white leading-snug group-hover:underline">
@@ -531,11 +750,11 @@ export function SharedClassDetail({
                           </div>
                         </div>
 
-                        {/* Status Badge & Detail Button */}
+                        {/* Status Badge & Action Buttons */}
                         <div className="shrink-0 flex flex-col sm:flex-row items-end sm:items-center gap-2">
                           <span
                             className={`rounded-xl px-3 py-1 text-xs font-black uppercase tracking-wider shadow-xs ${
-                              isReadOnly
+                              isStaffOrTeacher
                                 ? "bg-white/20 text-white backdrop-blur-xs"
                                 : isDone
                                 ? "bg-white text-blue-700"
@@ -544,7 +763,7 @@ export function SharedClassDetail({
                                 : "bg-white/25 text-white backdrop-blur-xs"
                             }`}
                           >
-                            {isReadOnly
+                            {isStaffOrTeacher
                               ? `${quiz.totalQuestions || 0} Soal`
                               : isDone
                               ? quiz.score !== null && quiz.score !== undefined
@@ -554,6 +773,24 @@ export function SharedClassDetail({
                               ? "Terlambat"
                               : "Belum dikerjakan"}
                           </span>
+                          {isAdmin && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setDeleteItemTarget({
+                                  type: "quiz",
+                                  id: quiz._id,
+                                  title: quiz.title,
+                                });
+                              }}
+                              title={`Hapus Kuis ${quiz.title}`}
+                              className="inline-flex items-center gap-1 rounded-xl bg-rose-500/90 hover:bg-rose-600 px-2.5 py-1 text-xs font-bold text-white shadow-xs transition cursor-pointer"
+                            >
+                              <Trash2 className="size-3" />
+                              <span>Hapus</span>
+                            </button>
+                          )}
                           <Link
                             href={targetUrl}
                             onClick={(e) => e.stopPropagation()}
@@ -568,7 +805,7 @@ export function SharedClassDetail({
                   );
                 })}
 
-                {/* 2. TUGAS (White Container per rule #9) */}
+                {/* 2. TUGAS (White Container) */}
                 {course.assignments.map((assignment) => {
                   const dueText = assignment.dueDate
                     ? new Date(assignment.dueDate).toLocaleDateString("id-ID", {
@@ -578,8 +815,10 @@ export function SharedClassDetail({
                       })
                     : "Tanpa batas waktu";
 
-                  // Route staff/admin/kepsek to the full Tugas/Kuis detail view, and students to the student assignment view
-                  const targetUrl = ["admin", "kepsek", "guru"].includes(userRole)
+                  const isStaffOrTeacher = ["admin", "kurikulum", "kepsek", "guru"].includes(
+                    userRole
+                  );
+                  const targetUrl = isStaffOrTeacher
                     ? `/guru/assignments/${assignment._id}`
                     : `/siswa/assignments/${assignment._id}`;
 
@@ -613,11 +852,11 @@ export function SharedClassDetail({
                           </div>
                         </div>
 
-                        {/* Status Badge & Detail Button */}
+                        {/* Status Badge & Action Buttons */}
                         <div className="shrink-0 flex flex-col sm:flex-row items-end sm:items-center gap-2">
                           <span
                             className={`rounded-xl px-3 py-1 text-xs font-black uppercase tracking-wider ${
-                              isReadOnly
+                              isStaffOrTeacher
                                 ? "bg-slate-100 text-slate-700"
                                 : assignment.submissionStatus === "graded"
                                 ? "bg-emerald-100 text-emerald-700"
@@ -628,7 +867,7 @@ export function SharedClassDetail({
                                 : "bg-slate-100 text-slate-700"
                             }`}
                           >
-                            {isReadOnly
+                            {isStaffOrTeacher
                               ? `${assignment.maxScore} Poin`
                               : assignment.submissionStatus === "graded"
                               ? `Nilai: ${assignment.score}`
@@ -638,6 +877,24 @@ export function SharedClassDetail({
                               ? "Terlambat"
                               : "Belum dikerjakan"}
                           </span>
+                          {isAdmin && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setDeleteItemTarget({
+                                  type: "assignment",
+                                  id: assignment._id,
+                                  title: assignment.title,
+                                });
+                              }}
+                              title={`Hapus Tugas ${assignment.title}`}
+                              className="inline-flex items-center gap-1 rounded-xl border border-rose-200 bg-rose-50 hover:bg-rose-100 px-2.5 py-1 text-xs font-bold text-rose-600 transition cursor-pointer"
+                            >
+                              <Trash2 className="size-3" />
+                              <span>Hapus</span>
+                            </button>
+                          )}
                           <Link
                             href={targetUrl}
                             onClick={(e) => e.stopPropagation()}
@@ -667,31 +924,51 @@ export function SharedClassDetail({
                     key={mat._id}
                     className="rounded-2xl border border-slate-200 bg-white p-4 shadow-xs"
                   >
-                    <div className="flex items-start gap-3">
-                      <div className="flex size-9 items-center justify-center rounded-xl bg-purple-50 text-purple-600 shrink-0">
-                        <BookOpen className="size-4" />
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-start gap-3 min-w-0 flex-1">
+                        <div className="flex size-9 items-center justify-center rounded-xl bg-purple-50 text-purple-600 shrink-0">
+                          <BookOpen className="size-4" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <h4 className="text-sm font-bold text-slate-900">{mat.title}</h4>
+                          {mat.description && (
+                            <p className="text-xs text-slate-600 mt-1">{mat.description}</p>
+                          )}
+                          {mat.attachments && mat.attachments.length > 0 && (
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              {mat.attachments.map((att, attIdx) => (
+                                <a
+                                  key={attIdx}
+                                  href={`/api/files/download?url=${encodeURIComponent(att.url)}`}
+                                  download={att.name}
+                                  className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-semibold text-slate-700 hover:bg-slate-100 transition"
+                                >
+                                  <Download className="size-3" />
+                                  {att.name}
+                                </a>
+                              ))}
+                            </div>
+                          )}
+                        </div>
                       </div>
-                      <div className="min-w-0 flex-1">
-                        <h4 className="text-sm font-bold text-slate-900">{mat.title}</h4>
-                        {mat.description && (
-                          <p className="text-xs text-slate-600 mt-1">{mat.description}</p>
-                        )}
-                        {mat.attachments && mat.attachments.length > 0 && (
-                          <div className="mt-2 flex flex-wrap gap-2">
-                            {mat.attachments.map((att, attIdx) => (
-                              <a
-                                key={attIdx}
-                                href={`/api/files/download?url=${encodeURIComponent(att.url)}`}
-                                download={att.name}
-                                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-semibold text-slate-700 hover:bg-slate-100 transition"
-                              >
-                                <Download className="size-3" />
-                                {att.name}
-                              </a>
-                            ))}
-                          </div>
-                        )}
-                      </div>
+
+                      {isAdmin && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setDeleteItemTarget({
+                              type: "material",
+                              id: mat._id,
+                              title: mat.title,
+                            })
+                          }
+                          title={`Hapus Materi ${mat.title}`}
+                          className="inline-flex items-center gap-1 rounded-xl border border-rose-200 bg-rose-50 hover:bg-rose-100 px-2.5 py-1 text-xs font-bold text-rose-600 transition shrink-0 cursor-pointer"
+                        >
+                          <Trash2 className="size-3" />
+                          <span>Hapus</span>
+                        </button>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -700,24 +977,246 @@ export function SharedClassDetail({
           )}
         </section>
 
+        {/* Diskusi & Komentar Kelas Section (TASK 6: Active for Admin, Guru, Siswa; Read-Only for Kurikulum & Kepsek) */}
+        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs space-y-4">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+            <h2 className="font-[family-name:var(--font-display)] text-lg font-extrabold text-slate-900 flex items-center gap-2">
+              <MessageSquare className="size-5 text-[#0066FF]" />
+              <span>Diskusi &amp; Komentar Kelas</span>
+            </h2>
+            <span className="rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-bold text-blue-700">
+              {allComments.length} Komentar
+            </span>
+          </div>
+
+          {!isReadOnly ? (
+            <form onSubmit={handleAddClassComment} className="space-y-1.5">
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  placeholder="Tulis komentar atau pengumuman di diskusi kelas ini..."
+                  value={commentText}
+                  onChange={(e) => {
+                    setCommentText(e.target.value);
+                    if (commentError) setCommentError(null);
+                  }}
+                  disabled={submittingComment}
+                  className="flex-1 rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-xs text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:bg-white focus:outline-none transition"
+                />
+                <button
+                  type="submit"
+                  disabled={!commentText.trim() || submittingComment}
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 px-4 py-2.5 text-xs font-bold text-white hover:bg-blue-700 disabled:opacity-50 transition cursor-pointer"
+                >
+                  {submittingComment ? (
+                    <Loader2 className="size-3.5 animate-spin" />
+                  ) : (
+                    <Send className="size-3.5" />
+                  )}
+                  <span>Kirim</span>
+                </button>
+              </div>
+              {commentError && (
+                <p className="text-[11px] font-semibold text-rose-600">{commentError}</p>
+              )}
+            </form>
+          ) : (
+            <div className="rounded-xl border border-slate-100 bg-slate-50 px-3.5 py-2.5 text-xs text-slate-500">
+              Mode Pratinjau Staf (Baca-Saja): Penulisan, pembalasan, dan penghapusan komentar
+              dinonaktifkan.
+            </div>
+          )}
+
+          {topLevelComments.length === 0 ? (
+            <div className="py-6 text-center text-xs text-slate-400">
+              Belum ada diskusi atau komentar di kelas mapel ini.
+            </div>
+          ) : (
+            <div className="space-y-3 pt-1">
+              {topLevelComments.map((c, idx) => {
+                const cId = String(c._id || idx);
+                const replies = repliesByParentId.get(cId) || [];
+                const isReplyingHere = replyingTo?.parentId === cId;
+
+                return (
+                  <div
+                    key={cId}
+                    className="rounded-xl border border-slate-100 bg-slate-50/70 p-3.5 space-y-2.5"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-slate-900">
+                            {c.userName || "Pengguna"}
+                          </span>
+                          {c.userRole && (
+                            <span className="rounded bg-blue-50 px-1.5 py-0.5 text-[10px] font-bold uppercase text-blue-700">
+                              {c.userRole}
+                            </span>
+                          )}
+                          <span className="text-[10px] text-slate-400">
+                            {c.createdAt
+                              ? new Date(c.createdAt).toLocaleString("id-ID", {
+                                  day: "numeric",
+                                  month: "short",
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                })
+                              : ""}
+                          </span>
+                        </div>
+                        <p
+                          className={`mt-1 text-xs leading-relaxed ${
+                            c.isDeleted ? "italic text-slate-400" : "text-slate-700"
+                          }`}
+                        >
+                          {c.message}
+                        </p>
+                      </div>
+
+                      {!isReadOnly && (
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          {!c.isDeleted && c._id && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setReplyingTo({
+                                  id: String(c._id),
+                                  parentId: cId,
+                                  postId: c.postId,
+                                  authorName: c.userName || "Pengguna",
+                                });
+                                setReplyError(null);
+                              }}
+                              className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-semibold text-blue-600 hover:bg-blue-50 transition cursor-pointer"
+                            >
+                              <Reply className="size-3" />
+                              <span>Balas</span>
+                            </button>
+                          )}
+                          {canDeleteComment(c) && c._id && (
+                            <button
+                              type="button"
+                              disabled={deletingCommentId === String(c._id)}
+                              onClick={() => handleDeleteComment(String(c._id))}
+                              className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-semibold text-rose-600 hover:bg-rose-50 transition cursor-pointer"
+                              title="Hapus komentar"
+                            >
+                              <Trash2 className="size-3" />
+                              <span>Hapus</span>
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Replies */}
+                    {replies.length > 0 && (
+                      <div className="ml-4 border-l-2 border-slate-200 pl-3 space-y-2">
+                        {replies.map((rep, rIdx) => (
+                          <div
+                            key={String(rep._id || rIdx)}
+                            className="flex items-start justify-between gap-2 rounded-lg bg-white p-2.5 border border-slate-100"
+                          >
+                            <div className="flex items-start gap-2">
+                              <CornerDownRight className="size-3.5 text-slate-400 mt-0.5 shrink-0" />
+                              <div>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs font-bold text-slate-900">
+                                    {rep.userName || "Pengguna"}
+                                  </span>
+                                  {rep.userRole && (
+                                    <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[9px] font-bold uppercase text-slate-600">
+                                      {rep.userRole}
+                                    </span>
+                                  )}
+                                </div>
+                                <p className="mt-0.5 text-xs text-slate-700">{rep.message}</p>
+                              </div>
+                            </div>
+
+                            {!isReadOnly && canDeleteComment(rep) && rep._id && (
+                              <button
+                                type="button"
+                                disabled={deletingCommentId === String(rep._id)}
+                                onClick={() => handleDeleteComment(String(rep._id))}
+                                className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-semibold text-rose-600 hover:bg-rose-50 transition shrink-0 cursor-pointer"
+                                title="Hapus balasan"
+                              >
+                                <Trash2 className="size-3" />
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Inline Reply Form */}
+                    {!isReadOnly && isReplyingHere && (
+                      <form onSubmit={handleSendReply} className="ml-4 pt-1 space-y-1.5">
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="text"
+                            placeholder={`Balas komentar ${replyingTo.authorName}...`}
+                            value={replyText}
+                            onChange={(e) => {
+                              setReplyText(e.target.value);
+                              if (replyError) setReplyError(null);
+                            }}
+                            disabled={submittingReply}
+                            className="flex-1 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 focus:border-blue-500 focus:outline-none"
+                          />
+                          <button
+                            type="submit"
+                            disabled={!replyText.trim() || submittingReply}
+                            className="rounded-xl bg-blue-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-blue-700 disabled:opacity-50 cursor-pointer"
+                          >
+                            Balas
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setReplyingTo(null);
+                              setReplyText("");
+                              setReplyError(null);
+                            }}
+                            className="rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 cursor-pointer"
+                          >
+                            Batal
+                          </button>
+                        </div>
+                        {replyError && (
+                          <p className="text-[11px] font-semibold text-rose-600">{replyError}</p>
+                        )}
+                      </form>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </section>
       </div>
 
-      {/* KELENGKAPAN ENROLLMENT SISWA ROMBEL Section (Task 2.2 - 2.6) */}
+      {/* KELENGKAPAN ENROLLMENT SISWA ROMBEL Section */}
       <section className="mt-8 space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 pb-3">
           <div>
             <h2 className="font-[family-name:var(--font-display)] text-xl font-extrabold text-slate-900 flex items-center gap-2">
               <Users className="size-5 text-blue-600" />
-              Status Enrollment Siswa Rombel {course.rombel?.name || course.enrollmentMonitoring?.rombelName || ""}
+              Status Enrollment Siswa Rombel{" "}
+              {course.rombel?.name || course.enrollmentMonitoring?.rombelName || ""}
             </h2>
             <p className="text-xs text-slate-500 mt-0.5">
-              Perbandingan siswa aktif di Rombel dengan siswa yang terdaftar pada Kelas Mapel <strong>{course.name}</strong>
+              Perbandingan siswa aktif di Rombel dengan siswa yang terdaftar pada Kelas Mapel{" "}
+              <strong>{course.name}</strong>
             </p>
           </div>
           {course.enrollmentMonitoring ? (
             <div className="flex flex-wrap items-center gap-2">
               <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-700">
-                Enrolled: {course.enrollmentMonitoring.enrolledCount} / {course.enrollmentMonitoring.totalActiveRombelStudents}
+                Enrolled: {course.enrollmentMonitoring.enrolledCount} /{" "}
+                {course.enrollmentMonitoring.totalActiveRombelStudents}
               </span>
               <span
                 className={`rounded-full px-3 py-1 text-xs font-bold ${
@@ -742,7 +1241,8 @@ export function SharedClassDetail({
                 ) : (
                   <AlertTriangle className="size-3.5 text-amber-600" />
                 )}
-                Status: {course.enrollmentMonitoring.enrollmentStatus} ({course.enrollmentMonitoring.completionPercentage}%)
+                Status: {course.enrollmentMonitoring.enrollmentStatus} (
+                {course.enrollmentMonitoring.completionPercentage}%)
               </span>
             </div>
           ) : (
@@ -921,7 +1421,10 @@ export function SharedClassDetail({
                     {icon}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="text-xs font-extrabold text-slate-900 truncate" title={file.name}>
+                    <p
+                      className="text-xs font-extrabold text-slate-900 truncate"
+                      title={file.name}
+                    >
                       {file.name}
                     </p>
                     <p className="text-[11px] text-slate-500 truncate mt-0.5">
@@ -941,6 +1444,102 @@ export function SharedClassDetail({
             })}
           </div>
         </section>
+      )}
+
+      {/* Admin Delete Mapel Class Confirmation Modal */}
+      {deleteClassModalOpen && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-xs animate-in fade-in"
+        >
+          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl space-y-4">
+            <div className="flex items-start gap-3.5">
+              <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-rose-100 text-rose-600">
+                <Trash2 className="size-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-extrabold text-slate-900">
+                  Hapus Kelas Mapel {course.name}?
+                </h3>
+                <p className="mt-1 text-xs text-slate-600 leading-relaxed">
+                  Seluruh Materi, Tugas, Kuis, pengumpulan nilai siswa pada kelas mapel ini,
+                  serta diskusi kelas akan dihapus permanen. Rombel dan akun siswa tidak akan
+                  terhapus.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                disabled={deletingClass}
+                onClick={() => setDeleteClassModalOpen(false)}
+                className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 cursor-pointer"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                disabled={deletingClass}
+                onClick={handleConfirmDeleteMapelClass}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-rose-600 px-4 py-2 text-xs font-bold text-white hover:bg-rose-700 disabled:opacity-50 cursor-pointer"
+              >
+                {deletingClass ? "Menghapus..." : "Hapus Kelas Mapel"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Admin Delete Assignment / Quiz / Material Confirmation Modal */}
+      {deleteItemTarget && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-xs animate-in fade-in"
+        >
+          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl space-y-4">
+            <div className="flex items-start gap-3.5">
+              <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-rose-100 text-rose-600">
+                <Trash2 className="size-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-extrabold text-slate-900">
+                  Hapus{" "}
+                  {deleteItemTarget.type === "quiz"
+                    ? "Kuis"
+                    : deleteItemTarget.type === "assignment"
+                    ? "Tugas"
+                    : "Materi"}
+                  ?
+                </h3>
+                <p className="mt-1 text-xs text-slate-600 leading-relaxed">
+                  Apakah Anda yakin ingin menghapus{" "}
+                  <strong className="text-slate-900">{deleteItemTarget.title}</strong> dari
+                  kelas mapel ini?
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                disabled={deletingItem}
+                onClick={() => setDeleteItemTarget(null)}
+                className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 cursor-pointer"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                disabled={deletingItem}
+                onClick={handleConfirmDeleteItem}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-rose-600 px-4 py-2 text-xs font-bold text-white hover:bg-rose-700 disabled:opacity-50 cursor-pointer"
+              >
+                {deletingItem ? "Menghapus..." : "Ya, Hapus"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

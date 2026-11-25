@@ -3,8 +3,13 @@ import bcrypt from "bcryptjs";
 import {
   isActivationRole,
   isUsernameAvailableForRole,
+  resolveAccountStatus,
   validateUsername,
 } from "@/lib/activation";
+import {
+  deleteTeacherAndClasses,
+  getTeacherDeletionSummary,
+} from "@/lib/teacher-class-cleanup";
 import { connectDB } from "@/lib/mongodb";
 import { requireRole } from "@/lib/session";
 import { User } from "@/models";
@@ -21,7 +26,13 @@ export async function GET(_req: Request, context: RouteContext) {
     const { id } = await context.params;
     await connectDB();
 
-    const user = await User.findById(id).select("-password");
+    const user = (await User.findById(id).select("-password").lean()) as {
+      _id?: unknown;
+      role?: string;
+      isActive?: boolean;
+      isActivated?: boolean;
+      mustChangePassword?: boolean;
+    } | null;
     if (!user) {
       return NextResponse.json(
         { success: false, message: "Pengguna tidak ditemukan" },
@@ -29,7 +40,21 @@ export async function GET(_req: Request, context: RouteContext) {
       );
     }
 
-    return NextResponse.json({ success: true, data: user });
+    const { accountStatus, accountStatusCode } = resolveAccountStatus(user);
+
+    const deletionSummary =
+      user.role === "guru" ? await getTeacherDeletionSummary(id) : null;
+
+    return NextResponse.json({
+      success: true,
+      data: {
+        ...user,
+        accountStatus,
+        accountStatusCode,
+        ...(deletionSummary ? { deletionSummary } : {}),
+      },
+      ...(deletionSummary ? { deletionSummary } : {}),
+    });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Terjadi kesalahan";
     return NextResponse.json({ success: false, message }, { status: 500 });
@@ -149,7 +174,9 @@ export async function PATCH(req: Request, context: RouteContext) {
 
     const updated = await User.findByIdAndUpdate(id, updateData, {
       new: true,
-    }).select("-password");
+    })
+      .select("-password")
+      .lean();
 
     if (!updated) {
       return NextResponse.json(
@@ -158,7 +185,23 @@ export async function PATCH(req: Request, context: RouteContext) {
       );
     }
 
-    return NextResponse.json({ success: true, data: updated });
+    const { accountStatus, accountStatusCode } = resolveAccountStatus(
+      updated as {
+        role?: string;
+        isActive?: boolean;
+        isActivated?: boolean;
+        mustChangePassword?: boolean;
+      }
+    );
+
+    return NextResponse.json({
+      success: true,
+      data: {
+        ...updated,
+        accountStatus,
+        accountStatusCode,
+      },
+    });
   } catch (err: unknown) {
     if (
       err &&
@@ -199,13 +242,32 @@ export async function DELETE(_req: Request, context: RouteContext) {
       );
     }
 
-    const deleted = await User.findByIdAndDelete(id);
-    if (!deleted) {
+    const targetUser = (await User.findById(id)
+      .select("_id role name")
+      .lean()) as { _id?: unknown; role?: string; name?: string } | null;
+    if (!targetUser) {
       return NextResponse.json(
         { success: false, message: "Pengguna tidak ditemukan" },
         { status: 404 }
       );
     }
+
+    if (targetUser.role === "guru") {
+      const result = await deleteTeacherAndClasses(id);
+      if (!result) {
+        return NextResponse.json(
+          { success: false, message: "Guru tidak ditemukan" },
+          { status: 404 }
+        );
+      }
+      return NextResponse.json({
+        success: true,
+        message: `Akun guru ${result.teacherName} beserta ${result.deletedClassesCount} Kelas Mapel terkait berhasil dihapus.`,
+        data: result,
+      });
+    }
+
+    await User.findByIdAndDelete(id);
 
     return NextResponse.json({
       success: true,

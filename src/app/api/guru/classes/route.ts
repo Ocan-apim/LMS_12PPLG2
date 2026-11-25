@@ -44,19 +44,17 @@ export async function GET(req: Request) {
       query.academicYear = academicYear;
     }
 
-    // Only sync rombel students for enrollmentMethod === "rombel" when requested by Guru
+    // Sync rombel students for active classes linked to a rombel when requested by Guru
     if (session.role === "guru") {
       const preClasses = await CourseClass.find(query)
-        .select("classRombelId assignedRombelIds enrollmentMethod")
+        .select("classRombelId assignedRombelIds")
         .lean();
       const rombelIdsToSync = new Set<string>();
       for (const pc of preClasses) {
-        if ((pc as any).enrollmentMethod === "rombel") {
-          if (pc.classRombelId) rombelIdsToSync.add(String(pc.classRombelId));
-          if (Array.isArray(pc.assignedRombelIds)) {
-            for (const rid of pc.assignedRombelIds) {
-              if (rid) rombelIdsToSync.add(String(rid));
-            }
+        if (pc.classRombelId) rombelIdsToSync.add(String(pc.classRombelId));
+        if (Array.isArray(pc.assignedRombelIds)) {
+          for (const rid of pc.assignedRombelIds) {
+            if (rid) rombelIdsToSync.add(String(rid));
           }
         }
       }
@@ -87,7 +85,8 @@ export async function GET(req: Request) {
         ]);
 
         const effectiveMethod =
-          (cls as any).enrollmentMethod || (cls.classRombelId ? "rombel" : "invitation");
+          (cls as { enrollmentMethod?: "rombel" | "invitation" }).enrollmentMethod ||
+          (cls.classRombelId ? "rombel" : "invitation");
 
         return {
           ...cls,
@@ -179,15 +178,14 @@ export async function POST(req: Request) {
       );
     }
 
-    const method: "rombel" | "invitation" =
-      enrollmentMethod === "invitation" ? "invitation" : "rombel";
-
-    if (method === "invitation" && (!password || !String(password).trim())) {
+    if (!password || !String(password).trim()) {
       return NextResponse.json(
-        { success: false, message: "Password kelas wajib diisi untuk metode Kode Undangan" },
+        { success: false, message: "Password undangan kelas wajib diisi" },
         { status: 400 }
       );
     }
+
+    const effectivePassword = String(password).trim();
 
     // Generate unique 5-char invitation code so invitation credentials always remain functional
     let code = generateClassCode();
@@ -199,13 +197,12 @@ export async function POST(req: Request) {
       attempts++;
     }
 
-    const effectivePassword =
-      password && String(password).trim() ? String(password).trim() : code;
-
-    // Auto-populate students from Rombel when method === "rombel";
-    // For method === "invitation", bind to the rombel while letting students enroll via code/password
-    const initialStudents =
-      method === "rombel" ? await getActiveStudentIdsForRombel(rombelDoc._id) : [];
+    // Preserve unified enrollment behavior:
+    // All active students belonging to the selected rombel automatically receive access,
+    // while the generated invitation code and mandatory password also remain available.
+    const method: "rombel" | "invitation" =
+      enrollmentMethod === "invitation" ? "invitation" : "rombel";
+    const initialStudents = await getActiveStudentIdsForRombel(rombelDoc._id);
 
     // Resolve default subject if not provided
     let resolvedSubjectId = subjectId || undefined;
@@ -233,9 +230,7 @@ export async function POST(req: Request) {
       isActive: true,
     });
 
-    if (method === "rombel") {
-      await syncRombelStudents(rombelDoc._id);
-    }
+    await syncRombelStudents(rombelDoc._id);
 
     const populated = await CourseClass.findById(newCourseClass._id)
       .populate("subjectId", "name code category")

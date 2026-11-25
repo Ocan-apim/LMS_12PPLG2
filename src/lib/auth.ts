@@ -1,6 +1,21 @@
 import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
 import type { Role, SessionUser } from "@/types";
+import {
+  isActivationRole,
+  requiresAccountActivation,
+  resolveAccountStatus,
+  type AccountStatusLabel,
+  type AccountStatusCode,
+} from "@/lib/account-status";
+
+export {
+  isActivationRole,
+  requiresAccountActivation,
+  resolveAccountStatus,
+  type AccountStatusLabel,
+  type AccountStatusCode,
+};
 
 const COOKIE_NAME = "lms_session";
 
@@ -10,23 +25,6 @@ function getSecret() {
     throw new Error("Missing JWT_SECRET in environment variables");
   }
   return new TextEncoder().encode(secret);
-}
-
-export function isActivationRole(role?: string | null): boolean {
-  return role === "guru" || role === "kurikulum";
-}
-
-export function requiresAccountActivation(
-  user?: {
-    role?: string | null;
-    isActivated?: boolean | null;
-    mustChangePassword?: boolean | null;
-  } | null
-): boolean {
-  if (!user || !isActivationRole(user.role)) {
-    return false;
-  }
-  return user.isActivated === false || user.mustChangePassword === true;
 }
 
 export async function createSessionToken(user: SessionUser) {

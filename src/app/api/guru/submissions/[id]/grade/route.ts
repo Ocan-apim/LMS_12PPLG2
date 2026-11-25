@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import { requireRole } from "@/lib/session";
@@ -14,7 +15,7 @@ type RouteContext = {
 };
 
 export async function POST(req: Request, context: RouteContext) {
-  const { session, error } = await requireRole(["guru", "admin"]);
+  const { session, error } = await requireRole(["guru"]);
   if (error || !session) return error;
 
   try {

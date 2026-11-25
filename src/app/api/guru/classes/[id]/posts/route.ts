@@ -55,7 +55,7 @@ export async function GET(_req: Request, context: RouteContext) {
 }
 
 export async function POST(req: Request, context: RouteContext) {
-  const { session, error } = await requireRole(["guru", "siswa"]);
+  const { session, error } = await requireRole(["guru", "siswa", "admin"]);
   if (error || !session) return error;
 
   try {

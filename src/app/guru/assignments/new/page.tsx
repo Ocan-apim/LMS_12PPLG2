@@ -7,7 +7,6 @@ import {
   Calendar,
   Trash2,
   Star,
-  HelpCircle,
   UploadCloud,
   FileText,
   Bold,
@@ -39,9 +38,12 @@ interface AttachedFile {
 function BuatTugasForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const initialClassId = searchParams.get("classId") || "";
+  const initialClassId =
+    searchParams.get("classId") || searchParams.get("courseClassId") || "";
+  const isLockedToClass = Boolean(initialClassId);
 
   const [classes, setClasses] = useState<TeacherClass[]>([]);
+  const [loadingClasses, setLoadingClasses] = useState(true);
   const [selectedClassId, setSelectedClassId] = useState(initialClassId);
   const [title, setTitle] = useState("");
   const [instructions, setInstructions] = useState("");
@@ -62,25 +64,32 @@ function BuatTugasForm() {
 
   useEffect(() => {
     async function loadData() {
+      setLoadingClasses(true);
       try {
         const classesRes = await fetch("/api/guru/classes");
         const classesJson = await classesRes.json();
 
         if (classesJson.success && Array.isArray(classesJson.data)) {
           setClasses(classesJson.data);
-          if (!selectedClassId && classesJson.data.length > 0) {
-            setSelectedClassId(classesJson.data[0]._id);
-          }
         }
       } catch (err) {
         console.error("Gagal memuat data kelas:", err);
+      } finally {
+        setLoadingClasses(false);
       }
     }
     loadData();
-  }, [selectedClassId]);
+  }, []);
 
-  const currentClass = classes.find((c) => c._id === selectedClassId);
-  const className = currentClass?.name || "10 PPLG 1";
+  const effectiveClassId = isLockedToClass ? initialClassId : selectedClassId;
+  const currentClass = classes.find((c) => c._id === effectiveClassId);
+  const className = currentClass
+    ? currentClass.classRombelId?.name
+      ? `${currentClass.name} (${currentClass.classRombelId.name})`
+      : currentClass.name
+    : isLockedToClass
+      ? "Kelas Mapel"
+      : "Pilih Kelas Mapel";
 
   async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const files = e.target.files;
@@ -132,8 +141,9 @@ function BuatTugasForm() {
       setError("Judul tugas wajib diisi");
       return;
     }
-    if (!selectedClassId) {
-      setError("Pilih kelas untuk tugas ini");
+    const targetClassId = isLockedToClass ? initialClassId : selectedClassId;
+    if (!targetClassId) {
+      setError("Pilih Kelas Mapel tujuan untuk tugas ini");
       return;
     }
 
@@ -150,7 +160,7 @@ function BuatTugasForm() {
           title: title.trim(),
           instructions: instructions.trim(),
           type: "tugas",
-          courseClassId: selectedClassId,
+          courseClassId: targetClassId,
           dueDate: combinedDueDate,
           maxScore: Number(maxScore) || 100,
           attachments,
@@ -161,7 +171,7 @@ function BuatTugasForm() {
       if (!json.success) {
         setError(json.message || "Gagal membuat tugas");
       } else {
-        router.push(`/guru/classes/${selectedClassId}`);
+        router.push(`/guru/classes/${targetClassId}`);
       }
     } catch {
       setError("Terjadi kesalahan jaringan");
@@ -205,8 +215,44 @@ function BuatTugasForm() {
       {/* Main 2-Column Form matching Screenshot 3 Right */}
       <form onSubmit={handleSubmit} className="space-y-6">
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
-          {/* Left Column (8 cols): Judul, Deskripsi/Instruksi, File yang Dibagikan */}
+          {/* Left Column (8 cols): Pilih Kelas Mapel (if unlocked), Judul, Deskripsi/Instruksi, File yang Dibagikan */}
           <div className="lg:col-span-8 space-y-6">
+            {/* Box: Pilih Kelas Mapel (ONLY shown when opened from Manajemen Tugas without classId) */}
+            {!isLockedToClass && (
+              <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs space-y-2">
+                <label
+                  htmlFor="assignment-course-class"
+                  className="block text-xs font-bold text-slate-700"
+                >
+                  Pilih Kelas Mapel <span className="text-red-500">*</span>
+                </label>
+                <select
+                  id="assignment-course-class"
+                  name="courseClassId"
+                  required
+                  value={selectedClassId}
+                  onChange={(e) => {
+                    setSelectedClassId(e.target.value);
+                    if (error) setError("");
+                  }}
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs font-semibold text-slate-900 focus:border-blue-500 focus:bg-white focus:outline-none transition"
+                >
+                  <option value="">
+                    {loadingClasses
+                      ? "Memuat daftar kelas mapel..."
+                      : "-- Pilih Kelas Mapel --"}
+                  </option>
+                  {classes.map((cls) => (
+                    <option key={cls._id} value={cls._id}>
+                      {cls.classRombelId?.name
+                        ? `${cls.name} — ${cls.classRombelId.name}`
+                        : cls.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
             {/* Box: Judul Tugas */}
             <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs space-y-2">
               <label className="block text-xs font-bold text-slate-700">

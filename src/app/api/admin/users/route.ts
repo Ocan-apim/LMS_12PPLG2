@@ -4,6 +4,7 @@ import {
   generateInitialUsername,
   isActivationRole,
   isUsernameAvailableForRole,
+  resolveAccountStatus,
   validateUsername,
 } from "@/lib/activation";
 import { connectDB } from "@/lib/mongodb";
@@ -22,36 +23,80 @@ export async function GET(req: Request) {
     const status = searchParams.get("status");
     const activationStatus = searchParams.get("activationStatus");
 
-    const query: Record<string, unknown> = {};
+    const andConditions: Record<string, unknown>[] = [];
 
     if (role && role !== "all") {
-      query.role = role;
-    }
-    if (status === "active") {
-      query.isActive = true;
-    } else if (status === "inactive") {
-      query.isActive = false;
-    }
-    if (activationStatus === "unactivated") {
-      query.$or = [{ isActivated: false }, { mustChangePassword: true }];
-    } else if (activationStatus === "activated") {
-      query.isActivated = { $ne: false };
-      query.mustChangePassword = { $ne: true };
-    }
-    if (search) {
-      query.$or = [
-        { name: { $regex: search, $options: "i" } },
-        { email: { $regex: search, $options: "i" } },
-        { loginUsername: { $regex: search, $options: "i" } },
-        { nip: { $regex: search, $options: "i" } },
-        { nisn: { $regex: search, $options: "i" } },
-      ];
+      andConditions.push({ role });
     }
 
-    const users = await User.find(query)
+    if (status === "inactive" || status === "Non-Aktif") {
+      andConditions.push({ isActive: false });
+    } else if (status === "unactivated" || status === "Belum Diaktivasi") {
+      andConditions.push({
+        isActive: { $ne: false },
+        role: { $in: ["guru", "kurikulum"] },
+        $or: [{ isActivated: false }, { mustChangePassword: true }],
+      });
+    } else if (status === "active" || status === "Aktif") {
+      andConditions.push({
+        isActive: { $ne: false },
+        $nor: [
+          {
+            role: { $in: ["guru", "kurikulum"] },
+            $or: [{ isActivated: false }, { mustChangePassword: true }],
+          },
+        ],
+      });
+    }
+
+    if (activationStatus === "unactivated") {
+      andConditions.push({
+        isActive: { $ne: false },
+        role: { $in: ["guru", "kurikulum"] },
+        $or: [{ isActivated: false }, { mustChangePassword: true }],
+      });
+    } else if (activationStatus === "activated") {
+      andConditions.push({
+        isActivated: { $ne: false },
+        mustChangePassword: { $ne: true },
+      });
+    }
+
+    if (search) {
+      andConditions.push({
+        $or: [
+          { name: { $regex: search, $options: "i" } },
+          { email: { $regex: search, $options: "i" } },
+          { loginUsername: { $regex: search, $options: "i" } },
+          { nip: { $regex: search, $options: "i" } },
+          { nisn: { $regex: search, $options: "i" } },
+        ],
+      });
+    }
+
+    const query: Record<string, unknown> =
+      andConditions.length > 0 ? { $and: andConditions } : {};
+
+    const rawUsers = await User.find(query)
       .select("-password")
       .sort({ createdAt: -1 })
       .lean();
+
+    const users = rawUsers.map((u) => {
+      const { accountStatus, accountStatusCode } = resolveAccountStatus(
+        u as {
+          role?: string;
+          isActive?: boolean;
+          isActivated?: boolean;
+          mustChangePassword?: boolean;
+        }
+      );
+      return {
+        ...u,
+        accountStatus,
+        accountStatusCode,
+      };
+    });
 
     const counts = {
       all: await User.countDocuments(),
@@ -184,6 +229,14 @@ export async function POST(req: Request) {
 
     const userObj = user.toObject() as unknown as Record<string, unknown>;
     delete userObj.password;
+    const { accountStatus, accountStatusCode } = resolveAccountStatus({
+      role: user.role,
+      isActive: user.isActive,
+      isActivated: user.isActivated,
+      mustChangePassword: user.mustChangePassword,
+    });
+    userObj.accountStatus = accountStatus;
+    userObj.accountStatusCode = accountStatusCode;
 
     return NextResponse.json({ success: true, data: userObj }, { status: 201 });
   } catch (err: unknown) {

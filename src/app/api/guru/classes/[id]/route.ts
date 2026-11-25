@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextResponse } from "next/server";
 import mongoose from "mongoose";
 import { connectDB } from "@/lib/mongodb";
@@ -8,6 +9,7 @@ import {
   getActiveStudentsForRombelDetailed,
   calculateCourseEnrollmentCompleteness,
 } from "@/lib/rombel-enrollment";
+import { deleteCourseClassAndAllRecords } from "@/lib/teacher-class-cleanup";
 
 type RouteContext = {
   params: Promise<{ id: string }>;
@@ -334,18 +336,17 @@ export async function DELETE(_req: Request, context: RouteContext) {
       );
     }
 
-    // TASK 4: Safe Mapel Class Deletion (Soft-Delete Only)
-    // Preserve all historical academic data: student submissions, quiz attempts/results,
-    // grades, teacher feedback, comments/replies (ClassPost), materials/attachments, and historical studentIds.
-    await CourseClass.findByIdAndUpdate(id, { isActive: false });
-    await Assignment.updateMany(
-      { courseClassId: id },
-      { isArchived: true, isPublished: false }
-    );
+    const className = existingClass.name;
+    const deletedCounts = await deleteCourseClassAndAllRecords(id);
 
     return NextResponse.json({
       success: true,
-      message: "Kelas berhasil diarsipkan secara aman tanpa menghapus riwayat nilai, tugas, kuis, atau diskusi",
+      message: `Kelas Mapel "${className}" beserta seluruh konten kelas terkait berhasil dihapus.`,
+      data: {
+        deletedClassId: id,
+        deletedClassName: className,
+        ...deletedCounts,
+      },
     });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Gagal menghapus kelas";

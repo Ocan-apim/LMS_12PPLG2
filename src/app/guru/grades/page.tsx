@@ -6,18 +6,13 @@ import Link from "next/link";
 import {
   FileSpreadsheet,
   SlidersHorizontal,
-  ChevronDown,
   ChevronLeft,
   ChevronRight,
-  TrendingUp,
   Award,
   BarChart3,
   PieChart,
-  Clock,
   X,
   Star,
-  Users,
-  CheckCircle2,
 } from "lucide-react";
 import { Spinner } from "@/components/ui";
 
@@ -25,16 +20,27 @@ interface TeacherClassOption {
   _id: string;
   name: string;
   code: string;
+  grade?: string;
+  jurusanCode?: string;
   classRombelId?: {
     name: string;
     grade: string;
   };
 }
 
+interface DepartmentOption {
+  _id: string;
+  code: string;
+  name: string;
+}
+
 interface RecentSubmissionItem {
   _id: string;
   studentName: string;
   studentClass: string;
+  studentGrade?: string;
+  studentJurusan?: string;
+  courseClassId?: string;
   assignmentTitle: string;
   assignmentType: string;
   assignmentId: string;
@@ -55,14 +61,15 @@ function PenilaianContent() {
   const initialClassId = searchParams.get("courseClassId") || "";
 
   const [classes, setClasses] = useState<TeacherClassOption[]>([]);
+  const [departments, setDepartments] = useState<DepartmentOption[]>([]);
   const [selectedClassId, setSelectedClassId] = useState(initialClassId);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Report Controls matching Figma Page 4 Left
+  // Report & Filter Controls (Task 3: Kelas 10/11/12 & Dynamic Jurusan, no Walas)
   const [generateReport, setGenerateReport] = useState(false);
-  const [selectedWalas, setSelectedWalas] = useState("-");
-  const [selectedJurusan, setSelectedJurusan] = useState("PPLG");
+  const [selectedGrade, setSelectedGrade] = useState<string>("all");
+  const [selectedJurusan, setSelectedJurusan] = useState<string>("all");
 
   // Slide-over Filter Drawer matching Figma Page 4 Right
   const [filterDrawerOpen, setFilterDrawerOpen] = useState(false);
@@ -87,7 +94,16 @@ function PenilaianContent() {
       setLoading(true);
       setError(null);
       try {
-        const query = selectedClassId ? `?courseClassId=${selectedClassId}` : "";
+        const params = new URLSearchParams();
+        if (initialClassId) params.set("courseClassId", initialClassId);
+        if (selectedGrade && selectedGrade !== "all") {
+          params.set("grade", selectedGrade);
+        }
+        if (selectedJurusan && selectedJurusan !== "all") {
+          params.set("jurusan", selectedJurusan);
+        }
+        const query = params.toString() ? `?${params.toString()}` : "";
+
         const [gradesRes, classesRes] = await Promise.all([
           fetch(`/api/guru/grades${query}`),
           fetch("/api/guru/classes"),
@@ -96,19 +112,50 @@ function PenilaianContent() {
         const gradesJson = await gradesRes.json();
         const classesJson = await classesRes.json();
 
-        if (classesJson.success && Array.isArray(classesJson.data)) {
+        if (gradesJson.success && Array.isArray(gradesJson.data?.departments)) {
+          setDepartments(gradesJson.data.departments);
+        }
+
+        if (gradesJson.success && Array.isArray(gradesJson.data?.classes)) {
+          setClasses(gradesJson.data.classes);
+          if (gradesJson.data.selectedClass?._id) {
+            setSelectedClassId(String(gradesJson.data.selectedClass._id));
+          } else if (gradesJson.data.classes.length > 0) {
+            setSelectedClassId((prev) => prev || gradesJson.data.classes[0]._id);
+          }
+        } else if (classesJson.success && Array.isArray(classesJson.data)) {
           setClasses(classesJson.data);
-          if (!selectedClassId && classesJson.data.length > 0) {
-            setSelectedClassId(classesJson.data[0]._id);
+          if (classesJson.data.length > 0) {
+            setSelectedClassId((prev) => prev || classesJson.data[0]._id);
           }
         }
 
         if (gradesJson.success && gradesJson.data?.recentSubmissions) {
           const mapped: RecentSubmissionItem[] = gradesJson.data.recentSubmissions.map(
-            (s: any, idx: number) => ({
+            (
+              s: {
+                _id?: string;
+                studentId?: { name?: string };
+                studentClass?: string;
+                studentGrade?: string;
+                studentJurusan?: string;
+                courseClassId?: string;
+                assignmentId?: { _id?: string; title?: string; maxScore?: number };
+                submittedAt?: string;
+                status?: string;
+                score?: number;
+              },
+              idx: number
+            ) => ({
               _id: s._id || `sub-${idx}`,
               studentName: s.studentId?.name || "Siswa",
-              studentClass: gradesJson.data.selectedClass?.name || "Kelas",
+              studentClass:
+                s.studentClass ||
+                gradesJson.data.selectedClass?.name ||
+                "Kelas",
+              studentGrade: s.studentGrade || "",
+              studentJurusan: s.studentJurusan || "",
+              courseClassId: s.courseClassId || "",
               assignmentTitle: s.assignmentId?.title || "Tugas",
               assignmentType: "Tugas",
               assignmentId: s.assignmentId?._id || "",
@@ -140,11 +187,12 @@ function PenilaianContent() {
       }
     }
     loadData();
-  }, [selectedClassId]);
+  }, [initialClassId, selectedGrade, selectedJurusan]);
 
   function handleExportExcel() {
-    if (!selectedClassId) return;
-    window.open(`/api/guru/grades/export?courseClassId=${selectedClassId}`, "_blank");
+    const targetId = selectedClassId || classes[0]?._id;
+    if (!targetId) return;
+    window.open(`/api/guru/grades/export?courseClassId=${targetId}`, "_blank");
   }
 
   function openGradingModal(row: RecentSubmissionItem) {
@@ -194,12 +242,38 @@ function PenilaianContent() {
   // Submissions list
   const rawSubmissions: RecentSubmissionItem[] = submissions;
 
-  // Apply active drawer filters
+  // Apply active drawer and Kelas + Jurusan filters
   const displaySubmissions: RecentSubmissionItem[] = rawSubmissions.filter((row) => {
+    if (selectedGrade && selectedGrade !== "all") {
+      if (row.studentGrade && row.studentGrade !== selectedGrade) {
+        return false;
+      }
+    }
+
+    if (selectedJurusan && selectedJurusan !== "all") {
+      if (
+        row.studentJurusan &&
+        row.studentJurusan.toUpperCase() !== selectedJurusan.toUpperCase()
+      ) {
+        return false;
+      }
+    }
+
+    if (
+      filterClassIds.length > 0 &&
+      !filterClassIds.includes("all") &&
+      row.courseClassId
+    ) {
+      if (!filterClassIds.includes(row.courseClassId)) {
+        return false;
+      }
+    }
+
     if (filterStatuses.length > 0) {
       const match = filterStatuses.some((st) => {
         if (st === "graded") return row.status === "graded";
-        if (st === "needs_review") return row.status === "needs_review" || row.status === "pending";
+        if (st === "needs_review" || st === "pending")
+          return row.status === "needs_review" || row.status === "pending";
         if (st === "late") return row.status === "late";
         return true;
       });
@@ -365,57 +439,49 @@ function PenilaianContent() {
 
         <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
           <div className="flex flex-wrap items-center gap-3">
-            {/* KELAS */}
+            {/* KELAS (Academic Grade Level: Kelas 10, 11, 12) */}
             <div>
-              <label className="block text-[10px] font-bold uppercase text-slate-400 mb-1">
+              <label
+                htmlFor="penilaian-filter-kelas"
+                className="block text-[10px] font-bold uppercase text-slate-400 mb-1"
+              >
                 Kelas
               </label>
               <select
-                value={selectedClassId}
-                onChange={(e) => setSelectedClassId(e.target.value)}
+                id="penilaian-filter-kelas"
+                name="grade"
+                value={selectedGrade}
+                onChange={(e) => setSelectedGrade(e.target.value)}
                 className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-800 focus:border-blue-500 focus:outline-none"
               >
-                {classes.length === 0 ? (
-                  <option value="">Belum ada kelas.</option>
-                ) : (
-                  classes.map((c) => (
-                    <option key={c._id} value={c._id}>
-                      {c.name}
-                    </option>
-                  ))
-                )}
+                <option value="all">Semua Kelas</option>
+                <option value="10">Kelas 10</option>
+                <option value="11">Kelas 11</option>
+                <option value="12">Kelas 12</option>
               </select>
             </div>
 
-            {/* WALAS */}
+            {/* JURUSAN (Dynamically populated from database) */}
             <div>
-              <label className="block text-[10px] font-bold uppercase text-slate-400 mb-1">
-                Walas
-              </label>
-              <select
-                value={selectedWalas}
-                onChange={(e) => setSelectedWalas(e.target.value)}
-                className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-800 focus:border-blue-500 focus:outline-none"
+              <label
+                htmlFor="penilaian-filter-jurusan"
+                className="block text-[10px] font-bold uppercase text-slate-400 mb-1"
               >
-                <option value="-">-</option>
-                <option value="Ibu Alvisya">Ibu Alvisya</option>
-                <option value="Pak Bambang">Pak Bambang</option>
-              </select>
-            </div>
-
-            {/* JURUSAN */}
-            <div>
-              <label className="block text-[10px] font-bold uppercase text-slate-400 mb-1">
                 Jurusan
               </label>
               <select
+                id="penilaian-filter-jurusan"
+                name="jurusan"
                 value={selectedJurusan}
                 onChange={(e) => setSelectedJurusan(e.target.value)}
                 className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-800 focus:border-blue-500 focus:outline-none"
               >
-                <option value="PPLG">PPLG</option>
-                <option value="TJKT">TJKT</option>
-                <option value="DKV">DKV</option>
+                <option value="all">Semua Jurusan</option>
+                {departments.map((dept) => (
+                  <option key={dept._id || dept.code} value={dept.code}>
+                    {dept.code}
+                  </option>
+                ))}
               </select>
             </div>
           </div>
@@ -954,14 +1020,7 @@ function PenilaianContent() {
                       <span>Semua Kelas</span>
                     </label>
 
-                    {(classes.length > 0
-                      ? classes
-                      : [
-                          { _id: "c1", name: "10 PPLG 1", code: "PPLG1" },
-                          { _id: "c2", name: "10 PPLG +", code: "PPLG+" },
-                          { _id: "c3", name: "10 PPLG 2", code: "PPLG2" },
-                        ]
-                    ).map((c) => {
+                    {classes.map((c) => {
                       const checked =
                         filterClassIds.includes("all") ||
                         filterClassIds.includes(c._id);

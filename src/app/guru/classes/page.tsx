@@ -7,7 +7,6 @@ import {
   ArrowUpDown,
   MoreVertical,
   ArrowRight,
-  TrendingUp,
   Trash2,
   AlertCircle,
 } from "lucide-react";
@@ -323,7 +322,7 @@ export default function GuruClassesPage() {
                       >
                         Buat Tugas
                       </Link>
-                      {item.enrollmentMethod !== "rombel" && item.code && (
+                      {item.code && (
                         <button
                           type="button"
                           onClick={() => handleCopyClassCode(item._id, item.code)}
@@ -394,83 +393,53 @@ export default function GuruClassesPage() {
         )}
       </div>
 
-      {/* Bottom Widgets Row matching Figma Page 2 Top */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
-        {/* Left Widget (8 cols): Pengiriman Siswa Terbaru */}
-        <div className="lg:col-span-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-xs space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-bold text-slate-900">
-              Pengiriman Siswa Terbaru
-            </h3>
-            <Link
-              href="/guru/grades"
-              className="text-xs font-semibold text-blue-600 hover:text-blue-700 transition"
-            >
-              Lihat Semua
-            </Link>
-          </div>
-
-          <div className="space-y-3">
-            {recentSubmissions.length === 0 ? (
-              <div className="py-8 text-center text-xs text-slate-400 bg-slate-50/50 rounded-xl border border-dashed border-slate-200">
-                Belum ada pengumpulan tugas.
-              </div>
-            ) : (
-              recentSubmissions.map((sub) => (
-                <div
-                  key={sub._id}
-                  className="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50/50 p-3 hover:bg-slate-50 transition"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="size-8 rounded-full bg-blue-100 flex items-center justify-center text-xs font-bold text-blue-700">
-                      {sub.studentId?.name?.charAt(0) || "S"}
-                    </div>
-                    <div>
-                      <p className="text-xs font-bold text-slate-900">
-                        {sub.studentId?.name || "Siswa"}
-                      </p>
-                      <p className="text-[11px] text-slate-400">
-                        Mengirimkan: {sub.assignmentId?.title || "Tugas"}
-                      </p>
-                    </div>
-                  </div>
-                  <Link
-                    href="/guru/grades"
-                    className="rounded-lg bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-600 hover:bg-blue-100 transition"
-                  >
-                    Kirimkan Nilai
-                  </Link>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-
-        {/* Right Widget (4 cols): Performa Kelas matching Figma Page 2 Top */}
-        <div className="lg:col-span-4 rounded-2xl bg-[#0066FF] p-6 text-white shadow-md flex flex-col justify-between space-y-6">
-          <div className="space-y-1">
-            <h3 className="text-sm font-bold text-white">Performa Kelas</h3>
-            <p className="text-xs text-blue-100 leading-relaxed">
-              Rata-rata nilai di semua kelas Learnix minggu ini:
-            </p>
-          </div>
-
-          <div className="space-y-1">
-            <div className="text-4xl sm:text-5xl font-extrabold tracking-tight">
-              86.4%
-            </div>
-            <div className="flex items-center gap-1 text-xs text-blue-100">
-              <TrendingUp className="size-3.5" />
-              <span>+4.2% dari minggu lalu</span>
-            </div>
-          </div>
-
+      {/* Bottom Widget: Pengiriman Siswa Terbaru */}
+      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-xs space-y-4">
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-bold text-slate-900">
+            Pengiriman Siswa Terbaru
+          </h3>
           <Link
             href="/guru/grades"
-            className="w-full text-center rounded-xl bg-white/20 border border-white/30 py-2.5 text-xs font-bold text-white hover:bg-white/30 transition shadow-xs"
+            className="text-xs font-semibold text-blue-600 hover:text-blue-700 transition"
           >
-            Unduh Laporan Lengkap
+            Lihat Semua
           </Link>
+        </div>
+
+        <div className="space-y-3">
+          {recentSubmissions.length === 0 ? (
+            <div className="py-8 text-center text-xs text-slate-400 bg-slate-50/50 rounded-xl border border-dashed border-slate-200">
+              Belum ada pengumpulan tugas.
+            </div>
+          ) : (
+            recentSubmissions.map((sub) => (
+              <div
+                key={sub._id}
+                className="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50/50 p-3 hover:bg-slate-50 transition"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="size-8 rounded-full bg-blue-100 flex items-center justify-center text-xs font-bold text-blue-700">
+                    {sub.studentId?.name?.charAt(0) || "S"}
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold text-slate-900">
+                      {sub.studentId?.name || "Siswa"}
+                    </p>
+                    <p className="text-[11px] text-slate-400">
+                      Mengirimkan: {sub.assignmentId?.title || "Tugas"}
+                    </p>
+                  </div>
+                </div>
+                <Link
+                  href="/guru/grades"
+                  className="rounded-lg bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-600 hover:bg-blue-100 transition"
+                >
+                  Kirimkan Nilai
+                </Link>
+              </div>
+            ))
+          )}
         </div>
       </div>
 

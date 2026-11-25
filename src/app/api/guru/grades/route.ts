@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import { requireRole } from "@/lib/session";
@@ -8,8 +9,32 @@ import {
   Submission,
   User,
   ClassModel,
+  Department,
 } from "@/models";
 import { resolveSubmissionScoring, roundScore } from "@/lib/quiz-scoring";
+
+function inferGradeFromText(text?: string | null): string {
+  if (!text) return "";
+  const s = String(text).toUpperCase();
+  if (/\b(12|XII)\b/.test(s) || /12/.test(s)) return "12";
+  if (/\b(11|XI)\b/.test(s) || /11/.test(s)) return "11";
+  if (/\b(10|X)\b/.test(s) || /10/.test(s)) return "10";
+  return "";
+}
+
+function inferMajorFromText(
+  text: string | undefined | null,
+  deptCodes: string[]
+): string {
+  if (!text) return "";
+  const upper = String(text).toUpperCase();
+  for (const code of deptCodes) {
+    if (upper.includes(code.toUpperCase())) {
+      return code;
+    }
+  }
+  return "";
+}
 
 export async function GET(req: Request) {
   const { session, error } = await requireRole(["guru", "admin"]);
@@ -18,20 +43,166 @@ export async function GET(req: Request) {
   try {
     await connectDB();
     const { searchParams } = new URL(req.url);
-    const courseClassId = searchParams.get("courseClassId");
+    const courseClassId = searchParams.get("courseClassId") || "";
+    const rawGradeFilter = (
+      searchParams.get("grade") ||
+      searchParams.get("kelas") ||
+      ""
+    ).trim();
+    const gradeFilter =
+      rawGradeFilter && rawGradeFilter !== "all" ? rawGradeFilter : "";
+    const rawJurusanFilter = (
+      searchParams.get("jurusan") ||
+      searchParams.get("department") ||
+      searchParams.get("departmentId") ||
+      ""
+    ).trim();
+    const jurusanFilter =
+      rawJurusanFilter && rawJurusanFilter !== "all" ? rawJurusanFilter : "";
 
-    // Get all teacher's classes for the dropdown
-    const teacherClasses = await CourseClass.find({
+    // Dynamically load available majors from Department and active ClassModel records
+    const [rawDepartments, allActiveRombels] = await Promise.all([
+      Department.find({ isActive: { $ne: false } })
+        .select("_id name code")
+        .sort({ code: 1, name: 1 })
+        .lean(),
+      ClassModel.find({ isActive: true })
+        .populate("departmentId", "name code")
+        .select("_id name grade departmentId studentIds")
+        .lean(),
+    ]);
+
+    const deptMap = new Map<
+      string,
+      { _id: string; code: string; name: string }
+    >();
+    const deptById = new Map<
+      string,
+      { _id: string; code: string; name: string }
+    >();
+
+    for (const d of rawDepartments as any[]) {
+      if (!d?.code) continue;
+      const code = String(d.code).trim();
+      const item = {
+        _id: String(d._id),
+        code,
+        name: String(d.name || code).trim(),
+      };
+      deptMap.set(code.toUpperCase(), item);
+      deptById.set(String(d._id), item);
+    }
+
+    for (const r of allActiveRombels as any[]) {
+      const rDept = r?.departmentId;
+      if (rDept && typeof rDept === "object" && rDept.code) {
+        const code = String(rDept.code).trim();
+        const item = {
+          _id: String(rDept._id || code),
+          code,
+          name: String(rDept.name || code).trim(),
+        };
+        if (!deptMap.has(code.toUpperCase())) {
+          deptMap.set(code.toUpperCase(), item);
+        }
+        if (rDept._id) {
+          deptById.set(String(rDept._id), item);
+        }
+      }
+    }
+
+    const availableDepartments = Array.from(deptMap.values());
+    const allDeptCodes = availableDepartments.map((d) => d.code);
+
+    // Resolve normalized jurusan filter (can be code like "PPLG" or department _id)
+    let normalizedJurusanCode = "";
+    if (jurusanFilter) {
+      const byId = deptById.get(jurusanFilter);
+      if (byId) {
+        normalizedJurusanCode = byId.code.toUpperCase();
+      } else {
+        normalizedJurusanCode = jurusanFilter.toUpperCase();
+      }
+    }
+
+    const rombelById = new Map<string, any>();
+    for (const r of allActiveRombels as any[]) {
+      rombelById.set(String(r._id), r);
+    }
+
+    // Get all teacher's classes
+    const rawTeacherClasses = await CourseClass.find({
       ...(session.role === "guru" ? { teacherId: session.id } : {}),
       isActive: true,
     })
-      .populate("classRombelId", "name grade")
-      .select("_id name code classRombelId")
+      .populate({
+        path: "classRombelId",
+        select: "name grade departmentId",
+        populate: { path: "departmentId", select: "name code" },
+      })
+      .select("_id name code classRombelId studentIds")
       .lean();
+
+    const teacherClasses = (rawTeacherClasses as any[]).map((c) => {
+      const rombelObj = c.classRombelId;
+      const rombelDoc =
+        rombelObj && rombelObj._id
+          ? rombelById.get(String(rombelObj._id)) || rombelObj
+          : rombelObj
+            ? rombelById.get(String(rombelObj))
+            : null;
+
+      const resolvedGrade =
+        rombelDoc?.grade ||
+        inferGradeFromText(rombelDoc?.name) ||
+        inferGradeFromText(c.name) ||
+        "";
+
+      const resolvedJurusanCode =
+        rombelDoc?.departmentId?.code ||
+        inferMajorFromText(rombelDoc?.name, allDeptCodes) ||
+        inferMajorFromText(c.name, allDeptCodes) ||
+        "";
+
+      const resolvedDeptId = rombelDoc?.departmentId?._id
+        ? String(rombelDoc.departmentId._id)
+        : "";
+
+      return {
+        ...c,
+        grade: resolvedGrade,
+        jurusanCode: resolvedJurusanCode,
+        departmentId: resolvedDeptId,
+      };
+    });
+
+    const classMetaById = new Map<string, any>();
+    for (const c of teacherClasses) {
+      classMetaById.set(String(c._id), c);
+    }
+
+    const matchingTeacherClasses = teacherClasses.filter((c) => {
+      if (gradeFilter && c.grade !== gradeFilter) {
+        return false;
+      }
+      if (
+        normalizedJurusanCode &&
+        c.jurusanCode.toUpperCase() !== normalizedJurusanCode
+      ) {
+        return false;
+      }
+      return true;
+    });
 
     const targetClassId =
       courseClassId ||
-      (teacherClasses[0]?._id ? String(teacherClasses[0]._id) : null);
+      (gradeFilter || normalizedJurusanCode
+        ? matchingTeacherClasses[0]?._id
+          ? String(matchingTeacherClasses[0]._id)
+          : null
+        : teacherClasses[0]?._id
+          ? String(teacherClasses[0]._id)
+          : null);
 
     let selectedClass: any = null;
     let assignments: any[] = [];
@@ -46,7 +217,11 @@ export async function GET(req: Request) {
 
     if (targetClassId) {
       selectedClass = await CourseClass.findById(targetClassId)
-        .populate("classRombelId", "name grade")
+        .populate({
+          path: "classRombelId",
+          select: "name grade departmentId",
+          populate: { path: "departmentId", select: "name code" },
+        })
         .lean();
 
       if (selectedClass) {
@@ -248,12 +423,14 @@ export async function GET(req: Request) {
         ...(session.role === "guru" ? { teacherId: session.id } : {}),
         isArchived: { $ne: true },
       })
-        .select("_id title maxScore type quizId")
+        .select("_id title maxScore type quizId courseClassId classId")
         .lean(),
       Quiz.find({
         ...(session.role === "guru" ? { teacherId: session.id } : {}),
       })
-        .select("_id title totalPoints maxRawPoints questions")
+        .select(
+          "_id title totalPoints maxRawPoints questions courseClassId classId"
+        )
         .lean(),
     ]);
 
@@ -276,14 +453,20 @@ export async function GET(req: Request) {
           : []),
       ],
     })
-      .populate("studentId", "name nisn email")
-      .populate("assignmentId", "title maxScore type quizId")
-      .populate("quizId", "title totalPoints maxRawPoints questions")
+      .populate("studentId", "name nisn email grade classId departmentId")
+      .populate(
+        "assignmentId",
+        "title maxScore type quizId courseClassId classId"
+      )
+      .populate(
+        "quizId",
+        "title totalPoints maxRawPoints questions courseClassId classId"
+      )
       .sort({ submittedAt: -1 })
-      .limit(10)
+      .limit(100)
       .lean();
 
-    const recentSubmissions = rawRecentSubmissions.map((s: any) => {
+    const mappedSubmissions = rawRecentSubmissions.map((s: any) => {
       const aObj = s.assignmentId;
       const qObj =
         s.quizId ||
@@ -291,12 +474,76 @@ export async function GET(req: Request) {
       const resolved = resolveSubmissionScoring(
         s,
         qObj,
-        aObj || (s.assignmentId ? teacherAssignMap.get(String(s.assignmentId)) : null)
+        aObj ||
+          (s.assignmentId
+            ? teacherAssignMap.get(String(s.assignmentId))
+            : null)
       );
+
+      const resolvedCourseClassId = String(
+        s.courseClassId ||
+          aObj?.courseClassId ||
+          qObj?.courseClassId ||
+          selectedClass?._id ||
+          ""
+      );
+      const classMeta = classMetaById.get(resolvedCourseClassId);
+
+      const studentDoc = s.studentId;
+      const studentRombel = studentDoc?.classId
+        ? rombelById.get(String(studentDoc.classId))
+        : null;
+      const assignRombelId = aObj?.classId || qObj?.classId;
+      const assignRombel = assignRombelId
+        ? rombelById.get(String(assignRombelId))
+        : null;
+
+      // Resolve academic grade level ("10", "11", "12") for this submission
+      // Prefer the CourseClass/assignment's rombel grade first, then the student's rombel/grade
+      const submissionGrade =
+        classMeta?.grade ||
+        assignRombel?.grade ||
+        studentRombel?.grade ||
+        studentDoc?.grade ||
+        inferGradeFromText(classMeta?.name) ||
+        "";
+
+      // Resolve major code (e.g. "PPLG", "TJKT", "DKV") for this submission
+      const studentDept = studentDoc?.departmentId
+        ? deptById.get(String(studentDoc.departmentId))
+        : null;
+      const submissionJurusan =
+        classMeta?.jurusanCode ||
+        assignRombel?.departmentId?.code ||
+        studentRombel?.departmentId?.code ||
+        studentDept?.code ||
+        inferMajorFromText(classMeta?.name, allDeptCodes) ||
+        "";
+
+      const resolvedClassName =
+        assignRombel?.name ||
+        classMeta?.classRombelId?.name ||
+        studentRombel?.name ||
+        classMeta?.name ||
+        selectedClass?.name ||
+        "Kelas";
 
       return {
         ...s,
-        assignmentId: aObj || (qObj ? { _id: qObj._id, title: qObj.title, maxScore: 100, type: "kuis" } : null),
+        courseClassId: resolvedCourseClassId,
+        studentClass: resolvedClassName,
+        studentGrade: submissionGrade,
+        studentJurusan: submissionJurusan,
+        assignmentId:
+          aObj ||
+          (qObj
+            ? {
+                _id: qObj._id,
+                title: qObj.title,
+                maxScore: 100,
+                type: "kuis",
+              }
+            : null),
         score: resolved.isFinalGraded ? resolved.normalizedScore : null,
         rawScore: resolved.rawScore,
         maxRawScore: resolved.maxRawScore,
@@ -307,17 +554,26 @@ export async function GET(req: Request) {
       };
     });
 
-    const pendingCount = await Submission.countDocuments({
-      $or: [
-        ...(teacherAssignIds.length > 0
-          ? [{ assignmentId: { $in: teacherAssignIds } }]
-          : []),
-        ...(teacherQuizIds.length > 0
-          ? [{ quizId: { $in: teacherQuizIds } }]
-          : []),
-      ],
-      status: { $in: ["turned_in", "late"] },
+    const recentSubmissions = mappedSubmissions.filter((item) => {
+      if (courseClassId && item.courseClassId !== courseClassId) {
+        return false;
+      }
+      if (gradeFilter && item.studentGrade !== gradeFilter) {
+        return false;
+      }
+      if (
+        normalizedJurusanCode &&
+        String(item.studentJurusan || "").toUpperCase() !==
+          normalizedJurusanCode
+      ) {
+        return false;
+      }
+      return true;
     });
+
+    const pendingCount = recentSubmissions.filter((s) =>
+      ["turned_in", "late"].includes(s.status)
+    ).length;
 
     const sortedMatrix = [...matrix].sort((a, b) => b.average - a.average);
     const topPerformers = sortedMatrix.slice(0, 3).map((m) => ({
@@ -337,6 +593,7 @@ export async function GET(req: Request) {
         success: true,
         data: {
           classes: teacherClasses,
+          departments: availableDepartments,
           selectedClass,
           assignments,
           matrix,

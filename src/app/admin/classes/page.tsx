@@ -13,12 +13,10 @@ import {
   X,
   AlertCircle,
   Lightbulb,
-  CheckCircle,
   Eye,
 } from "lucide-react";
 import {
   Button,
-  Badge,
   Spinner,
 } from "@/components/ui";
 
@@ -71,9 +69,26 @@ interface LegacyCourseClassItem {
   academicYear: string;
 }
 
+interface OrphanedCourseClassItem {
+  _id: string;
+  name: string;
+  code: string;
+  rombelId: string | null;
+  rombelName: string;
+  academicYear: string;
+  studentCount: number;
+  assignmentCount: number;
+  quizCount: number;
+  submissionCount: number;
+  gradedSubmissionCount: number;
+  studentCommentCount: number;
+  isActive: boolean;
+}
+
 export default function AdminClassesPage() {
   const [classes, setClasses] = useState<ClassItem[]>([]);
   const [legacyCourseClasses, setLegacyCourseClasses] = useState<LegacyCourseClassItem[]>([]);
+  const [orphanedCourseClasses, setOrphanedCourseClasses] = useState<OrphanedCourseClassItem[]>([]);
   const [selectedRombelForLegacy, setSelectedRombelForLegacy] = useState<Record<string, string>>({});
   const [assigningLegacyId, setAssigningLegacyId] = useState<string | null>(null);
   const [teachers, setTeachers] = useState<TeacherOption[]>([]);
@@ -153,6 +168,9 @@ export default function AdminClassesPage() {
         if (Array.isArray(classJson.legacyCourseClasses)) {
           setLegacyCourseClasses(classJson.legacyCourseClasses);
         }
+        if (Array.isArray(classJson.orphanedCourseClasses)) {
+          setOrphanedCourseClasses(classJson.orphanedCourseClasses);
+        }
       }
       if (teacherJson.success) setTeachers(teacherJson.data);
       if (deptJson.success) setDepartments(deptJson.data);
@@ -164,14 +182,16 @@ export default function AdminClassesPage() {
   }
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedGrade, selectedDept, search]);
 
   // Auto generate standard name: [Angka Romawi] [Jurusan] [Nomor Urut]
   function generateStandardName(grade: string, deptId: string, parallelNum: number) {
     const romanMap: Record<string, string> = { "10": "X", "11": "XI", "12": "XII" };
     const roman = romanMap[grade] || grade;
-    const dept = departments.find((d) => d._id === deptId);
+    const dept = departments.find((d) => d._id === deptId) || departments[0];
     const code = dept ? dept.code : "PPLG";
     return `${roman} ${code} ${parallelNum}`;
   }
@@ -194,11 +214,13 @@ export default function AdminClassesPage() {
 
   function handleOpenEditModal(c: ClassItem) {
     setEditingClass(c);
+    const resolvedDeptId = c.departmentId?._id || departments[0]?._id || "";
+    const resolvedParallel = c.parallelNumber || 1;
     setFormData({
-      name: c.name,
+      name: generateStandardName(c.grade, resolvedDeptId, resolvedParallel),
       grade: c.grade,
-      departmentId: c.departmentId?._id || "",
-      parallelNumber: c.parallelNumber || 1,
+      departmentId: resolvedDeptId,
+      parallelNumber: resolvedParallel,
       homeroomTeacherId: c.homeroomTeacherId?._id || "",
       maxCapacity: c.maxCapacity || 36,
       academicYear: c.academicYear || "2024/2025 - Genap",
@@ -210,6 +232,18 @@ export default function AdminClassesPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setFormError("");
+
+    if (!formData.departmentId) {
+      setFormError("Silakan pilih jurusan terlebih dahulu.");
+      return;
+    }
+
+    const generatedName = generateStandardName(
+      formData.grade,
+      formData.departmentId,
+      formData.parallelNumber
+    );
+
     setSubmitting(true);
 
     try {
@@ -221,7 +255,10 @@ export default function AdminClassesPage() {
       const res = await fetch(url, {
         method,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
+        body: JSON.stringify({
+          ...formData,
+          name: generatedName,
+        }),
       });
 
       const json = await res.json();
@@ -348,7 +385,7 @@ export default function AdminClassesPage() {
         </div>
       </div>
 
-      {/* TASK 3: Legacy Mapel Classes Without an Assigned Rombel */}
+      {/* TASK 2.C: Legacy Mapel Classes With Valid Assigned Teacher but Without Rombel */}
       {legacyCourseClasses.length > 0 && (
         <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-5 shadow-xs space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
@@ -358,7 +395,7 @@ export default function AdminClassesPage() {
                 Kelas Mapel Tanpa Rombel (Legacy — Belum Ditetapkan)
               </h2>
               <p className="text-xs text-amber-800 mt-0.5">
-                Ditemukan {legacyCourseClasses.length} Kelas Mapel yang dibuat sebelum aturan wajib Rombel. Pilih Rombel yang sesuai untuk penetapan satu kali (permanen).
+                Ditemukan {legacyCourseClasses.length} Kelas Mapel dengan guru aktif yang dibuat sebelum aturan wajib Rombel. Pilih Rombel yang sesuai untuk penetapan satu kali (permanen).
               </p>
             </div>
           </div>
@@ -404,6 +441,59 @@ export default function AdminClassesPage() {
                 </div>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* TASK 2.B: Orphaned Mapel Classes Without Assigned Teacher Preserved Due to Historical Academic Records */}
+      {orphanedCourseClasses.filter((oc) => oc.isActive).length > 0 && (
+        <div className="rounded-xl border border-rose-200 bg-rose-50/60 p-5 shadow-xs space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+            <div>
+              <h2 className="text-sm font-extrabold text-rose-950 flex items-center gap-2">
+                <AlertCircle className="size-4 text-rose-600" />
+                Kelas Mapel Tanpa Guru Pengampu (Orphan — Perlu Tinjauan Admin)
+              </h2>
+              <p className="text-xs text-rose-800 mt-0.5">
+                Kelas Mapel berikut tidak lagi memiliki Guru Pengampu aktif, namun tetap dipertahankan karena memiliki riwayat submisi, nilai, atau aktivitas akademik siswa.
+              </p>
+            </div>
+          </div>
+
+          <div className="grid gap-3 md:grid-cols-2">
+            {orphanedCourseClasses
+              .filter((oc) => oc.isActive)
+              .map((oc) => (
+                <div
+                  key={oc._id}
+                  className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-rose-200 bg-white p-4 shadow-xs"
+                >
+                  <div className="min-w-0 space-y-1">
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-bold text-slate-900 truncate">
+                        {oc.name}
+                      </p>
+                      <span className="rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-bold text-rose-800">
+                        Guru Terhapus
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-500">
+                      Rombel: <strong>{oc.rombelName}</strong> &bull;{" "}
+                      {oc.studentCount} Siswa &bull;{" "}
+                      <strong>{oc.submissionCount} Submisi</strong> (
+                      {oc.gradedSubmissionCount} Nilai Tersimpan)
+                    </p>
+                  </div>
+                  {oc.rombelId && (
+                    <Link
+                      href={`/admin/classes/${oc.rombelId}?courseId=${oc._id}`}
+                      className="shrink-0 rounded-lg border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-bold text-rose-700 hover:bg-rose-100 transition"
+                    >
+                      Tinjau Riwayat
+                    </Link>
+                  )}
+                </div>
+              ))}
           </div>
         </div>
       )}
@@ -603,10 +693,15 @@ export default function AdminClassesPage() {
                 {/* Left Column: Form Fields */}
                 <div className="space-y-4">
                   <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    <label
+                      htmlFor="admin-class-grade"
+                      className="block text-xs font-semibold text-slate-700 mb-1"
+                    >
                       Tingkat Kelas
                     </label>
                     <select
+                      id="admin-class-grade"
+                      name="grade"
                       value={formData.grade}
                       onChange={(e) => {
                         const newGrade = e.target.value;
@@ -618,18 +713,24 @@ export default function AdminClassesPage() {
                       }}
                       className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-800 focus:border-blue-500 focus:outline-hidden"
                     >
-                      <option value="10">Kelas 10</option>
-                      <option value="11">Kelas 11</option>
-                      <option value="12">Kelas 12</option>
+                      <option value="10">Kelas 10 (X)</option>
+                      <option value="11">Kelas 11 (XI)</option>
+                      <option value="12">Kelas 12 (XII)</option>
                     </select>
                   </div>
 
                   <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    <label
+                      htmlFor="admin-class-department"
+                      className="block text-xs font-semibold text-slate-700 mb-1"
+                    >
                       Jurusan SMK
                     </label>
                     <select
+                      id="admin-class-department"
+                      name="departmentId"
                       value={formData.departmentId}
+                      required
                       onChange={(e) => {
                         const newDeptId = e.target.value;
                         setFormData((prev) => ({
@@ -650,16 +751,22 @@ export default function AdminClassesPage() {
                   </div>
 
                   <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    <label
+                      htmlFor="admin-class-parallel"
+                      className="block text-xs font-semibold text-slate-700 mb-1"
+                    >
                       Nomor Paralel (Rombel)
                     </label>
                     <input
+                      id="admin-class-parallel"
+                      name="parallelNumber"
                       type="number"
                       min={1}
-                      max={10}
+                      max={20}
+                      required
                       value={formData.parallelNumber}
                       onChange={(e) => {
-                        const newNum = Number(e.target.value) || 1;
+                        const newNum = Math.max(1, Number(e.target.value) || 1);
                         setFormData((prev) => ({
                           ...prev,
                           parallelNumber: newNum,
@@ -671,24 +778,15 @@ export default function AdminClassesPage() {
                   </div>
 
                   <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">
-                      Nama Kelas (Otomatis / Kustom)
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.name}
-                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                      placeholder="Contoh: XII PPLG 2"
-                      required
-                      className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-blue-700 focus:border-blue-500 focus:outline-hidden"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    <label
+                      htmlFor="admin-class-walas"
+                      className="block text-xs font-semibold text-slate-700 mb-1"
+                    >
                       Wali Kelas
                     </label>
                     <select
+                      id="admin-class-walas"
+                      name="homeroomTeacherId"
                       value={formData.homeroomTeacherId}
                       onChange={(e) => setFormData({ ...formData, homeroomTeacherId: e.target.value })}
                       className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-800 focus:border-blue-500 focus:outline-hidden"
@@ -713,10 +811,15 @@ export default function AdminClassesPage() {
                   </div>
 
                   <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    <label
+                      htmlFor="admin-class-capacity"
+                      className="block text-xs font-semibold text-slate-700 mb-1"
+                    >
                       Kapasitas Maksimal Siswa
                     </label>
                     <input
+                      id="admin-class-capacity"
+                      name="maxCapacity"
                       type="number"
                       min={10}
                       max={50}
@@ -727,15 +830,35 @@ export default function AdminClassesPage() {
                   </div>
                 </div>
 
-                {/* Right Column: Panduan Penamaan & Tips matching Image 4 Top */}
+                {/* Right Column: Auto-Generated Class Name Preview & Panduan */}
                 <div className="space-y-4">
+                  <div className="rounded-xl border border-blue-200 bg-blue-50/70 p-4 space-y-1.5">
+                    <p className="text-[11px] font-bold uppercase tracking-wider text-blue-600">
+                      Pratinjau Nama Kelas (Otomatis)
+                    </p>
+                    <div
+                      aria-live="polite"
+                      className="rounded-lg border border-blue-200 bg-white px-3.5 py-2.5 font-mono text-base font-extrabold text-blue-700"
+                    >
+                      {generateStandardName(
+                        formData.grade,
+                        formData.departmentId,
+                        formData.parallelNumber
+                      )}
+                    </div>
+                    <p className="text-[11px] text-slate-500">
+                      Nama kelas dihasilkan otomatis berdasarkan Tingkat,
+                      Jurusan, dan Rombel yang dipilih.
+                    </p>
+                  </div>
+
                   <div className="rounded-xl border border-blue-100 bg-blue-50/80 p-4 text-xs text-blue-900">
                     <div className="flex items-center gap-2 font-bold text-blue-800 mb-2">
                       <Lightbulb className="size-4 text-amber-500" />
                       <span>Panduan Penamaan Kelas</span>
                     </div>
                     <p className="leading-relaxed">
-                      Gunakan format standar SMK:
+                      Format standar SMK diterapkan secara otomatis:
                       <br />
                       <strong className="font-semibold text-blue-950">[Angka Romawi] [Jurusan] [Nomor Urut]</strong>
                     </p>
@@ -743,7 +866,6 @@ export default function AdminClassesPage() {
                       Contoh: XII PPLG 2, X TJKT 1, XI DKV 3
                     </div>
                   </div>
-
                 </div>
               </div>
 

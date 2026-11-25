@@ -2,21 +2,18 @@
 
 import { useEffect, useState } from "react";
 import {
-  Users,
   Plus,
   Search,
   CheckCircle2,
   XCircle,
   Edit2,
   Trash2,
-  KeyRound,
-  ShieldCheck,
   X,
   AlertCircle,
   Eye,
   EyeOff,
 } from "lucide-react";
-import { Button, Spinner, Badge } from "@/components/ui";
+import { Button, Spinner } from "@/components/ui";
 
 interface UserItem {
   _id: string;
@@ -25,6 +22,8 @@ interface UserItem {
   loginUsername?: string;
   isActivated?: boolean;
   mustChangePassword?: boolean;
+  accountStatus?: "Aktif" | "Belum Diaktivasi" | "Non-Aktif";
+  accountStatusCode?: "active" | "unactivated" | "inactive";
   role: "admin" | "guru" | "kurikulum" | "kepsek" | "siswa";
   nip?: string;
   nisn?: string;
@@ -33,6 +32,31 @@ interface UserItem {
   tahunBergabung?: string;
   joinDate?: string;
   createdAt?: string;
+}
+
+function getDisplayAccountStatus(
+  u: Pick<
+    UserItem,
+    "accountStatus" | "isActive" | "role" | "isActivated" | "mustChangePassword"
+  >
+): "Aktif" | "Belum Diaktivasi" | "Non-Aktif" {
+  if (
+    u.accountStatus === "Non-Aktif" ||
+    u.accountStatus === "Belum Diaktivasi" ||
+    u.accountStatus === "Aktif"
+  ) {
+    return u.accountStatus;
+  }
+  if (u.isActive === false) {
+    return "Non-Aktif";
+  }
+  if (
+    (u.role === "guru" || u.role === "kurikulum") &&
+    (u.isActivated === false || u.mustChangePassword === true)
+  ) {
+    return "Belum Diaktivasi";
+  }
+  return "Aktif";
 }
 
 export default function AdminUsersPage() {
@@ -98,7 +122,9 @@ export default function AdminUsersPage() {
   }
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedRole, selectedStatus, search]);
 
   function handleOpenCreate() {
@@ -184,18 +210,75 @@ export default function AdminUsersPage() {
     }
   }
 
+  // Delete confirmation modal state (supports detailed Guru impact summary per Task 1)
+  const [deleteTarget, setDeleteTarget] = useState<UserItem | null>(null);
+  const [deleteSummary, setDeleteSummary] = useState<{
+    classCount: number;
+    materialCount: number;
+    assignmentCount: number;
+    quizCount: number;
+    submissionCount: number;
+    gradedSubmissionCount: number;
+  } | null>(null);
+  const [loadingDeleteSummary, setLoadingDeleteSummary] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [actionNotice, setActionNotice] = useState<string | null>(null);
+
   async function handleDelete(u: UserItem) {
-    if (!confirm(`Hapus akun ${u.name} (${u.email})?`)) return;
+    setDeleteTarget(u);
+    setDeleteSummary(null);
+    if (u.role === "guru") {
+      setLoadingDeleteSummary(true);
+      try {
+        const res = await fetch(`/api/admin/users/${u._id}`);
+        const json = await res.json();
+        if (res.ok && json.success && (json.deletionSummary || json.data?.deletionSummary)) {
+          setDeleteSummary(json.deletionSummary || json.data.deletionSummary);
+        } else {
+          setDeleteSummary({
+            classCount: 0,
+            materialCount: 0,
+            assignmentCount: 0,
+            quizCount: 0,
+            submissionCount: 0,
+            gradedSubmissionCount: 0,
+          });
+        }
+      } catch {
+        setDeleteSummary({
+          classCount: 0,
+          materialCount: 0,
+          assignmentCount: 0,
+          quizCount: 0,
+          submissionCount: 0,
+          gradedSubmissionCount: 0,
+        });
+      } finally {
+        setLoadingDeleteSummary(false);
+      }
+    }
+  }
+
+  async function handleConfirmDelete() {
+    if (!deleteTarget) return;
+    setDeleting(true);
     try {
-      const res = await fetch(`/api/admin/users/${u._id}`, { method: "DELETE" });
+      const res = await fetch(`/api/admin/users/${deleteTarget._id}`, {
+        method: "DELETE",
+      });
       const json = await res.json();
       if (!json.success) {
         alert(json.message || "Gagal menghapus akun");
       } else {
+        setActionNotice(json.message || `Akun ${deleteTarget.name} berhasil dihapus.`);
+        setDeleteTarget(null);
+        setDeleteSummary(null);
         loadData();
       }
     } catch {
       alert("Terjadi kesalahan sistem");
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -225,6 +308,25 @@ export default function AdminUsersPage() {
           Tambah Pengguna
         </Button>
       </div>
+
+      {actionNotice && (
+        <div
+          role="status"
+          className="flex items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs font-semibold text-emerald-800 shadow-xs"
+        >
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="size-4 shrink-0 text-emerald-600" />
+            <span>{actionNotice}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setActionNotice(null)}
+            className="rounded-lg p-1 text-emerald-600 hover:bg-emerald-100 transition"
+          >
+            <X className="size-4" />
+          </button>
+        </div>
+      )}
 
       {/* Role Tabs */}
       <div className="flex flex-wrap gap-2 border-b border-slate-200 pb-3">
@@ -277,7 +379,8 @@ export default function AdminUsersPage() {
         >
           <option value="all">Semua Status</option>
           <option value="active">Aktif</option>
-          <option value="inactive">Nonaktif</option>
+          <option value="unactivated">Belum Diaktivasi</option>
+          <option value="inactive">Non-Aktif</option>
         </select>
       </div>
 
@@ -353,28 +456,28 @@ export default function AdminUsersPage() {
                       (u.createdAt ? new Date(u.createdAt).getFullYear().toString() : "-")}
                   </td>
                   <td className="py-4 px-6">
-                    <div className="flex flex-col items-start gap-1">
-                      {u.isActive ? (
+                    {(() => {
+                      const statusLabel = getDisplayAccountStatus(u);
+                      if (statusLabel === "Non-Aktif") {
+                        return (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-rose-50 px-2.5 py-0.5 text-xs font-semibold text-rose-700 border border-rose-200">
+                            <XCircle className="size-3" /> Non-Aktif
+                          </span>
+                        );
+                      }
+                      if (statusLabel === "Belum Diaktivasi") {
+                        return (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-700 border border-amber-200">
+                            <AlertCircle className="size-3" /> Belum Diaktivasi
+                          </span>
+                        );
+                      }
+                      return (
                         <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-700 border border-emerald-200">
                           <CheckCircle2 className="size-3" /> Aktif
                         </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-rose-50 px-2.5 py-0.5 text-xs font-semibold text-rose-700 border border-rose-200">
-                          <XCircle className="size-3" /> Nonaktif
-                        </span>
-                      )}
-                      {(u.role === "guru" || u.role === "kurikulum") && (
-                        u.isActivated === false || u.mustChangePassword === true ? (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-0.5 text-[11px] font-semibold text-amber-700 border border-amber-200">
-                            <AlertCircle className="size-3" /> Belum Diaktivasi
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-0.5 text-[11px] font-semibold text-blue-700 border border-blue-200">
-                            <CheckCircle2 className="size-3" /> Sudah Diaktivasi
-                          </span>
-                        )
-                      )}
-                    </div>
+                      );
+                    })()}
                   </td>
                   <td className="py-4 px-6 text-right">
                     <div className="flex items-center justify-end gap-1">
@@ -411,6 +514,101 @@ export default function AdminUsersPage() {
           </tbody>
         </table>
       </div>
+
+      {/* Delete Confirmation Modal */}
+      {deleteTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl space-y-4">
+            <div className="flex items-start gap-3.5">
+              <div className="flex size-12 shrink-0 items-center justify-center rounded-full bg-rose-100 text-rose-600">
+                <Trash2 className="size-6" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900">
+                  {deleteTarget.role === "guru"
+                    ? "Hapus Akun Guru?"
+                    : `Hapus Akun ${deleteTarget.name}?`}
+                </h3>
+                <p className="mt-1.5 text-xs text-slate-600 leading-relaxed">
+                  {deleteTarget.role === "guru"
+                    ? "Apakah Anda yakin ingin menghapus akun guru ini? Tindakan ini juga akan menghapus seluruh Kelas Mapel yang terhubung dengan guru tersebut beserta data kelas terkait. Data yang terhapus mungkin tidak dapat dipulihkan."
+                    : `Apakah Anda yakin ingin menghapus akun ${deleteTarget.name} (${deleteTarget.email})? Tindakan ini tidak dapat dibatalkan.`}
+                </p>
+              </div>
+            </div>
+
+            {deleteTarget.role === "guru" && (
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-xs space-y-2">
+                <div className="flex items-center justify-between border-b border-slate-200/80 pb-2">
+                  <span className="font-semibold text-slate-500">Akun Guru:</span>
+                  <span className="font-bold text-slate-900">
+                    {deleteTarget.name}
+                  </span>
+                </div>
+                {loadingDeleteSummary ? (
+                  <div className="flex items-center justify-center gap-2 py-3 text-slate-500">
+                    <Spinner size="sm" />
+                    <span>Memeriksa Kelas Mapel dan data terkait...</span>
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-600">Kelas Mapel terkait:</span>
+                      <span className="font-bold text-slate-900">
+                        {deleteSummary?.classCount ?? 0} kelas
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-600">Materi:</span>
+                      <span className="font-bold text-slate-900">
+                        {deleteSummary?.materialCount ?? 0}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-600">Tugas:</span>
+                      <span className="font-bold text-slate-900">
+                        {deleteSummary?.assignmentCount ?? 0}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-600">Kuis:</span>
+                      <span className="font-bold text-slate-900">
+                        {deleteSummary?.quizCount ?? 0}
+                      </span>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+
+            <div className="flex justify-end gap-3 pt-2 border-t border-slate-100">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={deleting}
+                onClick={() => {
+                  setDeleteTarget(null);
+                  setDeleteSummary(null);
+                }}
+              >
+                Batal
+              </Button>
+              <Button
+                type="button"
+                onClick={handleConfirmDelete}
+                disabled={deleting || loadingDeleteSummary}
+                className="bg-rose-600 hover:bg-rose-700 text-white font-semibold"
+              >
+                {deleting
+                  ? "Menghapus..."
+                  : deleteTarget.role === "guru"
+                  ? "Hapus Guru dan Kelas"
+                  : "Ya, Hapus Akun"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Create / Edit User Modal */}
       {isModalOpen && (

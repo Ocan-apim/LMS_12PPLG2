@@ -4,6 +4,10 @@ import {
   isUsernameAvailableForRole,
   validateUsername,
 } from "@/lib/activation";
+import {
+  getTeacherDeletionSummary,
+  deleteTeacherAndClasses,
+} from "@/lib/teacher-class-cleanup";
 import { connectDB } from "@/lib/mongodb";
 import { requireRole } from "@/lib/session";
 import { User, ClassModel, Subject } from "@/models";
@@ -23,7 +27,8 @@ export async function GET(_req: Request, context: RouteContext) {
     const teacher = await User.findOne({ _id: id, role: "guru" })
       .populate("subjects", "name code category")
       .populate("homeroomClassId", "name grade")
-      .select("-password");
+      .select("-password")
+      .lean();
 
     if (!teacher) {
       return NextResponse.json(
@@ -32,7 +37,16 @@ export async function GET(_req: Request, context: RouteContext) {
       );
     }
 
-    return NextResponse.json({ success: true, data: teacher });
+    const deletionSummary = await getTeacherDeletionSummary(id);
+
+    return NextResponse.json({
+      success: true,
+      data: {
+        ...teacher,
+        deletionSummary,
+      },
+      deletionSummary,
+    });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Terjadi kesalahan";
     return NextResponse.json({ success: false, message }, { status: 500 });
@@ -260,27 +274,23 @@ export async function DELETE(_req: Request, context: RouteContext) {
     const { id } = await context.params;
     await connectDB();
 
-    const teacher = await User.findOne({ _id: id, role: "guru" });
-    if (!teacher) {
+    const result = await deleteTeacherAndClasses(id);
+    if (!result) {
       return NextResponse.json(
         { success: false, message: "Guru tidak ditemukan" },
         { status: 404 }
       );
     }
 
-    if (teacher.homeroomClassId) {
-      await ClassModel.findByIdAndUpdate(teacher.homeroomClassId, {
-        $unset: { homeroomTeacherId: 1 },
-      });
-    }
-
-    await Subject.updateMany({ teacherIds: id }, { $pull: { teacherIds: id } });
-
-    await User.findByIdAndDelete(id);
+    const preservedNote =
+      result.preservedHistoricalClassesCount > 0
+        ? ` (${result.preservedHistoricalClassesCount} kelas dengan riwayat nilai/submisi siswa telah diarsipkan untuk menjaga integritas akademik)`
+        : "";
 
     return NextResponse.json({
       success: true,
-      message: "Data guru berhasil dihapus",
+      message: `Akun guru ${result.teacherName} beserta ${result.deletedClassesCount} Kelas Mapel terkait berhasil dihapus${preservedNote}.`,
+      data: result,
     });
   } catch (err: unknown) {
     const message =

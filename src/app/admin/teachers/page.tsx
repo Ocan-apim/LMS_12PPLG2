@@ -11,13 +11,10 @@ import {
   Edit2,
   Trash2,
   X,
-  BookOpen,
-  Calendar,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
   KeyRound,
-  LogIn,
   CheckCircle2,
   AlertCircle,
 } from "lucide-react";
@@ -91,9 +88,21 @@ export default function AdminTeachersPage() {
   const [tempJoinDate, setTempJoinDate] = useState<string | null>(null);
   const [calendarDate, setCalendarDate] = useState(new Date(2024, 1, 1)); // February 2024 default
 
-  // Delete modal
+  // Delete modal & impact summary state (Task 1)
   const [deleteTarget, setDeleteTarget] = useState<TeacherItem | null>(null);
+  const [deleteSummary, setDeleteSummary] = useState<{
+    classCount: number;
+    materialCount: number;
+    assignmentCount: number;
+    quizCount: number;
+    submissionCount: number;
+    gradedSubmissionCount: number;
+    hasHistoricalRecords: boolean;
+  } | null>(null);
+  const [loadingDeleteSummary, setLoadingDeleteSummary] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [actionNotice, setActionNotice] = useState<string | null>(null);
 
   // Edit modal
   const [editingTeacher, setEditingTeacher] = useState<TeacherItem | null>(null);
@@ -188,23 +197,42 @@ export default function AdminTeachersPage() {
   const [savingPassword, setSavingPassword] = useState(false);
   const [passwordError, setPasswordError] = useState("");
   const [passwordSuccess, setPasswordSuccess] = useState("");
-  const [impersonatingTeacherId, setImpersonatingTeacherId] = useState<string | null>(null);
 
-  async function handleLoginAsGuru(t: TeacherItem) {
-    if (!confirm(`Masuk ke sistem sebagai Guru: ${t.name}?`)) return;
-    setImpersonatingTeacherId(t._id);
+  async function handleOpenDeleteModal(teacher: TeacherItem) {
+    setDeleteTarget(teacher);
+    setDeleteSummary(null);
+    setDeleteError(null);
+    setLoadingDeleteSummary(true);
     try {
-      const res = await fetch(`/api/admin/teachers/${t._id}/impersonate`, { method: "POST" });
+      const res = await fetch(`/api/admin/teachers/${teacher._id}`);
       const json = await res.json();
-      if (json.success && json.redirectTo) {
-        window.location.href = json.redirectTo;
+      if (res.ok && json.success && json.deletionSummary) {
+        setDeleteSummary(json.deletionSummary);
+      } else if (res.ok && json.success && json.data?.deletionSummary) {
+        setDeleteSummary(json.data.deletionSummary);
       } else {
-        alert(json.message || "Gagal login sebagai guru");
+        setDeleteSummary({
+          classCount: 0,
+          materialCount: 0,
+          assignmentCount: 0,
+          quizCount: 0,
+          submissionCount: 0,
+          gradedSubmissionCount: 0,
+          hasHistoricalRecords: false,
+        });
       }
     } catch {
-      alert("Terjadi kesalahan sistem saat mencoba login sebagai guru");
+      setDeleteSummary({
+        classCount: 0,
+        materialCount: 0,
+        assignmentCount: 0,
+        quizCount: 0,
+        submissionCount: 0,
+        gradedSubmissionCount: 0,
+        hasHistoricalRecords: false,
+      });
     } finally {
-      setImpersonatingTeacherId(null);
+      setLoadingDeleteSummary(false);
     }
   }
 
@@ -319,19 +347,25 @@ export default function AdminTeachersPage() {
   async function handleDeleteTeacher() {
     if (!deleteTarget) return;
     setDeleting(true);
+    setDeleteError(null);
     try {
       const res = await fetch(`/api/admin/teachers/${deleteTarget._id}`, {
         method: "DELETE",
       });
       const json = await res.json();
-      if (!json.success) {
-        alert(json.message || "Gagal menghapus data guru");
+      if (!res.ok || !json.success) {
+        setDeleteError(json.message || "Gagal menghapus data guru");
       } else {
+        setActionNotice(
+          json.message ||
+            `Akun guru ${deleteTarget.name} dan Kelas Mapel terkait berhasil dihapus.`
+        );
         setDeleteTarget(null);
+        setDeleteSummary(null);
         loadData();
       }
     } catch {
-      alert("Terjadi kesalahan sistem saat menghapus data guru");
+      setDeleteError("Terjadi kesalahan sistem saat menghapus data guru");
     } finally {
       setDeleting(false);
     }
@@ -355,6 +389,25 @@ export default function AdminTeachersPage() {
           Tambah Guru
         </Link>
       </div>
+
+      {actionNotice && (
+        <div
+          role="status"
+          className="flex items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs font-semibold text-emerald-800 shadow-xs"
+        >
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="size-4 shrink-0 text-emerald-600" />
+            <span>{actionNotice}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setActionNotice(null)}
+            className="rounded-lg p-1 text-emerald-600 hover:bg-emerald-100 transition"
+          >
+            <X className="size-4" />
+          </button>
+        </div>
+      )}
 
       {/* Stats Cards matching Image 2 Top-Left */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -478,7 +531,7 @@ export default function AdminTeachersPage() {
                         </span>
                       ) : (
                         <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-700 border border-emerald-200">
-                          <CheckCircle2 className="size-3" /> Sudah Diaktivasi
+                          <CheckCircle2 className="size-3" /> Aktif
                         </span>
                       )}
                       {t.isHomeroomTeacher && t.homeroomClassId ? (
@@ -492,18 +545,6 @@ export default function AdminTeachersPage() {
                   </td>
                   <td className="py-4 px-6 text-right">
                     <div className="flex items-center justify-end gap-1">
-                      <button
-                        onClick={() => handleLoginAsGuru(t)}
-                        disabled={impersonatingTeacherId === t._id}
-                        className="rounded-lg p-1.5 text-slate-400 hover:bg-emerald-50 hover:text-emerald-600 transition"
-                        title="Login sebagai Guru"
-                      >
-                        {impersonatingTeacherId === t._id ? (
-                          <Spinner size="sm" />
-                        ) : (
-                          <LogIn className="size-4" />
-                        )}
-                      </button>
                       <button
                         onClick={() => {
                           setManagePasswordTeacher(t);
@@ -524,7 +565,7 @@ export default function AdminTeachersPage() {
                         <Edit2 className="size-4" />
                       </button>
                       <button
-                        onClick={() => setDeleteTarget(t)}
+                        onClick={() => handleOpenDeleteModal(t)}
                         className="rounded-lg p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600 transition"
                         title="Hapus Guru"
                       >
@@ -937,27 +978,107 @@ export default function AdminTeachersPage() {
         </div>
       )}
 
-      {/* Delete Confirmation Modal */}
+      {/* Delete Confirmation Modal (Task 1) */}
       {deleteTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs">
-          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl text-center">
-            <div className="mx-auto flex size-12 items-center justify-center rounded-full bg-rose-100 text-rose-600">
-              <Trash2 className="size-6" />
+          <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl space-y-4">
+            <div className="flex items-start gap-3.5">
+              <div className="flex size-12 shrink-0 items-center justify-center rounded-full bg-rose-100 text-rose-600">
+                <Trash2 className="size-6" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900">
+                  Hapus Akun Guru?
+                </h3>
+                <p className="mt-1.5 text-xs text-slate-600 leading-relaxed">
+                  Apakah Anda yakin ingin menghapus akun guru ini? Tindakan ini
+                  juga akan menghapus seluruh Kelas Mapel yang terhubung dengan
+                  guru tersebut beserta data kelas terkait. Data yang terhapus
+                  mungkin tidak dapat dipulihkan.
+                </p>
+              </div>
             </div>
-            <h3 className="mt-4 font-bold text-slate-900">Hapus Data Guru?</h3>
-            <p className="mt-2 text-xs text-slate-500">
-              Apakah Anda yakin ingin menghapus data guru <strong>{deleteTarget.name}</strong>? Akun login dan penugasan kelasnya akan dihapus.
-            </p>
-            <div className="mt-6 flex justify-center gap-3">
-              <Button variant="outline" onClick={() => setDeleteTarget(null)}>
+
+            {deleteError && (
+              <div className="flex items-center gap-2 rounded-lg border border-rose-200 bg-rose-50 p-3 text-xs font-semibold text-rose-700">
+                <AlertCircle className="size-4 shrink-0" />
+                <span>{deleteError}</span>
+              </div>
+            )}
+
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-xs space-y-2">
+              <div className="flex items-center justify-between border-b border-slate-200/80 pb-2">
+                <span className="font-semibold text-slate-500">Akun Guru:</span>
+                <span className="font-bold text-slate-900">
+                  {deleteTarget.name}
+                  {deleteTarget.degree ? `, ${deleteTarget.degree}` : ""}
+                </span>
+              </div>
+
+              {loadingDeleteSummary ? (
+                <div className="flex items-center justify-center gap-2 py-3 text-slate-500">
+                  <Spinner size="sm" />
+                  <span>Memeriksa Kelas Mapel dan data terkait...</span>
+                </div>
+              ) : (
+                <>
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-600">Kelas Mapel terkait:</span>
+                    <span className="font-bold text-slate-900">
+                      {deleteSummary?.classCount ?? 0} kelas
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-600">Materi:</span>
+                    <span className="font-bold text-slate-900">
+                      {deleteSummary?.materialCount ?? 0}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-600">Tugas:</span>
+                    <span className="font-bold text-slate-900">
+                      {deleteSummary?.assignmentCount ?? 0}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-600">Kuis:</span>
+                    <span className="font-bold text-slate-900">
+                      {deleteSummary?.quizCount ?? 0}
+                    </span>
+                  </div>
+                  {(deleteSummary?.submissionCount ?? 0) > 0 && (
+                    <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-[11px] text-amber-800 leading-relaxed">
+                      <strong>Perlindungan Riwayat Akademik:</strong> Ditemukan{" "}
+                      <strong>{deleteSummary?.submissionCount}</strong> submisi
+                      siswa ({deleteSummary?.gradedSubmissionCount ?? 0}{" "}
+                      dinilai). Kelas dengan riwayat nilai siswa akan
+                      dinonaktifkan/diarsipkan agar nilai siswa tidak hilang.
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+
+            <div className="flex justify-end gap-3 pt-2 border-t border-slate-100">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={deleting}
+                onClick={() => {
+                  setDeleteTarget(null);
+                  setDeleteSummary(null);
+                  setDeleteError(null);
+                }}
+              >
                 Batal
               </Button>
               <Button
+                type="button"
                 onClick={handleDeleteTeacher}
-                disabled={deleting}
-                className="bg-rose-600 hover:bg-rose-700 text-white font-medium"
+                disabled={deleting || loadingDeleteSummary}
+                className="bg-rose-600 hover:bg-rose-700 text-white font-semibold"
               >
-                {deleting ? "Menghapus..." : "Ya, Hapus"}
+                {deleting ? "Menghapus..." : "Hapus Guru dan Kelas"}
               </Button>
             </div>
           </div>

@@ -14,9 +14,7 @@ import {
   Calendar as CalendarIcon,
   X,
   AlertCircle,
-  Clock,
   Sparkles,
-  Check,
 } from "lucide-react";
 import { Spinner } from "@/components/ui";
 
@@ -103,6 +101,7 @@ export default function GuruAssignmentsPage() {
   }
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadData();
   }, []);
 
@@ -127,45 +126,8 @@ export default function GuruAssignmentsPage() {
     }
   }
 
-  // Fallback realistic mock data from Figma Page 3 Bottom Left if empty
-  const displayAssignments =
-    assignments.length > 0
-      ? assignments
-      : [
-          {
-            _id: "mock-1",
-            title: "Membuat UI Component",
-            description: "Kerjakan tugas styling komponen Figma ke Tailwind CSS",
-            type: "tugas",
-            courseClassId: { _id: "c1", name: "10 PPLG 1", code: "PPLG1" },
-            dueDate: "2023-10-24T23:59:00",
-            maxScore: 100,
-            isPublished: true,
-            createdAt: "2023-10-15T10:00:00",
-          },
-          {
-            _id: "mock-2",
-            title: "Kuis Harian: HTML Basic",
-            description: "Evaluasi pemahaman tag semantik dan formulir HTML",
-            type: "kuis",
-            courseClassId: { _id: "c2", name: "10 PPLG +", code: "PPLG+" },
-            dueDate: "2023-10-22T10:30:00",
-            maxScore: 100,
-            isPublished: true,
-            createdAt: "2023-10-14T08:00:00",
-          },
-          {
-            _id: "mock-3",
-            title: "Proyek Akhir: CSS Layout",
-            description: "Implementasi CSS Grid dan Flexbox untuk landing page",
-            type: "tugas",
-            courseClassId: { _id: "c3", name: "10 PPLG 2", code: "PPLG2" },
-            dueDate: "2023-10-30T14:15:00",
-            maxScore: 100,
-            isPublished: false,
-            createdAt: "2023-10-12T12:00:00",
-          },
-        ];
+  // TASK 4: Use real database assignments only (never display fallback demo/mock assignments)
+  const displayAssignments = assignments;
 
   // Filtering
   const filtered = displayAssignments.filter((item) => {
@@ -231,7 +193,12 @@ export default function GuruAssignmentsPage() {
       {/* Top Header matching Figma Page 3 Bottom Left */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Manajemen Tugas</h1>
+          <div className="flex items-center gap-2.5">
+            <h1 className="text-2xl font-bold text-slate-900">Manajemen Tugas</h1>
+            <span className="rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-bold text-blue-700 border border-blue-200">
+              {assignments.length} Tugas
+            </span>
+          </div>
           <p className="text-xs text-slate-500 mt-0.5">
             Kelola semua tugas Anda serta buat tugas baru di sini.
           </p>
@@ -322,9 +289,11 @@ export default function GuruAssignmentsPage() {
                     <td colSpan={6} className="py-16 text-center text-slate-400">
                       {assignments.length === 0 ? (
                         <div className="space-y-3">
-                          <p className="text-base font-semibold text-slate-800">Belum ada tugas.</p>
+                          <p className="text-base font-semibold text-slate-800">
+                            Belum ada tugas yang dibuat.
+                          </p>
                           <p className="text-xs text-slate-400 max-w-sm mx-auto">
-                            Anda belum membuat tugas atau kuis pembelajaran.
+                            Mulai dengan membuat tugas pertama untuk kelas Anda.
                           </p>
                           <Link
                             href="/guru/assignments/new"
@@ -528,38 +497,37 @@ export default function GuruAssignmentsPage() {
                     Kelas
                   </h3>
                   <div className="space-y-2">
-                    {(classes.length > 0
-                      ? classes
-                      : [
-                          { _id: "c1", name: "10 PPLG 1", code: "PPLG1" },
-                          { _id: "c2", name: "10 PPLG +", code: "PPLG+" },
-                          { _id: "c3", name: "10 PPLG 2", code: "PPLG2" },
-                        ]
-                    ).map((c) => {
-                      const checked = filterClassIds.includes(c._id);
-                      return (
-                        <label
-                          key={c._id}
-                          className="flex items-center gap-2.5 text-xs text-slate-700 cursor-pointer"
-                        >
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            onChange={(e) => {
-                              if (e.target.checked) {
-                                setFilterClassIds((prev) => [...prev, c._id]);
-                              } else {
-                                setFilterClassIds((prev) =>
-                                  prev.filter((id) => id !== c._id)
-                                );
-                              }
-                            }}
-                            className="size-4 rounded text-blue-600 focus:ring-blue-500"
-                          />
-                          <span>{c.name}</span>
-                        </label>
-                      );
-                    })}
+                    {classes.length === 0 ? (
+                      <p className="text-xs text-slate-400 italic">
+                        Belum ada kelas.
+                      </p>
+                    ) : (
+                      classes.map((c) => {
+                        const checked = filterClassIds.includes(c._id);
+                        return (
+                          <label
+                            key={c._id}
+                            className="flex items-center gap-2.5 text-xs text-slate-700 cursor-pointer"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setFilterClassIds((prev) => [...prev, c._id]);
+                                } else {
+                                  setFilterClassIds((prev) =>
+                                    prev.filter((id) => id !== c._id)
+                                  );
+                                }
+                              }}
+                              className="size-4 rounded text-blue-600 focus:ring-blue-500"
+                            />
+                            <span>{c.name}</span>
+                          </label>
+                        );
+                      })
+                    )}
                   </div>
                 </div>
 

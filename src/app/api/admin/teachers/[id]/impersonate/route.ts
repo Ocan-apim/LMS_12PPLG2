@@ -1,56 +1,37 @@
 import { NextResponse } from "next/server";
-import { connectDB } from "@/lib/mongodb";
-import { requireRole } from "@/lib/session";
-import { createSessionToken, setSessionCookie } from "@/lib/auth";
-import { User } from "@/models";
-import type { SessionUser } from "@/types";
 
-type RouteContext = {
-  params: Promise<{ id: string }>;
-};
+/**
+ * TASK 3: Admin Login-as-Guru (Impersonation) has been permanently disabled and removed.
+ * Admin cannot generate a Guru session or switch authenticated identity to another user.
+ */
+function impersonationDisabledResponse() {
+  return NextResponse.json(
+    {
+      success: false,
+      code: "IMPERSONATION_DISABLED",
+      message:
+        "Fitur login sebagai guru (impersonasi) telah dihapus dan tidak diizinkan.",
+    },
+    { status: 403 }
+  );
+}
 
-export async function POST(_req: Request, context: RouteContext) {
-  const { error } = await requireRole("admin");
-  if (error) return error;
+export async function POST() {
+  return impersonationDisabledResponse();
+}
 
-  try {
-    const { id } = await context.params;
-    await connectDB();
+export async function GET() {
+  return impersonationDisabledResponse();
+}
 
-    const teacher = await User.findOne({
-      _id: id,
-      role: "guru",
-      isActive: true,
-    });
-    if (!teacher) {
-      return NextResponse.json(
-        { success: false, message: "Akun guru tidak ditemukan atau nonaktif" },
-        { status: 404 }
-      );
-    }
+export async function PUT() {
+  return impersonationDisabledResponse();
+}
 
-    const sessionUser: SessionUser = {
-      id: teacher._id.toString(),
-      name: teacher.name,
-      email: teacher.email,
-      role: "guru",
-      loginUsername: teacher.loginUsername,
-      isActivated: teacher.isActivated !== false,
-      mustChangePassword: Boolean(teacher.mustChangePassword),
-      nip: teacher.nip,
-    };
+export async function PATCH() {
+  return impersonationDisabledResponse();
+}
 
-    const token = await createSessionToken(sessionUser);
-    await setSessionCookie(token);
-
-    return NextResponse.json({
-      success: true,
-      message: `Berhasil login sebagai ${teacher.name}`,
-      redirectTo: "/guru",
-    });
-  } catch (err: unknown) {
-    const message =
-      err instanceof Error ? err.message : "Gagal melakukan impersonasi guru";
-    return NextResponse.json({ success: false, message }, { status: 500 });
-  }
+export async function DELETE() {
+  return impersonationDisabledResponse();
 }

@@ -132,3 +132,70 @@ export async function POST(req: Request, context: RouteContext) {
     return NextResponse.json({ success: false, message }, { status: 500 });
   }
 }
+
+export async function DELETE(req: Request, context: RouteContext) {
+  const { session, error } = await requireRole(["guru", "admin"]);
+  if (error || !session) return error;
+
+  try {
+    const { id } = await context.params;
+    await connectDB();
+
+    const courseClass = await CourseClass.findById(id);
+    if (!courseClass) {
+      return NextResponse.json(
+        { success: false, message: "Kelas tidak ditemukan" },
+        { status: 404 }
+      );
+    }
+
+    if (
+      session.role === "guru" &&
+      courseClass.teacherId.toString() !== session.id
+    ) {
+      return NextResponse.json(
+        { success: false, message: "Akses ditolak: Anda bukan pengampu kelas ini" },
+        { status: 403 }
+      );
+    }
+
+    const url = new URL(req.url);
+    let materialId = url.searchParams.get("materialId");
+    if (!materialId) {
+      try {
+        const body = await req.json();
+        materialId = body?.materialId;
+      } catch {
+        // ignore empty body
+      }
+    }
+
+    if (!materialId) {
+      return NextResponse.json(
+        { success: false, message: "ID materi wajib diisi" },
+        { status: 400 }
+      );
+    }
+
+    const material = await Material.findOneAndDelete({
+      _id: materialId,
+      courseClassId: id,
+    });
+
+    if (!material) {
+      return NextResponse.json(
+        { success: false, message: "Materi tidak ditemukan di kelas ini" },
+        { status: 404 }
+      );
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: "Materi berhasil dihapus",
+      data: { materialId },
+    });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Gagal menghapus materi";
+    return NextResponse.json({ success: false, message }, { status: 500 });
+  }
+}

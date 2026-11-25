@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/set-state-in-effect */
 "use client";
 
 import { use, useEffect, useState } from "react";
@@ -154,7 +155,9 @@ export default function GoogleClassroomSubmissionsPage({
           setIsReadOnly(
             Boolean(
               json.data.isReadOnly ||
-                ["kepsek", "kurikulum"].includes(json.data.currentUserRole || "")
+                ["admin", "kepsek", "kurikulum"].includes(
+                  json.data.currentUserRole || ""
+                )
             )
           );
           if (json.data.items && json.data.items.length > 0) {
@@ -191,6 +194,7 @@ export default function GoogleClassroomSubmissionsPage({
   }, [selectedStudentId, selectedItem]);
 
   function handleEssayScoreChange(questionId: string, newPoints: number, maxPoints: number) {
+    if (isReadOnly) return;
     const safeVal = Number.isFinite(newPoints) ? newPoints : 0;
     const clamped = Math.max(0, Math.min(safeVal, maxPoints));
     setEditingQuizAnswers((prev) => {
@@ -289,7 +293,7 @@ export default function GoogleClassroomSubmissionsPage({
 
   // Submit Grade (Kembalikan Nilai)
   async function handleSaveGrade(asDraft = false) {
-    if (!selectedItem || !assignment) return;
+    if (!selectedItem || !assignment || isReadOnly) return;
     setSavingGrade(true);
     setSaveNotification(null);
 

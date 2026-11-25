@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import { requireRole } from "@/lib/session";
@@ -22,6 +23,7 @@ export async function GET(req: Request, context: RouteContext) {
 
     const isStudent = session.role === "siswa";
     const isStaff = ["admin", "kurikulum", "kepsek", "guru"].includes(session.role);
+    const isReadOnlyStaff = ["kurikulum", "kepsek"].includes(session.role);
 
     const url = new URL(req.url);
     const requestedCourseId = url.searchParams.get("courseClassId");
@@ -93,7 +95,7 @@ export async function GET(req: Request, context: RouteContext) {
               materials: [],
               sharedFiles: [],
               siblingClasses: [],
-              isReadOnly: isStaff,
+              isReadOnly: isReadOnlyStaff,
               currentUserRole: session.role,
               currentUserId: session.id,
               noCourseClass: true,
@@ -333,7 +335,7 @@ export async function GET(req: Request, context: RouteContext) {
         materials,
         sharedFiles,
         siblingClasses: formattedSiblingClasses,
-        isReadOnly: isStaff,
+        isReadOnly: isReadOnlyStaff,
         currentUserRole: session.role,
         currentUserId: session.id,
       },

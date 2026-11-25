@@ -1,7 +1,19 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextResponse } from "next/server";
+import mongoose from "mongoose";
 import { connectDB } from "@/lib/mongodb";
 import { requireRole } from "@/lib/session";
-import { ClassModel, User, CourseClass } from "@/models";
+import { ClassModel, User, Department } from "@/models";
+import { inspectAndCleanOrphanedClasses } from "@/lib/teacher-class-cleanup";
+
+const ROMAN_BY_GRADE: Record<string, { grade: "10" | "11" | "12"; roman: string }> = {
+  "10": { grade: "10", roman: "X" },
+  X: { grade: "10", roman: "X" },
+  "11": { grade: "11", roman: "XI" },
+  XI: { grade: "11", roman: "XI" },
+  "12": { grade: "12", roman: "XII" },
+  XII: { grade: "12", roman: "XII" },
+};
 
 export async function GET(req: Request) {
   const { error } = await requireRole(["admin", "guru", "kurikulum", "kepsek"]);
@@ -26,43 +38,29 @@ export async function GET(req: Request) {
       query.name = { $regex: search, $options: "i" };
     }
 
-    const [classes, legacyCourseClasses] = await Promise.all([
-      ClassModel.find(query)
-        .populate("homeroomTeacherId", "name email nip degree")
-        .populate("departmentId", "name code")
-        .sort({ grade: 1, name: 1 })
-        .lean(),
-      CourseClass.find({
-        isActive: true,
-        $or: [{ classRombelId: null }, { classRombelId: { $exists: false } }],
-      })
-        .populate("teacherId", "name email nip degree")
-        .populate("subjectId", "name code category")
-        .sort({ createdAt: -1 })
-        .lean(),
-    ]);
+    // TASK 2: Automatically inspect and clean up genuinely empty orphaned Mapel Classes
+    // while preserving orphaned classes with meaningful records and separating them from
+    // legacy classes that still have a valid assigned Guru.
+    const orphanInspection = await inspectAndCleanOrphanedClasses();
+
+    const classes = await ClassModel.find(query)
+      .populate("homeroomTeacherId", "name email nip degree")
+      .populate("departmentId", "name code")
+      .sort({ grade: 1, name: 1 })
+      .lean();
 
     const formatted = classes.map((c) => ({
       ...c,
       studentCount: Array.isArray(c.studentIds) ? c.studentIds.length : 0,
     }));
 
-    const formattedLegacy = legacyCourseClasses.map((lc: any) => ({
-      _id: String(lc._id),
-      name: lc.name,
-      code: lc.code || "-",
-      teacherName: lc.teacherId
-        ? `${lc.teacherId.name}${lc.teacherId.degree ? `, ${lc.teacherId.degree}` : ""}`
-        : "Guru Pengampu",
-      category: lc.subjectId?.category || "Kejuruan",
-      studentCount: Array.isArray(lc.studentIds) ? lc.studentIds.length : 0,
-      academicYear: lc.academicYear || "-",
-    }));
-
     return NextResponse.json({
       success: true,
       data: formatted,
-      legacyCourseClasses: formattedLegacy,
+      legacyCourseClasses: orphanInspection.validLegacyUnassignedClasses,
+      orphanedCourseClasses: orphanInspection.orphanedClassesWithRecords,
+      removedEmptyOrphanClassNames:
+        orphanInspection.removedEmptyOrphanClassNames,
     });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Gagal memuat kelas";
@@ -79,26 +77,59 @@ export async function POST(req: Request) {
     const body = await req.json();
 
     const {
-      name,
       grade,
       departmentId,
+      jurusan,
       parallelNumber,
+      rombel,
       academicYear,
       homeroomTeacherId,
       maxCapacity,
     } = body;
 
-    if (!name || !grade) {
+    const rawGrade = String(grade || "").trim().toUpperCase();
+    const gradeEntry = ROMAN_BY_GRADE[rawGrade];
+    if (!gradeEntry) {
       return NextResponse.json(
-        { success: false, message: "Nama kelas dan tingkat wajib diisi" },
+        { success: false, message: "Tingkat kelas wajib dipilih (10, 11, atau 12)" },
         { status: 400 }
       );
     }
 
-    const existing = await ClassModel.findOne({ name });
-    if (existing) {
+    // Resolve department from departmentId or jurusan code
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let deptDoc: any = null;
+    if (departmentId && mongoose.Types.ObjectId.isValid(String(departmentId))) {
+      deptDoc = await Department.findById(departmentId).lean();
+    } else if (jurusan || departmentId) {
+      const codeQuery = String(jurusan || departmentId).trim().toUpperCase();
+      deptDoc = await Department.findOne({
+        $or: [{ code: codeQuery }, { name: { $regex: `^${codeQuery}$`, $options: "i" } }],
+      }).lean();
+    }
+
+    if (!deptDoc) {
       return NextResponse.json(
-        { success: false, message: `Kelas dengan nama "${name}" sudah ada` },
+        { success: false, message: "Jurusan wajib dipilih" },
+        { status: 400 }
+      );
+    }
+
+    const parsedParallel = Number(parallelNumber ?? rombel ?? 1);
+    if (!Number.isInteger(parsedParallel) || parsedParallel < 1) {
+      return NextResponse.json(
+        { success: false, message: "Nomor rombel harus berupa angka bulat positif" },
+        { status: 400 }
+      );
+    }
+
+    // TASK 2: Automatically generate class name from Grade (Roman), Jurusan code, and Rombel number
+    const generatedName = `${gradeEntry.roman} ${deptDoc.code} ${parsedParallel}`;
+
+    const existing = await ClassModel.findOne({ name: generatedName });
+    if (existing && existing.isActive !== false) {
+      return NextResponse.json(
+        { success: false, message: `Kelas dengan nama "${generatedName}" sudah ada` },
         { status: 400 }
       );
     }
@@ -112,6 +143,7 @@ export async function POST(req: Request) {
       const existingWalasClass = await ClassModel.findOne({
         homeroomTeacherId: cleanTeacherId,
         isActive: true,
+        ...(existing ? { _id: { $ne: existing._id } } : {}),
       });
       if (existingWalasClass) {
         return NextResponse.json(
@@ -124,25 +156,39 @@ export async function POST(req: Request) {
       }
     }
 
-    const newClass = await ClassModel.create({
-      name,
-      grade,
-      departmentId: departmentId || undefined,
-      parallelNumber: Number(parallelNumber) || 1,
-      academicYear: academicYear || "2024/2025 - Genap",
-      homeroomTeacherId: cleanTeacherId || undefined,
-      maxCapacity: Number(maxCapacity) || 36,
-      studentIds: [],
-    });
+    let savedClassId;
+    if (existing && existing.isActive === false) {
+      existing.grade = gradeEntry.grade;
+      existing.departmentId = deptDoc._id;
+      existing.parallelNumber = parsedParallel;
+      existing.academicYear = academicYear || "2024/2025 - Genap";
+      existing.homeroomTeacherId = cleanTeacherId ? new mongoose.Types.ObjectId(cleanTeacherId) : undefined;
+      existing.maxCapacity = Number(maxCapacity) || 36;
+      existing.isActive = true;
+      await existing.save();
+      savedClassId = existing._id;
+    } else {
+      const newClass = await ClassModel.create({
+        name: generatedName,
+        grade: gradeEntry.grade,
+        departmentId: deptDoc._id,
+        parallelNumber: parsedParallel,
+        academicYear: academicYear || "2024/2025 - Genap",
+        homeroomTeacherId: cleanTeacherId || undefined,
+        maxCapacity: Number(maxCapacity) || 36,
+        studentIds: [],
+      });
+      savedClassId = newClass._id;
+    }
 
     if (cleanTeacherId) {
       await User.findByIdAndUpdate(cleanTeacherId, {
         isHomeroomTeacher: true,
-        homeroomClassId: newClass._id,
+        homeroomClassId: savedClassId,
       });
     }
 
-    const populated = await ClassModel.findById(newClass._id)
+    const populated = await ClassModel.findById(savedClassId)
       .populate("homeroomTeacherId", "name email nip degree")
       .populate("departmentId", "name code");
 

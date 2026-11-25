@@ -1,11 +1,23 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextResponse } from "next/server";
+import mongoose from "mongoose";
 import { connectDB } from "@/lib/mongodb";
 import { requireRole } from "@/lib/session";
-import { ClassModel, User, Assignment, CourseClass, Quiz } from "@/models";
+import { ClassModel, User, Assignment, CourseClass, Quiz, Department } from "@/models";
+
+const ROMAN_BY_GRADE: Record<string, { grade: "10" | "11" | "12"; roman: string }> = {
+  "10": { grade: "10", roman: "X" },
+  X: { grade: "10", roman: "X" },
+  "11": { grade: "11", roman: "XI" },
+  XI: { grade: "11", roman: "XI" },
+  "12": { grade: "12", roman: "XII" },
+  XII: { grade: "12", roman: "XII" },
+};
 import {
   getActiveStudentsForRombelDetailed,
   calculateCourseEnrollmentCompleteness,
 } from "@/lib/rombel-enrollment";
+import { inspectAndCleanOrphanedClasses } from "@/lib/teacher-class-cleanup";
 
 type RouteContext = {
   params: Promise<{ id: string }>;
@@ -33,33 +45,22 @@ export async function GET(_req: Request, context: RouteContext) {
       );
     }
 
+    // TASK 2: Inspect and clean up genuinely empty orphaned classes before building rombel view
+    const orphanInspection = await inspectAndCleanOrphanedClasses();
+
     // TASK 2.3 & 2.6: Pure read-only enrollment completeness calculation for this Rombel
     // Never mutate student enrollments during monitoring GET requests.
     const activeRombelStudents = await getActiveStudentsForRombelDetailed(id, cls.name);
 
     // Also fetch associated active CourseClasses (Mapel Classes) linked to this rombel
-    const [courseClasses, legacyUnassignedClasses] = await Promise.all([
-      CourseClass.find({
-        $or: [{ classRombelId: id }, { assignedRombelIds: id }],
-        isActive: true,
-      })
-        .populate("teacherId", "name email nip degree")
-        .populate("subjectId", "name code category")
-        .sort({ createdAt: -1 })
-        .lean(),
-      // TASK 3: Surface any existing/legacy Mapel Classes that currently have no assigned rombel
-      CourseClass.find({
-        isActive: true,
-        $or: [
-          { classRombelId: null },
-          { classRombelId: { $exists: false } },
-        ],
-      })
-        .populate("teacherId", "name email nip degree")
-        .populate("subjectId", "name code category")
-        .sort({ createdAt: -1 })
-        .lean(),
-    ]);
+    const courseClasses = await CourseClass.find({
+      $or: [{ classRombelId: id }, { assignedRombelIds: id }],
+      isActive: true,
+    })
+      .populate("teacherId", "name email nip degree")
+      .populate("subjectId", "name code category")
+      .sort({ createdAt: -1 })
+      .lean();
 
     const enrichedCourseClasses = await Promise.all(
       courseClasses.map(async (cc: any) => {
@@ -81,9 +82,10 @@ export async function GET(_req: Request, context: RouteContext) {
           cls.name
         );
 
-        const teacherName = cc.teacherId
+        const hasValidTeacher = Boolean(cc.teacherId && cc.teacherId._id);
+        const teacherName = hasValidTeacher
           ? `${cc.teacherId.name}${cc.teacherId.degree ? `, ${cc.teacherId.degree}` : ""}`
-          : "Guru Pengampu";
+          : "Tanpa Guru Pengampu (Orphan — Perlu Tinjauan Admin)";
 
         return {
           _id: String(cc._id),
@@ -91,14 +93,18 @@ export async function GET(_req: Request, context: RouteContext) {
           code: cc.code,
           enrollmentMethod: cc.enrollmentMethod || "rombel",
           teacherId: cc.teacherId,
+          teacher: cc.teacherId || null,
           teacherName,
+          isOrphaned: !hasValidTeacher,
           rombelId: String(cls._id),
           rombelName: cls.name,
+          subject: cc.subjectId || null,
           category: cc.subjectId?.category || "Kejuruan",
           assignmentCount,
           quizCount,
           studentCount: Array.isArray(cc.studentIds) ? cc.studentIds.length : 0,
           bannerColor: cc.bannerColor || "blue",
+          enrollmentMonitoring: completeness,
           // TASK 2.2 - 2.5 Enrollment Completeness Fields
           totalActiveRombelStudents: completeness.totalActiveRombelStudents,
           enrolledCount: completeness.enrolledCount,
@@ -111,26 +117,27 @@ export async function GET(_req: Request, context: RouteContext) {
       })
     );
 
-    const formattedLegacyClasses = legacyUnassignedClasses.map((lc: any) => ({
-      _id: String(lc._id),
-      name: lc.name,
-      code: lc.code || "-",
-      teacherName: lc.teacherId
-        ? `${lc.teacherId.name}${lc.teacherId.degree ? `, ${lc.teacherId.degree}` : ""}`
-        : "Guru Pengampu",
-      category: lc.subjectId?.category || "Kejuruan",
-      studentCount: Array.isArray(lc.studentIds) ? lc.studentIds.length : 0,
-      academicYear: lc.academicYear || "-",
-    }));
+    const studentsList =
+      activeRombelStudents.length > 0
+        ? activeRombelStudents
+        : Array.isArray(cls.studentIds)
+        ? cls.studentIds
+        : [];
 
     return NextResponse.json({
       success: true,
       data: {
         ...cls,
+        department: cls.departmentId || null,
+        homeroomTeacher: cls.homeroomTeacherId || null,
+        students: studentsList,
+        studentCount: activeRombelStudents.length,
         activeStudentCount: activeRombelStudents.length,
         activeRombelStudents,
+        courseClassCount: enrichedCourseClasses.length,
         courseClasses: enrichedCourseClasses,
-        legacyCourseClasses: formattedLegacyClasses,
+        legacyCourseClasses: orphanInspection.validLegacyUnassignedClasses,
+        orphanedCourseClasses: orphanInspection.orphanedClassesWithRecords,
       },
     });
   } catch (err: unknown) {
@@ -149,10 +156,11 @@ export async function PUT(req: Request, context: RouteContext) {
 
     const body = await req.json();
     const {
-      name,
       grade,
       departmentId,
+      jurusan,
       parallelNumber,
+      rombel,
       homeroomTeacherId,
       maxCapacity,
       academicYear,
@@ -166,16 +174,58 @@ export async function PUT(req: Request, context: RouteContext) {
       );
     }
 
+    const rawGrade = String(grade || existingClass.grade || "10")
+      .trim()
+      .toUpperCase();
+    const gradeEntry = ROMAN_BY_GRADE[rawGrade];
+    if (!gradeEntry) {
+      return NextResponse.json(
+        { success: false, message: "Tingkat kelas tidak valid (pilih 10, 11, atau 12)" },
+        { status: 400 }
+      );
+    }
+
+    const targetDeptId = departmentId || existingClass.departmentId;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let deptDoc: any = null;
+    if (targetDeptId && mongoose.Types.ObjectId.isValid(String(targetDeptId))) {
+      deptDoc = await Department.findById(targetDeptId).lean();
+    } else if (jurusan || targetDeptId) {
+      const codeQuery = String(jurusan || targetDeptId).trim().toUpperCase();
+      deptDoc = await Department.findOne({
+        $or: [{ code: codeQuery }, { name: { $regex: `^${codeQuery}$`, $options: "i" } }],
+      }).lean();
+    }
+
+    if (!deptDoc) {
+      return NextResponse.json(
+        { success: false, message: "Jurusan wajib dipilih" },
+        { status: 400 }
+      );
+    }
+
+    const parsedParallel = Number(
+      parallelNumber ?? rombel ?? existingClass.parallelNumber ?? 1
+    );
+    if (!Number.isInteger(parsedParallel) || parsedParallel < 1) {
+      return NextResponse.json(
+        { success: false, message: "Nomor rombel harus berupa angka bulat positif" },
+        { status: 400 }
+      );
+    }
+
+    const generatedName = `${gradeEntry.roman} ${deptDoc.code} ${parsedParallel}`;
+
     // Check duplicate name
-    if (name && name.trim() !== existingClass.name) {
+    if (generatedName !== existingClass.name) {
       const duplicate = await ClassModel.findOne({
-        name: name.trim(),
+        name: generatedName,
         _id: { $ne: id },
         isActive: true,
       });
       if (duplicate) {
         return NextResponse.json(
-          { success: false, message: `Kelas dengan nama "${name}" sudah terdaftar` },
+          { success: false, message: `Kelas dengan nama "${generatedName}" sudah terdaftar` },
           { status: 400 }
         );
       }
@@ -213,11 +263,11 @@ export async function PUT(req: Request, context: RouteContext) {
       });
     }
 
-    // Update fields
-    if (name) existingClass.name = name.trim();
-    if (grade) existingClass.grade = grade;
-    if (departmentId) existingClass.departmentId = departmentId;
-    if (parallelNumber !== undefined) existingClass.parallelNumber = Number(parallelNumber);
+    // Update fields using automatically generated name
+    existingClass.name = generatedName;
+    existingClass.grade = gradeEntry.grade;
+    existingClass.departmentId = deptDoc._id;
+    existingClass.parallelNumber = parsedParallel;
     if (maxCapacity !== undefined) existingClass.maxCapacity = Number(maxCapacity);
     if (academicYear) existingClass.academicYear = academicYear;
     existingClass.homeroomTeacherId = homeroomTeacherId || undefined;

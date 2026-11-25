@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextResponse } from "next/server";
 import mongoose from "mongoose";
 import { connectDB } from "@/lib/mongodb";
@@ -5,7 +6,6 @@ import { requireRole } from "@/lib/session";
 import {
   Assignment,
   Submission,
-  CourseClass,
   ClassModel,
   User,
   Quiz,
@@ -20,7 +20,7 @@ type RouteContext = {
 };
 
 export async function GET(_req: Request, context: RouteContext) {
-  const { session, error } = await requireRole(["guru", "admin", "kepsek"]);
+  const { session, error } = await requireRole(["guru", "admin", "kurikulum", "kepsek"]);
   if (error || !session) return error;
 
   try {
@@ -323,7 +323,7 @@ export async function GET(_req: Request, context: RouteContext) {
           },
           items,
           currentUserRole: session.role,
-          isReadOnly: session.role === "kepsek",
+          isReadOnly: ["admin", "kurikulum", "kepsek"].includes(session.role),
         },
       },
       {

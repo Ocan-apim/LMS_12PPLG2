@@ -1,8 +1,20 @@
 import { containsProfanity } from "@/lib/profanity-filter";
-import { isActivationRole, requiresAccountActivation } from "@/lib/auth";
+import {
+  isActivationRole,
+  requiresAccountActivation,
+  resolveAccountStatus,
+  type AccountStatusLabel,
+  type AccountStatusCode,
+} from "@/lib/auth";
 import { User } from "@/models/User";
 
-export { isActivationRole, requiresAccountActivation };
+export {
+  isActivationRole,
+  requiresAccountActivation,
+  resolveAccountStatus,
+  type AccountStatusLabel,
+  type AccountStatusCode,
+};
 
 export function escapeRegex(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");

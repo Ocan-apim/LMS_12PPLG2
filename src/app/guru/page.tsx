@@ -320,7 +320,7 @@ export default function GuruDashboardPage() {
                 />
                 <path
                   className="text-[#0066FF] transition-all duration-1000 ease-out"
-                  strokeDasharray={`${gradingStats.percentage || 75}, 100`}
+                  strokeDasharray={`${gradingStats.percentage ?? 0}, 100`}
                   strokeWidth="3.5"
                   strokeLinecap="round"
                   stroke="currentColor"
@@ -330,7 +330,7 @@ export default function GuruDashboardPage() {
               </svg>
               <div className="absolute flex flex-col items-center">
                 <span className="text-3xl font-extrabold text-slate-900">
-                  {gradingStats.percentage || 75}%
+                  {gradingStats.percentage ?? 0}%
                 </span>
                 <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
                   SELESAI
@@ -342,11 +342,11 @@ export default function GuruDashboardPage() {
             <div className="mt-8 grid grid-cols-2 gap-3 border-t border-slate-100 pt-4">
               <div className="rounded-xl bg-slate-50/80 p-3 text-center border border-slate-100">
                 <div className="text-[10px] font-semibold text-slate-400">Dinilai</div>
-                <div className="text-xl font-bold text-slate-900 mt-1">{gradingStats.gradedCount || 142}</div>
+                <div className="text-xl font-bold text-slate-900 mt-1">{gradingStats.gradedCount ?? 0}</div>
               </div>
               <div className="rounded-xl bg-slate-50/80 p-3 text-center border border-slate-100">
                 <div className="text-[10px] font-semibold text-slate-400">Sisa</div>
-                <div className="text-xl font-bold text-slate-900 mt-1">{gradingStats.pendingCount || 48}</div>
+                <div className="text-xl font-bold text-slate-900 mt-1">{gradingStats.pendingCount ?? 0}</div>
               </div>
             </div>
 

@@ -156,7 +156,7 @@ export default function AssignmentDetailPage({
         const backUrl =
           role === "admin"
             ? rId && cId
-              ? `/admin/classes/${rId}?courseId=${cId}`
+              ? `/admin/classes/${rId}?courseClassId=${cId}`
               : "/admin/classes"
             : cId
               ? `/guru/classes/${cId}`
@@ -292,15 +292,19 @@ export default function AssignmentDetailPage({
   const classBackHref =
     userRole === "admin"
       ? rombelId && classId
-        ? `/admin/classes/${rombelId}?courseId=${classId}`
+        ? `/admin/classes/${rombelId}?courseClassId=${classId}`
         : "/admin/classes"
-      : userRole === "kepsek"
+      : userRole === "kurikulum"
         ? rombelId && classId
-          ? `/kepsek/classes/${rombelId}?courseId=${classId}`
-          : "/kepsek/teachers"
-        : classId
-          ? `/guru/classes/${classId}`
-          : "/guru/classes";
+          ? `/kurikulum/classes/${rombelId}?courseClassId=${classId}`
+          : "/kurikulum/grades/classes"
+        : userRole === "kepsek"
+          ? rombelId && classId
+            ? `/kepsek/classes/${rombelId}?courseClassId=${classId}`
+            : "/kepsek/teachers"
+          : classId
+            ? `/guru/classes/${classId}`
+            : "/guru/classes";
 
   const attachments = assignment.attachments || [];
   const isQuiz = assignment.type === "kuis" || Boolean(assignment.quizId);
